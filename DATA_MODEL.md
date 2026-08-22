@@ -106,12 +106,13 @@ identity worth preserving across an edit.
 | `aliases` | JSON list, lowercased; matched against recipe lines |
 | `package_size_grams` | float? |
 | `cost_per_kg_cents` | **int?** — see below |
+| `cost_source`, `cost_updated_at` | Where a price came from and when — "manual" once a human edits it, or an enrichment script's own label. Mirrors `nutrition_source` |
 | `source` | Where it is bought. Fourteen values — see `IngredientSource`. Stored as a plain VARCHAR with no database CHECK: the first seven were a guess and a real shopping list added seven more, so the next addition should not need a migration that behaves differently on SQLite and Postgres |
 | `is_food` | Indexed. False for batteries, shampoo, cat litter — in the pantry as a shopping lookup, out of the ingredient work queues |
 | `density_g_per_ml` | float? — converts volumes to grams |
 | `grams_per_piece` | float? — converts counts to grams |
 | `energy_kj`, `calories_kcal`, `protein_g`, `fat_g`, `saturated_fat_g`, `carbs_g`, `sugars_g`, `fibre_g`, `sodium_mg` | float?, all **per 100g** |
-| `nutrition_source`, `nutrition_updated_at` | Provenance for the figures |
+| `nutrition_source`, `nutrition_updated_at` | Provenance: `"AFCD (<matched food>)"`, `"AI estimate (Claude)"`, a packet, or a human's own note |
 | `notes`, `created_at`, `updated_at` | |
 
 ### Why cents per kilogram

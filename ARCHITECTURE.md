@@ -73,6 +73,10 @@ backend/
   recipes_service.py # persistence + read-model assembly shared by every writer
   blog_parser.py     # deterministic fallback parser for the Blogger posts
   shopping_list.py   # rationalising a shopping-list export into pantry rows
+  afcd.py             # local matching against the Australian Food Composition
+                      # Database — real nutrition data, no AI involved
+  ingredient_enrichment.py # Claude prompt + response normalisation for the
+                      # nutrition/cost fallback and reclassification pass
   ai_import.py       # Claude prompt + response normalisation (3 callers)
   routers/
     auth_router.py   # /auth/google, /auth/me, /auth/config
@@ -91,6 +95,8 @@ data/
   sections.json          # the 20 navigation section tags
   pantry.json            # densities + rough prices for 60 common items
   images/                # downloaded post images (gitignored — see SPEC.md)
+  afcd/                  # AFCD Release 3 files (gitignored — see SPEC.md)
+  shopping_list*.csv     # a shopping-list export (gitignored — see SPEC.md)
 scripts/
   fetch_blog.py      # 1. Blogger feed  -> data/blog_raw.json
   fetch_images.py    # 2. post images   -> data/images/
@@ -99,6 +105,8 @@ scripts/
   seed_sections.py   # navigation sections from data/sections.json
   seed_pantry.py     # densities/prices from data/pantry.json
   import_pantry_csv.py # a shopping-list export -> the master ingredient list
+  fetch_afcd.py       # downloads the AFCD dataset (gitignored, not committed)
+  enrich_pantry.py    # AFCD first, then Claude -> nutrition + cost + is_food
   seed_dev_data.py   # a small local fixture set
 frontend/
   src/
@@ -199,6 +207,11 @@ touches `.deploy-trigger`; a systemd path unit runs `deploy.sh --update`
   matches whether or not the query needed singularising.
 - `Ingredient.source` is a plain VARCHAR, not a database ENUM — the value
   list has already grown once and will again.
+- Nutrition and cost are held to different accuracy bars: `enrich_pantry.py`
+  tries a real government lookup (AFCD) before ever asking Claude for
+  nutrition, but always asks Claude for cost, since AFCD has no price data
+  and a rough estimate is the actual requirement there. `nutrition_source`
+  / `cost_source` say which is which on every row.
 - Re-slugging happens only when a title genuinely changes, so editing a
   description never breaks a link.
 - An `explicit` weight is never recomputed, even when the pantry's density

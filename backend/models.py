@@ -121,6 +121,13 @@ class Ingredient(SQLModel, table=True):
 
     package_size_grams: float | None = None
     cost_per_kg_cents: int | None = None
+    # Where the price came from and when — mirrors nutrition_source /
+    # nutrition_updated_at below. "manual" once a human edits it via the
+    # Pantry page; an enrichment script sets its own label (e.g. "AI
+    # estimate (mid-season, 2026-08)") so a rough guess is never mistaken
+    # for a price someone actually paid.
+    cost_source: str | None = None
+    cost_updated_at: datetime | None = None
     # native_enum=False + create_constraint=False: stored as a plain VARCHAR
     # with no database-level CHECK, so adding a shop needs no migration —
     # but SQLAlchemy still hands back an IngredientSource on read rather
@@ -159,6 +166,8 @@ class Ingredient(SQLModel, table=True):
     sugars_g: float | None = None
     fibre_g: float | None = None
     sodium_mg: float | None = None
+    # A label, not a boolean: "packet" or "AUSNUT" reads as real, "AI
+    # estimate" reads as a guess to be checked — see ingredient_enrichment.py.
     nutrition_source: str | None = None
     nutrition_updated_at: datetime | None = None
 
@@ -201,6 +210,7 @@ class IngredientUpdate(SQLModel):
     package_size_grams: float | None = Field(default=None, gt=0)
     cost_per_kg_cents: int | None = Field(default=None, ge=0)
     source: IngredientSource | None = None
+    cost_source: str | None = None
     density_g_per_ml: float | None = Field(default=None, gt=0)
     grams_per_piece: float | None = Field(default=None, gt=0)
     is_food: bool | None = None
@@ -227,6 +237,8 @@ class IngredientRead(SQLModel):
     cost_per_kg_cents: int | None
     cost_per_gram: float | None  # derived: dollars, 5dp — display only
     package_cost_cents: int | None  # derived: cost of one usual package
+    cost_source: str | None
+    cost_updated_at: datetime | None
     source: IngredientSource
     is_food: bool
     density_g_per_ml: float | None

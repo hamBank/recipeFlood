@@ -44,6 +44,7 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
     cost_per_kg: ingredient.cost_per_kg_cents !== null && ingredient.cost_per_kg_cents !== undefined
       ? (ingredient.cost_per_kg_cents / 100).toFixed(2)
       : '',
+    cost_source: ingredient.cost_source || '',
     source: ingredient.source,
     density_g_per_ml: ingredient.density_g_per_ml ?? '',
     grams_per_piece: ingredient.grams_per_piece ?? '',
@@ -65,6 +66,7 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
     try {
       await onSave({
         name: form.name.trim(),
+        cost_source: form.cost_source.trim() || null,
         aliases: form.aliases
           .split(',')
           .map((alias) => alias.trim())
@@ -124,6 +126,16 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
           <Field label={`Cost per kg (${symbol})`} hint="Stored as cents per kg — plenty of resolution for a per-gram price">
             <input type="number" step="0.01" min="0" value={form.cost_per_kg}
               onChange={(e) => set('cost_per_kg', e.target.value)} className={inputClass} />
+          </Field>
+          <Field
+            label="Price source"
+            hint={
+              ingredient.cost_updated_at
+                ? `Last set ${new Date(ingredient.cost_updated_at).toLocaleDateString()}`
+                : 'e.g. "manual", or a note on where the price came from'
+            }
+          >
+            <input value={form.cost_source} onChange={(e) => set('cost_source', e.target.value)} className={inputClass} />
           </Field>
 
           <Field label="Bought from">

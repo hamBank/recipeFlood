@@ -180,6 +180,15 @@ def update_ingredient(
         fields["aliases"] = [a.strip().lower() for a in fields["aliases"] if a.strip()]
     if any(field in fields for field in NUTRIENT_FIELDS):
         ingredient.nutrition_updated_at = utcnow()
+    # A human editing the price in the Pantry page is itself a source: it
+    # means "I looked and this is what it costs," which should read
+    # differently from an unset field or an AI estimate. Only stamp when
+    # cost_per_kg_cents actually changes — editing the package size alone
+    # shouldn't make an old price look freshly verified.
+    if "cost_per_kg_cents" in fields and fields["cost_per_kg_cents"] != ingredient.cost_per_kg_cents:
+        ingredient.cost_updated_at = utcnow()
+        if "cost_source" not in fields:
+            ingredient.cost_source = "manual"
 
     conversion_changed = any(
         field in fields and fields[field] != getattr(ingredient, field)

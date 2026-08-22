@@ -18,6 +18,23 @@ from sqlmodel import Session
 
 from .models import Ingredient, NutritionRead, RecipeIngredient
 
+#: kJ and kcal are not independently measured — a food label computes one
+#: from the other by this fixed factor. Kept here as the single home for
+#: it: backend/afcd.py derives kcal from the government data's kJ figure;
+#: backend/ingredient_enrichment.py derives kJ from Claude's kcal estimate.
+#: Trusting a source to state both and have them agree is a needless way
+#: to fail when one can simply be computed from the other.
+KJ_PER_KCAL = 4.184
+
+
+def kcal_from_kj(energy_kj: float | None) -> float | None:
+    return round(energy_kj / KJ_PER_KCAL, 1) if energy_kj is not None else None
+
+
+def kj_from_kcal(calories_kcal: float | None) -> float | None:
+    return round(calories_kcal * KJ_PER_KCAL) if calories_kcal is not None else None
+
+
 #: Per-100g fields summed across ingredients.
 NUTRIENT_FIELDS = (
     "energy_kj",

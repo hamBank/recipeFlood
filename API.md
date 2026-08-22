@@ -123,7 +123,12 @@ filename.
 | DELETE | `/ingredients/{key}` | admin | Unlinks recipe lines rather than damaging them |
 
 Reads include derived `cost_per_gram`, `package_cost_cents`,
-`has_nutrition` and `recipe_count`.
+`has_nutrition` and `recipe_count`, plus provenance: `nutrition_source` /
+`nutrition_updated_at` and `cost_source` / `cost_updated_at` — a label
+("AFCD (<matched food>)", "AI estimate (Claude)", "manual", a packet) and
+a timestamp for each, filled in by `scripts/enrich_pantry.py` or by a
+human editing the row. `PATCH` stamps `cost_updated_at` (and defaults
+`cost_source` to `"manual"`) whenever `cost_per_kg_cents` actually changes.
 
 `is_food=false` lists the non-recipe items a shopping-list import flagged —
 batteries, shampoo, cat litter. `source` accepts any of the fourteen

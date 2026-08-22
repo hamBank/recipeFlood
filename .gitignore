@@ -37,3 +37,9 @@ data/images/*
 # DEVELOPMENT.md "Importing a shopping list".
 data/shopping_list*.csv
 data/pantry_import_report.csv
+
+# Australian Food Composition Database (Release 3), fetched by
+# scripts/fetch_afcd.py. NOT committed — FSANZ's download page states
+# plain copyright with no licence grant, so the dataset isn't
+# redistributed in this public repo. Run the fetch script locally.
+data/afcd/
