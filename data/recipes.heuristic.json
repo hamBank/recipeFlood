@@ -6,8 +6,9 @@
   {
    "title": "Tomato Fritters",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "recipe",
     "tomato"
    ],
@@ -79,7 +80,7 @@
   {
    "title": "Perfect Pizza base",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "pizza dough"
    ],
@@ -171,8 +172,9 @@
   {
    "title": "English Muffins",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
+    "cake",
     "baking bread muffin"
    ],
    "servings": null,
@@ -326,8 +328,9 @@
   {
    "title": "Ricotta & Walnut Stuffed Field Mushroom on Herbed Polenta with Buttered French Beans and Roast Pepper & Port Jus",
    "description": null,
-   "category_slug": "preserves-chutney",
+   "section": "preserves-chutney",
    "tags": [
+    "preserves-chutney",
     "mushroom dinner"
    ],
    "servings": null,
@@ -584,8 +587,9 @@
   {
    "title": "Greek butterflied Leg of Lamb",
    "description": null,
-   "category_slug": "main-meat",
+   "section": "main-meat",
    "tags": [
+    "main-meat",
     "bbq",
     "greek",
     "lamb"
@@ -699,8 +703,9 @@
   {
    "title": "Cauliflower and Toasted Crumbs",
    "description": null,
-   "category_slug": "main-meat",
+   "section": "main-meat",
    "tags": [
+    "main-meat",
     "cauliflower",
     "roast",
     "salad"
@@ -832,8 +837,9 @@
   {
    "title": "Peanut and chocolate biscuits",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "biscuit chocolate peanut"
    ],
    "servings": 15,
@@ -943,7 +949,7 @@
   {
    "title": "burbon preserved peaches",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [],
    "servings": null,
    "servings_note": null,
@@ -1107,8 +1113,9 @@
   {
    "title": "Fried eggs with hummus and red onion and sumac salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "dinner",
     "eggs",
     "sumac"
@@ -1210,7 +1217,7 @@
   {
    "title": "Chinese Pepper  Steak",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "chinese beef pepper"
    ],
@@ -1419,8 +1426,9 @@
   {
    "title": "Tofu- steamed silken",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "tofu chinese"
    ],
    "servings": 2,
@@ -1624,7 +1632,7 @@
   {
    "title": "Simon Bryant's Roasted Cauliflower Salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "cauliflower",
     "salad"
@@ -1835,8 +1843,9 @@
   {
    "title": "Tahini and Mushroom Sauce.Gravy",
    "description": null,
-   "category_slug": "sauces-dressings",
+   "section": "sauces-dressings",
    "tags": [
+    "sauces-dressings",
     "sauce mushroom gravy"
    ],
    "servings": null,
@@ -1943,7 +1952,7 @@
   {
    "title": "Untitled",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "beetroot",
     "salad",
@@ -2039,8 +2048,9 @@
   {
    "title": "Untitled",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "harissa",
     "pumpkin",
     "warm salad"
@@ -2229,7 +2239,7 @@
   {
    "title": "Untitled",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "cabbage",
     "stir-fry"
@@ -2312,8 +2322,9 @@
   {
    "title": "Untitled",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "lemon",
     "slice"
    ],
@@ -2421,8 +2432,9 @@
   {
    "title": "Untitled",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "caramel",
     "coconut",
     "slice"
@@ -2640,7 +2652,7 @@
   {
    "title": "Untitled",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "couscous",
     "salad"
@@ -2804,7 +2816,7 @@
   {
    "title": "Untitled",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "rice",
     "salad"
@@ -2863,7 +2875,7 @@
   {
    "title": "Untitled",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "cake",
     "orange"
@@ -2980,8 +2992,9 @@
   {
    "title": "Spinach dip",
    "description": null,
-   "category_slug": "dips-spreads",
+   "section": "dips-spreads",
    "tags": [
+    "dips-spreads",
     "dip",
     "spinach"
    ],
@@ -3073,7 +3086,7 @@
   {
    "title": "Banana Bread Recipe",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking bread muffin",
     "banana",
@@ -3218,8 +3231,9 @@
   {
    "title": "Spicy cauliflower fritters",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "cauliflower",
     "fritter"
    ],
@@ -3438,8 +3452,9 @@
   {
    "title": "Salad of Mixed Greens, Roasted Portobello Mushrooms and Red Onions with Sherry Vinaigrette",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "mushroom dinner",
     "red oinon",
     "warm salad"
@@ -3623,7 +3638,7 @@
   {
    "title": "Dry Potato Curry",
    "description": null,
-   "category_slug": "curry",
+   "section": "curry",
    "tags": [
     "curry",
     "potato"
@@ -3813,8 +3828,9 @@
   {
    "title": "Blood Plum Jam",
    "description": null,
-   "category_slug": "preserves-chutney",
+   "section": "preserves-chutney",
    "tags": [
+    "preserves-chutney",
     "jams",
     "preserves"
    ],
@@ -3884,7 +3900,7 @@
   {
    "title": "Black Forest Trifle",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "black forest trifle",
     "dessert"
@@ -4130,7 +4146,7 @@
   {
    "title": "Butter Cake with Vienna Cream Icing",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "birthday cake",
     "cake",
@@ -4290,7 +4306,7 @@
   {
    "title": "Spanish Custard Flan",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "dessert",
     "flan",
@@ -4423,7 +4439,7 @@
   {
    "title": "Lemon Tea Cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "afternoon tea",
     "cake",
@@ -4504,8 +4520,9 @@
   {
    "title": "Lemon Butter",
    "description": null,
-   "category_slug": "preserves-chutney",
+   "section": "preserves-chutney",
    "tags": [
+    "preserves-chutney",
     "butter",
     "lemon",
     "preserves"
@@ -4588,8 +4605,9 @@
   {
    "title": "Haloumi and Chickpea salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "chickpeas",
     "haloumi"
    ],
@@ -4751,7 +4769,7 @@
   {
    "title": "Cheese toasts with zucchini salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "cheese toast",
     "salad",
@@ -4946,7 +4964,7 @@
   {
    "title": "Sticky date pudding with caramel sauce",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "dessert",
     "sticky date"
@@ -5124,7 +5142,7 @@
   {
    "title": "Choc hazelnut and coffee friands",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "baking",
     "friand"
@@ -5260,8 +5278,9 @@
   {
    "title": "White chocolate and cranberry cookies",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "biscuit",
     "choclate"
@@ -5395,8 +5414,9 @@
   {
    "title": "Hedgehog slice",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "chocolate",
     "slice"
@@ -5499,7 +5519,7 @@
   {
    "title": "Coffee pecan streusal cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -5682,7 +5702,7 @@
   {
    "title": "white sourdough - My Favorite White Bread Recipe",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
     "bread",
     "sourdough"
@@ -5839,8 +5859,9 @@
   {
    "title": "ANZAC biscuits",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "anzac",
     "biscuit"
    ],
@@ -5944,8 +5965,9 @@
   {
    "title": "Warm tomato and bread salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "sourdough",
     "tomato",
     "warm salad"
@@ -6046,7 +6068,7 @@
   {
    "title": "Watercress and melon salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "melon",
     "salad",
@@ -6145,8 +6167,9 @@
   {
    "title": "Baked ricotta and roasted tomatoes on sourdough",
    "description": null,
-   "category_slug": "main-meat",
+   "section": "main-meat",
    "tags": [
+    "main-meat",
     "ricotta",
     "sourdough",
     "tomato"
@@ -6307,8 +6330,9 @@
   {
    "title": "Haloumi and chargrilled vegies on vienna",
    "description": null,
-   "category_slug": "side",
+   "section": "side",
    "tags": [
+    "side",
     "haloumi",
     "roast vegies"
    ],
@@ -6437,7 +6461,7 @@
   {
    "title": "Cherry crumble pizzas",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "cherry",
     "dessert",
@@ -6665,8 +6689,9 @@
   {
    "title": "Cappuccino cupcakes",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
+    "cake",
     "baking",
     "coffee",
     "cupcakes"
@@ -6857,7 +6882,7 @@
   {
    "title": "Apple pancake",
    "description": null,
-   "category_slug": "breakfast",
+   "section": "breakfast",
    "tags": [
     "apple",
     "breakfast",
@@ -6996,7 +7021,7 @@
   {
    "title": "Apple teacake",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "apple",
     "baking",
@@ -7138,8 +7163,9 @@
   {
    "title": "Chocolate and banana bread",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
+    "bread",
     "baking",
     "banana",
     "chocolate",
@@ -7272,8 +7298,9 @@
   {
    "title": "Carrot cake with white chocolate frosting",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
+    "cake",
     "baking",
     "carrot cake"
    ],
@@ -7462,7 +7489,7 @@
   {
    "title": "Tunisian Brik",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "sweet potato",
     "tunisian brik"
@@ -7745,8 +7772,9 @@
   {
    "title": "RED SAUCE ENCHILADAS",
    "description": null,
-   "category_slug": "sauces-dressings",
+   "section": "sauces-dressings",
    "tags": [
+    "sauces-dressings",
     "mexican",
     "recipe"
    ],
@@ -7858,8 +7886,9 @@
   {
    "title": "Roasted vegetable tart",
    "description": null,
-   "category_slug": "side",
+   "section": "side",
    "tags": [
+    "side",
     "roast vegies",
     "tart"
    ],
@@ -8061,7 +8090,7 @@
   {
    "title": "Grasshopper pie",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "cheesecake",
     "dessert"
@@ -8224,8 +8253,9 @@
   {
    "title": "Zucchini, pine nut and parmesan salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "warm salad",
     "zucchini"
    ],
@@ -8387,8 +8417,9 @@
   {
    "title": "Barbecued corn with tahini herb butter",
    "description": null,
-   "category_slug": "preserves-chutney",
+   "section": "preserves-chutney",
    "tags": [
+    "preserves-chutney",
     "bbq",
     "corn"
    ],
@@ -8487,8 +8518,9 @@
   {
    "title": "Roast sweet potato and chilli salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "sweet potato",
     "warm salad"
    ],
@@ -8584,7 +8616,7 @@
   {
    "title": "Bulgur and asparagus salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "asparagus",
     "bulgur",
@@ -8699,7 +8731,7 @@
   {
    "title": "Gingerbread men",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "baking",
     "gingerbread"
@@ -8895,8 +8927,9 @@
   {
    "title": "Tarragon asparagus and haloumi salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "asparagus",
     "haloumi"
    ],
@@ -8995,7 +9028,7 @@
   {
    "title": "Asian coleslaw",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "coleslaw",
     "salad"
@@ -9155,8 +9188,9 @@
   {
    "title": "Macadamia nut tartlets",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "macadamia",
     "tart"
@@ -9376,7 +9410,7 @@
   {
    "title": "Raspberry butter cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -9518,8 +9552,9 @@
   {
    "title": "Sugared apple tarts",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "apple tart",
     "baking"
    ],
@@ -9678,7 +9713,7 @@
   {
    "title": "Stollen twist",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "baking",
     "christmas",
@@ -9843,8 +9878,9 @@
   {
    "title": "Truffle brownies",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "brownie"
    ],
@@ -10003,8 +10039,9 @@
   {
    "title": "Chocolate mousse with coffee granita",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
+    "dessert",
     "chocolate",
     "coffee",
     "granita"
@@ -10148,8 +10185,9 @@
   {
    "title": "Frosted cointreau balls",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "chocolate",
     "truffle"
    ],
@@ -10278,8 +10316,9 @@
   {
    "title": "Christmas profiteroles",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "christmas",
     "profiterole"
    ],
@@ -10404,8 +10443,9 @@
   {
    "title": "Orange ricotta tartlets",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "ricotta",
     "tart"
@@ -10589,7 +10629,7 @@
   {
    "title": "Pistachio and cranberry baklava",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "baking",
     "baklava",
@@ -10724,8 +10764,9 @@
   {
    "title": "Lime tart",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "lime",
     "tart"
@@ -10879,8 +10920,9 @@
   {
    "title": "Mushroom noodle broth",
    "description": null,
-   "category_slug": "pasta-noodles",
+   "section": "pasta-noodles",
    "tags": [
+    "pasta-noodles",
     "mushroom dinner",
     "noodle"
    ],
@@ -11029,8 +11071,9 @@
   {
    "title": "Roasted sweet potato with egg noodles",
    "description": null,
-   "category_slug": "pasta-noodles",
+   "section": "pasta-noodles",
    "tags": [
+    "pasta-noodles",
     "noodle",
     "sweet potato"
    ],
@@ -11146,7 +11189,7 @@
   {
    "title": "Lemon and poppyseed cakes",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -11346,8 +11389,9 @@
   {
    "title": "Ricotta and chive ravioli with brandy sage butter",
    "description": null,
-   "category_slug": "preserves-chutney",
+   "section": "preserves-chutney",
    "tags": [
+    "preserves-chutney",
     "ravioli",
     "ricotta"
    ],
@@ -11522,7 +11566,7 @@
   {
    "title": "Flourless orange rosemary cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -11680,8 +11724,9 @@
   {
    "title": "Pecan pie",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "pecan pie"
    ],
@@ -11820,8 +11865,9 @@
   {
    "title": "Pumpkin and pecorino gnocchi",
    "description": null,
-   "category_slug": "pasta-noodles",
+   "section": "pasta-noodles",
    "tags": [
+    "pasta-noodles",
     "gnocchi",
     "pumpkin"
    ],
@@ -11963,7 +12009,7 @@
   {
    "title": "Pumpkin, pecan and caramel round",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "baking",
     "caramel",
@@ -12148,8 +12194,9 @@
   {
    "title": "Cannellini bean and walnut patties with avocado and wasabi sauce",
    "description": null,
-   "category_slug": "sauces-dressings",
+   "section": "sauces-dressings",
    "tags": [
+    "sauces-dressings",
     "bean",
     "patties",
     "walnut"
@@ -12363,8 +12410,9 @@
   {
    "title": "Coconut meringue cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
+    "cake",
     "baking",
     "meringue"
    ],
@@ -12486,7 +12534,7 @@
   {
    "title": "Mushrooms with lemon thyme and fetta",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "fetta",
     "mushroom dinner"
@@ -12593,7 +12641,7 @@
   {
    "title": "Caramel and macadamia clafouti",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "baking",
     "caramel",
@@ -12712,8 +12760,9 @@
   {
    "title": "Chocolate, caramel and hazelnut tarts",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "caramel",
     "choclate",
@@ -12909,7 +12958,7 @@
   {
    "title": "Potato and capsicum tortilla",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "capsicum",
     "potato",
@@ -13034,7 +13083,7 @@
   {
    "title": "Vegetable and tofu curry",
    "description": null,
-   "category_slug": "curry",
+   "section": "curry",
    "tags": [
     "curry",
     "tofu"
@@ -13214,8 +13263,9 @@
   {
    "title": "Banana and pecan tartes tatin",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "banana",
     "caramel"
@@ -13346,7 +13396,7 @@
   {
    "title": "Upside down lemon and blueberry cakes",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "blueberry",
@@ -13480,7 +13530,7 @@
   {
    "title": "Honey and orange madeleines",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "baking",
     "madeleine"
@@ -13633,7 +13683,7 @@
   {
    "title": "Red bean and red capsicum hotpot with limed avocado",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "hotpot",
     "red bean"
@@ -13893,8 +13943,9 @@
   {
    "title": "Cherry and ricotta crumble",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "cherry",
     "strudel"
@@ -14078,8 +14129,9 @@
   {
    "title": "Sourdough apple-oat pancakes with aged cheddar and bacon",
    "description": null,
-   "category_slug": "breakfast",
+   "section": "breakfast",
    "tags": [
+    "breakfast",
     "breaky",
     "pancake",
     "sourdough"
@@ -14262,8 +14314,9 @@
   {
    "title": "Roasted Red Onions with Garlic Mash",
    "description": null,
-   "category_slug": "side",
+   "section": "side",
    "tags": [
+    "side",
     "mash",
     "onion",
     "roast vegies"
@@ -14313,8 +14366,9 @@
   {
    "title": "Roasted beet and pomegranate salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "beetroot",
     "pomegranate",
     "walnut",
@@ -14352,7 +14406,7 @@
   {
    "title": "Baked maple plum custards",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "baked custard",
     "dessert"
@@ -14472,8 +14526,9 @@
   {
    "title": "deep dish apple pie",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "apple pie",
     "baking"
    ],
@@ -14635,8 +14690,9 @@
   {
    "title": "Lemon meringue pie",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "lemon meringue"
    ],
@@ -14828,7 +14884,7 @@
   {
    "title": "Chocolate tart",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "chocolate",
     "dessert",
@@ -14960,7 +15016,7 @@
   {
    "title": "Treacle tart",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "baking",
     "dessert",
@@ -15142,7 +15198,7 @@
   {
    "title": "Sweet raisin and orange bread",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
     "baking",
     "bread",
@@ -15327,7 +15383,7 @@
   {
    "title": "Garlic, oregano and chilli focaccia with mozarella crust",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
     "bread",
     "focaccia"
@@ -15480,7 +15536,7 @@
   {
    "title": "Yoghurt, honey and chocolate cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -15662,7 +15718,7 @@
   {
    "title": "Chilli pumpkin and beans",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "bean",
     "chilli",
@@ -15831,7 +15887,7 @@
   {
    "title": "Baked berry pudding",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "berry",
     "dessert",
@@ -15950,7 +16006,7 @@
   {
    "title": "choc-banana puddings",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "banana",
     "dessert",
@@ -16105,8 +16161,9 @@
   {
    "title": "Caramel filled chocolate cakes",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
+    "cake",
     "baking",
     "caramel",
     "chocolate"
@@ -16230,8 +16287,9 @@
   {
    "title": "Vegetable biryani",
    "description": null,
-   "category_slug": "side",
+   "section": "side",
    "tags": [
+    "side",
     "biryani",
     "vegetable"
    ],
@@ -16410,7 +16468,7 @@
   {
    "title": "caramel baked custards",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "baked custard",
     "caramel",
@@ -16515,7 +16573,7 @@
   {
    "title": "Pear and blueberry crumble tart",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "crumble",
     "dessert",
@@ -16710,7 +16768,7 @@
   {
    "title": "Coconut and lime meringue topped custard",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "baked custard",
     "dessert",
@@ -16850,8 +16908,9 @@
   {
    "title": "Spicy beetroot relish",
    "description": null,
-   "category_slug": "preserves-chutney",
+   "section": "preserves-chutney",
    "tags": [
+    "preserves-chutney",
     "beetroot",
     "preserves",
     "relish"
@@ -16941,8 +17000,10 @@
   {
    "title": "Chocolate Self-Saucing Pudding",
    "description": null,
-   "category_slug": "dessert",
-   "tags": [],
+   "section": "dessert",
+   "tags": [
+    "dessert"
+   ],
    "servings": 4,
    "servings_note": "Serves 4",
    "prep_minutes": null,
@@ -17039,8 +17100,10 @@
   {
    "title": "Prawn Curry Recipe",
    "description": null,
-   "category_slug": "curry",
-   "tags": [],
+   "section": "curry",
+   "tags": [
+    "curry"
+   ],
    "servings": null,
    "servings_note": null,
    "prep_minutes": null,
@@ -17164,7 +17227,7 @@
   {
    "title": "Palak Paneer Recipe",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [],
    "servings": null,
    "servings_note": null,
@@ -17243,7 +17306,7 @@
   {
    "title": "Pea, Fetta and Mint salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "fetta",
     "mint",
@@ -17427,7 +17490,7 @@
   {
    "title": "Green Beans with Mustard Seeds & Almonds",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "beans",
     "indian"
@@ -17616,8 +17679,10 @@
   {
    "title": "Tiramisu",
    "description": null,
-   "category_slug": "dessert",
-   "tags": [],
+   "section": "dessert",
+   "tags": [
+    "dessert"
+   ],
    "servings": 8,
    "servings_note": "serves 8",
    "prep_minutes": null,
@@ -17776,7 +17841,7 @@
   {
    "title": "Peach Tarte Tatin",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "dessert",
     "peach"
@@ -17927,8 +17992,9 @@
   {
    "title": "Vegetable Korma",
    "description": null,
-   "category_slug": "side",
+   "section": "side",
    "tags": [
+    "side",
     "curry",
     "korma",
     "vegetable"
@@ -18143,7 +18209,7 @@
   {
    "title": "Dhal",
    "description": null,
-   "category_slug": "curry",
+   "section": "curry",
    "tags": [
     "curry",
     "dahl",
@@ -18411,7 +18477,7 @@
   {
    "title": "Bengali Fish Curry",
    "description": null,
-   "category_slug": "curry",
+   "section": "curry",
    "tags": [
     "curry",
     "fish"
@@ -18664,7 +18730,7 @@
   {
    "title": "Coconut Lime Syrup Cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "cake",
     "coconut",
@@ -18850,8 +18916,9 @@
   {
    "title": "Chicken Korma",
    "description": null,
-   "category_slug": "main-meat",
+   "section": "main-meat",
    "tags": [
+    "main-meat",
     "chicken",
     "korma"
    ],
@@ -19083,7 +19150,7 @@
   {
    "title": "Polenta and Rosemary Bread with Fresh Sweet Corn",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
     "bread",
     "corn",
@@ -19282,8 +19349,9 @@
   {
    "title": "Steamed silken tofu",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "tofu"
    ],
    "servings": null,
@@ -19465,7 +19533,7 @@
   {
    "title": "Chinese Fried Eggs",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "eggs",
     "fired eggs"
@@ -19639,8 +19707,9 @@
   {
    "title": "Roasted eggplant with garlic and mint",
    "description": null,
-   "category_slug": "side",
+   "section": "side",
    "tags": [
+    "side",
     "eggplant",
     "roast vegies"
    ],
@@ -19769,7 +19838,7 @@
   {
    "title": "Pear and almond butter cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "almond",
     "baking",
@@ -19936,8 +20005,9 @@
   {
    "title": "Sweet potato fritters with snow pea and almond salad",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "almond",
     "fritter",
     "snow pea",
@@ -20080,8 +20150,9 @@
   {
    "title": "Warm bean, asparagus and egg salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "asparagus",
     "bean",
     "eggs",
@@ -20227,7 +20298,7 @@
   {
    "title": "Lemon polenta cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -20348,8 +20419,9 @@
   {
    "title": "caramel baked custards",
    "description": null,
-   "category_slug": "basics",
+   "section": "basics",
    "tags": [
+    "basics",
     "baked custard",
     "caramel"
    ],
@@ -20451,8 +20523,9 @@
   {
    "title": "Pasta with oven dried tomatoes and breadcrumbs",
    "description": null,
-   "category_slug": "pasta-noodles",
+   "section": "pasta-noodles",
    "tags": [
+    "pasta-noodles",
     "pasta",
     "tomato"
    ],
@@ -20604,7 +20677,7 @@
   {
    "title": "Roast pumpkin, ricotta and cashew salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "pumpkin",
     "ricotta",
@@ -20743,8 +20816,9 @@
   {
    "title": "Orange Cheesecake",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
+    "dessert",
     "baking",
     "cheesecake",
     "orange"
@@ -20898,8 +20972,9 @@
   {
    "title": "Pinolate",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "biscuit"
    ],
@@ -21051,7 +21126,7 @@
   {
    "title": "Crepe layer cake with walnut jam and chocolate ganache",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "chocolate",
     "crepe",
@@ -21311,7 +21386,7 @@
   {
    "title": "mushroom tatin",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "mushroom dinner",
     "tatin"
@@ -21517,8 +21592,9 @@
   {
    "title": "Roast carrots with potato and pistachio salad",
    "description": null,
-   "category_slug": "side",
+   "section": "side",
    "tags": [
+    "side",
     "carrots",
     "pistachio",
     "potato",
@@ -21733,8 +21809,9 @@
   {
    "title": "pine nut biscuits",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "biscuit",
     "pine nuts"
@@ -21865,8 +21942,9 @@
   {
    "title": "crescent moons",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "almond",
     "biscuit"
    ],
@@ -21985,8 +22063,9 @@
   {
    "title": "Savoury profiteroles with herb and cream cheese",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "profiterole",
     "savoury apetiser"
    ],
@@ -22135,7 +22214,7 @@
   {
    "title": "Sweet potato crisps with avocado and garlic mayonaise",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "avocado",
     "mayonaise",
@@ -22244,8 +22323,9 @@
   {
    "title": "Thai sweet corn fritters with sweet chilli sauce",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "corn",
     "fritter"
    ],
@@ -22384,8 +22464,9 @@
   {
    "title": "polenta cake with vegetables and cheese",
    "description": null,
-   "category_slug": "side",
+   "section": "side",
    "tags": [
+    "side",
     "polenta"
    ],
    "servings": null,
@@ -22562,7 +22643,7 @@
   {
    "title": "banana and pineapple cake with rum frosting",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "banana",
@@ -22756,7 +22837,7 @@
   {
    "title": "Banoffee buttefly cakes",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "banana",
     "cake",
@@ -22898,7 +22979,7 @@
   {
    "title": "nectarine and watercress salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "nectarine",
     "salad",
@@ -23027,8 +23108,9 @@
   {
    "title": "Chocolate, rum and macadamia slice",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "chocolate",
     "macadamia",
@@ -23224,7 +23306,7 @@
   {
    "title": "Bean and raddichio salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "bean",
     "salad"
@@ -23371,7 +23453,7 @@
   {
    "title": "Honey and marsala glazed ham",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "christmas",
     "ham"
@@ -23451,7 +23533,7 @@
   {
    "title": "Potato and oinon galette",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "oinon",
     "potato"
@@ -23528,7 +23610,7 @@
   {
    "title": "Watercress salad with sherry and hazelnut dressing",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "salad",
     "watercress"
@@ -23645,8 +23727,9 @@
   {
    "title": "Mango and white chocolate baked cheesecake",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
+    "dessert",
     "baking",
     "cheesecake",
     "chocolate",
@@ -23828,7 +23911,7 @@
   {
    "title": "Fig and pistachio salad with lemon dressing",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "fig",
     "pistachio",
@@ -23967,8 +24050,9 @@
   {
    "title": "honey and soy glazed tofu",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "tofu"
    ],
    "servings": null,
@@ -24062,7 +24146,7 @@
   {
    "title": "Blueberry and raspberry clafoutis",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "berry",
     "clafoutis",
@@ -24201,8 +24285,9 @@
   {
    "title": "Mixed berry tart",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "berry",
     "tart"
@@ -24343,8 +24428,9 @@
   {
    "title": "Coconut raspberry slices",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "coconut",
     "raspberry",
@@ -24464,8 +24550,9 @@
   {
    "title": "choc-cherry coconut slice",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "cherry",
     "chocolate",
     "coconut",
@@ -24651,8 +24738,9 @@
   {
    "title": "Oatmeal squares",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "slice"
    ],
@@ -24808,8 +24896,9 @@
   {
    "title": "Walnut caramel slice",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "caramel",
     "slice",
@@ -24922,8 +25011,9 @@
   {
    "title": "dark chocolate brownies",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "brownie",
     "chocolate"
@@ -25073,7 +25163,7 @@
   {
    "title": "Chocolate creme caramel",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "caramel",
     "chocolate",
@@ -25178,8 +25268,9 @@
   {
    "title": "Eggplant cheeseburger",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "bbq",
     "burger",
     "eggplant"
@@ -25339,7 +25430,7 @@
   {
    "title": "Chocolate and coconut peaches with gelato",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "chocolate",
     "dessert",
@@ -25453,8 +25544,9 @@
   {
    "title": "Hollandaise sauce",
    "description": null,
-   "category_slug": "sauces-dressings",
+   "section": "sauces-dressings",
    "tags": [
+    "sauces-dressings",
     "hollandaise",
     "sauce"
    ],
@@ -25599,8 +25691,9 @@
   {
    "title": "coconut icecream",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
+    "dessert",
     "coconut",
     "icecream"
    ],
@@ -25710,8 +25803,9 @@
   {
    "title": "Strawberry tarts",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "strawberry",
     "tart"
@@ -25845,8 +25939,9 @@
   {
    "title": "Plum sauce",
    "description": null,
-   "category_slug": "preserves-chutney",
+   "section": "preserves-chutney",
    "tags": [
+    "preserves-chutney",
     "plum",
     "preserves",
     "sauce"
@@ -25972,8 +26067,9 @@
   {
    "title": "Chinese plum sauce",
    "description": null,
-   "category_slug": "preserves-chutney",
+   "section": "preserves-chutney",
    "tags": [
+    "preserves-chutney",
     "plum",
     "preserves",
     "sauce"
@@ -26150,8 +26246,9 @@
   {
    "title": "Autumn salad of mushroom and oinon",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "mushroom dinner",
     "oinon",
     "warm salad"
@@ -26268,8 +26365,9 @@
   {
    "title": "Southern fried chicken",
    "description": null,
-   "category_slug": "main-meat",
+   "section": "main-meat",
    "tags": [
+    "main-meat",
     "chicken"
    ],
    "servings": null,
@@ -26430,8 +26528,9 @@
   {
    "title": "Tofu Mii Grop / (crispy noodles)",
    "description": null,
-   "category_slug": "pasta-noodles",
+   "section": "pasta-noodles",
    "tags": [
+    "pasta-noodles",
     "mii grop",
     "noodle",
     "tofu"
@@ -26634,7 +26733,7 @@
   {
    "title": "Creme Brulee",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "creme brulee",
     "dessert"
@@ -26762,7 +26861,7 @@
   {
    "title": "Celeriac, Apple and Walnut Salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "apple",
     "celeriac",
@@ -26957,7 +27056,7 @@
   {
    "title": "Rhubarb Crumble",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "crumble",
     "dessert",
@@ -27096,7 +27195,7 @@
   {
    "title": "Three bean salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "bean",
     "salad"
@@ -27254,8 +27353,9 @@
   {
    "title": "corn fritters",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "corn",
     "fritter"
    ],
@@ -27386,8 +27486,9 @@
   {
    "title": "Pastry Cream",
    "description": null,
-   "category_slug": "basics",
+   "section": "basics",
    "tags": [
+    "basics",
     "custard",
     "pastry"
    ],
@@ -27532,8 +27633,9 @@
   {
    "title": "Slow roasted eggplant with chermoula rub and moghrabieh salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "eggplant",
     "moghrabieh"
    ],
@@ -27854,8 +27956,9 @@
   {
    "title": "Chewy fruit and nut bar",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "bar",
     "fruit and nut"
    ],
@@ -28004,8 +28107,9 @@
   {
    "title": "Mango chutney",
    "description": null,
-   "category_slug": "preserves-chutney",
+   "section": "preserves-chutney",
    "tags": [
+    "preserves-chutney",
     "chutney",
     "mango",
     "preserves"
@@ -28143,8 +28247,9 @@
   {
    "title": "Home-made honeycomb",
    "description": null,
-   "category_slug": "basics",
+   "section": "basics",
    "tags": [
+    "basics",
     "honeycomb"
    ],
    "servings": null,
@@ -28241,7 +28346,7 @@
   {
    "title": "Yoghurt pannacotta with raspberries and home made honeycomb",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "dessert",
     "panna cotta"
@@ -28364,7 +28469,7 @@
   {
    "title": "Toasted bircher style museli",
    "description": null,
-   "category_slug": "breakfast",
+   "section": "breakfast",
    "tags": [
     "bircher museli",
     "breakfast"
@@ -28524,8 +28629,9 @@
   {
    "title": "Croissant",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "croissant"
    ],
@@ -28906,7 +29012,7 @@
   {
    "title": "Banana Bread",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
     "baking",
     "banana",
@@ -29012,8 +29118,9 @@
   {
    "title": "double choc muffins",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
+    "cake",
     "baking",
     "chocolate",
     "muffin"
@@ -29177,8 +29284,9 @@
   {
    "title": "Croissant",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "croissant"
    ],
@@ -29373,8 +29481,9 @@
   {
    "title": "Eggplant Dip (Baba Ghanouj)",
    "description": null,
-   "category_slug": "dips-spreads",
+   "section": "dips-spreads",
    "tags": [
+    "dips-spreads",
     "baba ganouj",
     "dip",
     "eggplant"
@@ -29525,8 +29634,9 @@
   {
    "title": "zucchini and corn fritters",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "corn",
     "fritter",
     "zucchini"
@@ -29668,8 +29778,9 @@
   {
    "title": "Tomato fritters",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "fritter",
     "tomato"
    ],
@@ -29809,8 +29920,9 @@
   {
    "title": "chicken enchiladas",
    "description": null,
-   "category_slug": "main-meat",
+   "section": "main-meat",
    "tags": [
+    "main-meat",
     "chicken",
     "enchilada",
     "mexican"
@@ -30139,7 +30251,7 @@
   {
    "title": "Baked Pears in Puff Pastry with Molasses Sauce",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "dessert",
     "pear"
@@ -30331,8 +30443,9 @@
   {
    "title": "Pancake batter",
    "description": null,
-   "category_slug": "breakfast",
+   "section": "breakfast",
    "tags": [
+    "breakfast",
     "pancake"
    ],
    "servings": null,
@@ -30439,7 +30552,7 @@
   {
    "title": "Mussaman curry",
    "description": null,
-   "category_slug": "curry",
+   "section": "curry",
    "tags": [
     "curry",
     "mussaman"
@@ -30767,7 +30880,7 @@
   {
    "title": "Leek and Potato Soup",
    "description": null,
-   "category_slug": "soup",
+   "section": "soup",
    "tags": [
     "leek",
     "potato",
@@ -30884,7 +30997,7 @@
   {
    "title": "Banana Fritters with Cinnamon Sauce",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "banana",
     "dessert",
@@ -31067,8 +31180,9 @@
   {
    "title": "Three-Onion Pie with Feta or Goat Cheese",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "fetta",
     "leek",
     "onion",
@@ -31273,7 +31387,7 @@
   {
    "title": "Dry potato curry",
    "description": null,
-   "category_slug": "curry",
+   "section": "curry",
    "tags": [
     "curry",
     "potato"
@@ -31463,7 +31577,7 @@
   {
    "title": "Cream of cauliflower soup",
    "description": null,
-   "category_slug": "soup",
+   "section": "soup",
    "tags": [
     "cauliflower",
     "soup"
@@ -31658,7 +31772,7 @@
   {
    "title": "Vienna bread recipe",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
     "bread",
     "vienna"
@@ -31794,7 +31908,7 @@
   {
    "title": "Traditional ratatouille",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "tatatouille"
    ],
@@ -31899,7 +32013,7 @@
   {
    "title": "Grilled pear and watercress salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "pear",
     "salad",
@@ -32155,8 +32269,9 @@
   {
    "title": "Blueberry pancakes",
    "description": null,
-   "category_slug": "breakfast",
+   "section": "breakfast",
    "tags": [
+    "breakfast",
     "blueberry",
     "pancake"
    ],
@@ -32295,8 +32410,9 @@
   {
    "title": "Chocolate Profiteroles",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "baking",
     "chocolate",
     "profiterole"
@@ -32575,8 +32691,9 @@
   {
    "title": "Pastry Cream (Creme Patissiere)",
    "description": null,
-   "category_slug": "basics",
+   "section": "basics",
    "tags": [
+    "basics",
     "custard",
     "pastry cream"
    ],
@@ -32672,7 +32789,7 @@
   {
    "title": "Banana and walnut bread",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
     "baking",
     "banana",
@@ -32816,7 +32933,7 @@
   {
    "title": "Tunisian carrot, potato and egg salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "carrots",
     "eggs",
@@ -33013,7 +33130,7 @@
   {
    "title": "3 minute sponge with jam and cream",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -33191,7 +33308,7 @@
   {
    "title": "Chocolate walnut cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -33443,8 +33560,9 @@
   {
    "title": "Chocolate malt truffles",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "chocolate",
     "malt",
     "truffle"
@@ -33522,8 +33640,9 @@
   {
    "title": "Chocolate brownies",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "brownie",
     "chocolate"
    ],
@@ -33635,7 +33754,7 @@
   {
    "title": "Churros",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "chocolate",
     "churros"
@@ -33775,7 +33894,7 @@
   {
    "title": "Flourless chocolate roll",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "baking",
     "chocolate"
@@ -33921,8 +34040,9 @@
   {
    "title": "Soybean and cauliflower fritters with pomegranate and tahini dipping sauce",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "cauliflower",
     "fritter",
     "pomegranate",
@@ -34206,8 +34326,9 @@
   {
    "title": "Spiced eggplant dhal",
    "description": null,
-   "category_slug": "curry",
+   "section": "curry",
    "tags": [
+    "curry",
     "dhal",
     "eggplant"
    ],
@@ -34386,7 +34507,7 @@
   {
    "title": "Boston baked beans",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "baked",
     "beans"
@@ -34599,8 +34720,9 @@
   {
    "title": "Black bean brownies",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "bean",
     "brownie"
    ],
@@ -34768,8 +34890,9 @@
   {
    "title": "Banana, ricotta and white chocolate crepes",
    "description": null,
-   "category_slug": "breakfast",
+   "section": "breakfast",
    "tags": [
+    "breakfast",
     "banana",
     "chocolate",
     "crepe",
@@ -34971,7 +35094,7 @@
   {
    "title": "Lentil and pumpkin curry",
    "description": null,
-   "category_slug": "curry",
+   "section": "curry",
    "tags": [
     "curry",
     "lentil",
@@ -35146,8 +35269,9 @@
   {
    "title": "Spinach and pine nut pies",
    "description": null,
-   "category_slug": "pastry-tarts",
+   "section": "pastry-tarts",
    "tags": [
+    "pastry-tarts",
     "pie",
     "pine nuts",
     "spinach"
@@ -35334,7 +35458,7 @@
   {
    "title": "Chocolate mousse with coffee granita",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "chocolate",
     "coffee",
@@ -35499,7 +35623,7 @@
   {
    "title": "Apple fritters",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "apple",
     "dessert",
@@ -35704,8 +35828,9 @@
   {
    "title": "Red pesto pasta",
    "description": null,
-   "category_slug": "pasta-noodles",
+   "section": "pasta-noodles",
    "tags": [
+    "pasta-noodles",
     "capsicum",
     "pasta",
     "pesto"
@@ -35836,8 +35961,9 @@
   {
    "title": "Ricotta and spinach gnocchi",
    "description": null,
-   "category_slug": "pasta-noodles",
+   "section": "pasta-noodles",
    "tags": [
+    "pasta-noodles",
     "gnocchi",
     "ricotta",
     "spinach"
@@ -36018,8 +36144,9 @@
   {
    "title": "Fluffy pancakes",
    "description": null,
-   "category_slug": "breakfast",
+   "section": "breakfast",
    "tags": [
+    "breakfast",
     "pancake"
    ],
    "servings": null,
@@ -36170,8 +36297,9 @@
   {
    "title": "Buttermilk Pancakes",
    "description": null,
-   "category_slug": "breakfast",
+   "section": "breakfast",
    "tags": [
+    "breakfast",
     "buttermilk",
     "pancake"
    ],
@@ -36276,8 +36404,9 @@
   {
    "title": "Thai Coconut Fish",
    "description": null,
-   "category_slug": "main-seafood",
+   "section": "main-seafood",
    "tags": [
+    "main-seafood",
     "fish",
     "thai"
    ],
@@ -36502,8 +36631,9 @@
   {
    "title": "Baby pancakes",
    "description": null,
-   "category_slug": "breakfast",
+   "section": "breakfast",
    "tags": [
+    "breakfast",
     "baby",
     "banana",
     "pancake"
@@ -36651,7 +36781,7 @@
   {
    "title": "Apple and Hazelnut cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "apple",
     "baking",
@@ -36772,7 +36902,7 @@
   {
    "title": "Apple crumble pie",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "apple pie",
     "dessert"
@@ -36998,7 +37128,7 @@
   {
    "title": "Apple and Cream Cheese Strudel",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "apple",
     "baking",
@@ -37142,8 +37272,9 @@
   {
    "title": "Cinnamon biscuits",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "biscuit",
     "cinnamon"
@@ -37343,7 +37474,7 @@
   {
    "title": "Sweet flatbread with orange-cinnamon jam",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
     "baking",
     "bread",
@@ -37543,8 +37674,9 @@
   {
    "title": "Salted spiced caramel slice",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "caramel",
     "slice"
@@ -37754,7 +37886,7 @@
   {
    "title": "Coconut Cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -37886,8 +38018,9 @@
   {
    "title": "zucchini and apple muffins",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
+    "cake",
     "apple",
     "baking",
     "muffin",
@@ -38020,8 +38153,9 @@
   {
    "title": "Chocolate Berry Slice",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "chocolate",
     "slice"
@@ -38135,7 +38269,7 @@
   {
    "title": "Olive oil lime cake",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -38265,7 +38399,7 @@
   {
    "title": "Cheese and buttermilk loaves",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
     "baking",
     "bread",
@@ -38387,7 +38521,7 @@
   {
    "title": "Raspberry chocolate puddings",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "baking",
     "chocolate",
@@ -38551,8 +38685,9 @@
   {
    "title": "Hazelnut and chocolate biscuits",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "biscuit",
     "hazelnut"
@@ -38696,7 +38831,7 @@
   {
    "title": "Potted puddings",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "dessert",
     "pudding"
@@ -38862,7 +38997,7 @@
   {
    "title": "Blushing bread and butter pudding",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "bread and butter",
     "dessert",
@@ -39026,8 +39161,9 @@
   {
    "title": "Sweet potato burgers",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "burger",
     "sweet potato"
    ],
@@ -39168,7 +39304,7 @@
   {
    "title": "Sauteed cherry tomatoes and white beans",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "bean",
     "tomato"
@@ -39265,8 +39401,9 @@
   {
    "title": "Barbecued vegetable salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "bbq",
     "warm salad"
    ],
@@ -39444,8 +39581,9 @@
   {
    "title": "Roast pumpkin, spinach and goat's cheese salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "pumpkin",
     "spinach",
     "warm salad"
@@ -39556,7 +39694,7 @@
   {
    "title": "Rocket and pear salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "pear",
     "salad"
@@ -39653,7 +39791,7 @@
   {
    "title": "Honey creme caramel",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "creme caramel",
     "dessert"
@@ -39766,8 +39904,9 @@
   {
    "title": "coffee roasted veal with potato wafers",
    "description": null,
-   "category_slug": "main-meat",
+   "section": "main-meat",
    "tags": [
+    "main-meat",
     "coffee",
     "veal"
    ],
@@ -39886,7 +40025,7 @@
   {
    "title": "potato salad with mustard, soft egg and bacon",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "potato",
     "salad"
@@ -40087,7 +40226,7 @@
   {
    "title": "Mango and macadamia salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "macadamia",
     "mango",
@@ -40232,7 +40371,7 @@
   {
    "title": "Cherry, rocket and pear salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "cherry",
     "pear",
@@ -40384,7 +40523,7 @@
   {
    "title": "Mango granita with coconut panna cotta",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "dessert",
     "mango",
@@ -40552,7 +40691,7 @@
   {
    "title": "Chargrilled polenta toasts with red capsicum",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "capsicum",
     "polenta"
@@ -40715,8 +40854,9 @@
   {
    "title": "Watermelon and cranberry mocktail",
    "description": null,
-   "category_slug": "drinks",
+   "section": "drinks",
    "tags": [
+    "drinks",
     "cranberry",
     "punch",
     "watermelon"
@@ -40807,8 +40947,9 @@
   {
    "title": "Cranberry, mint and almond shoulder of lamb",
    "description": null,
-   "category_slug": "main-meat",
+   "section": "main-meat",
    "tags": [
+    "main-meat",
     "lamb",
     "roast"
    ],
@@ -40950,8 +41091,9 @@
   {
    "title": "Stuffed onions",
    "description": null,
-   "category_slug": "main-meat",
+   "section": "main-meat",
    "tags": [
+    "main-meat",
     "onion",
     "roast"
    ],
@@ -41090,8 +41232,9 @@
   {
    "title": "Eggplant, basil and tomato pasta",
    "description": null,
-   "category_slug": "pasta-noodles",
+   "section": "pasta-noodles",
    "tags": [
+    "pasta-noodles",
     "eggplant",
     "pasta",
     "tomato"
@@ -41251,8 +41394,9 @@
   {
    "title": "cinnamon nut toffees",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "nut;",
     "toffee"
    ],
@@ -41382,7 +41526,7 @@
   {
    "title": "Lemon meringue ice-cream loaf",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "dessert",
     "icecream",
@@ -41529,7 +41673,7 @@
   {
    "title": "Chocolate polenta puddings",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "chocolate",
     "dessert"
@@ -41702,8 +41846,9 @@
   {
    "title": "Christmas pudding shortbread",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "biscuit",
     "christmas",
@@ -41853,7 +41998,7 @@
   {
    "title": "Ginger cake with pistachio praline",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "baking",
     "cake",
@@ -42098,8 +42243,9 @@
   {
    "title": "Garam Masala Tofu Scramble Recipe",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "low-carb",
     "tofu"
    ],
@@ -42249,7 +42395,7 @@
   {
    "title": "White Chocolate Fudge",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [],
    "servings": null,
    "servings_note": null,
@@ -42397,8 +42543,9 @@
   {
    "title": "Triple choc gingerbread brownies with almonds",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "brownie",
     "chocolate",
@@ -42571,7 +42718,7 @@
   {
    "title": "Spinach and garlic soup",
    "description": null,
-   "category_slug": "soup",
+   "section": "soup",
    "tags": [
     "garlic",
     "soup",
@@ -42723,8 +42870,9 @@
   {
    "title": "Ricotta gnocchi",
    "description": null,
-   "category_slug": "pasta-noodles",
+   "section": "pasta-noodles",
    "tags": [
+    "pasta-noodles",
     "gnocchi",
     "ricotta"
    ],
@@ -42928,7 +43076,7 @@
   {
    "title": "Cuban tiramisu with rum and mint",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "dessert",
     "tiramisu"
@@ -43065,8 +43213,9 @@
   {
    "title": "Banana Butter",
    "description": null,
-   "category_slug": "preserves-chutney",
+   "section": "preserves-chutney",
    "tags": [
+    "preserves-chutney",
     "banana",
     "butter",
     "preserves"
@@ -43157,8 +43306,9 @@
   {
    "title": "Peanut Biscuits",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "biscuit",
     "peanut"
@@ -43262,8 +43412,9 @@
   {
    "title": "Date Slice",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "date",
     "slice"
@@ -43377,7 +43528,7 @@
   {
    "title": "Apricot Loaf",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
     "all bran",
     "apricot",
@@ -43487,8 +43638,9 @@
   {
    "title": "Choc-caramel slice",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "baking",
     "caramel",
     "chocolate",
@@ -43616,8 +43768,9 @@
   {
    "title": "Black Forest Cheesecake",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
+    "dessert",
     "baking",
     "black forest",
     "cheesecake"
@@ -43858,8 +44011,9 @@
   {
    "title": "Vegie burgers - 2 flavours",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "vegie burger"
    ],
    "servings": null,
@@ -44020,8 +44174,9 @@
   {
    "title": "Zucchini and Haloumi Fritters",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "fritter",
     "haloumi",
     "zucchini"
@@ -44219,7 +44374,7 @@
   {
    "title": "Shakshuka (baked eggs",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "baked eggs"
    ],
@@ -44414,8 +44569,9 @@
   {
    "title": "Yellow miso eggplant with tofu dressing",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "eggplant",
     "miso",
     "tofu"
@@ -44567,8 +44723,9 @@
   {
    "title": "Warm roast veggie salad with lemony lentils",
    "description": null,
-   "category_slug": "side",
+   "section": "side",
    "tags": [
+    "side",
     "lentil",
     "roast vegies",
     "warm salad"
@@ -44763,7 +44920,7 @@
   {
    "title": "Middle Eastern lentils and rice with blackened onions",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "lentil",
     "onion",
@@ -44954,8 +45111,9 @@
   {
    "title": "Quinoa, red rice and black lentil salad with spicy cauliflower",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "cauliflower",
     "lentil",
     "quinoa",
@@ -45238,8 +45396,9 @@
   {
    "title": "Ricotta and tomato pasta",
    "description": null,
-   "category_slug": "pasta-noodles",
+   "section": "pasta-noodles",
    "tags": [
+    "pasta-noodles",
     "pasta",
     "ricotta",
     "tomato"
@@ -45371,8 +45530,9 @@
   {
    "title": "Mushroom and tofu with beanthread noodles",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "mushroom",
     "stir-fry",
     "tofu"
@@ -45574,7 +45734,7 @@
   {
    "title": "Lentil and sweet potato curry",
    "description": null,
-   "category_slug": "curry",
+   "section": "curry",
    "tags": [
     "curry",
     "dahl",
@@ -45792,7 +45952,7 @@
   {
    "title": "Chinese fluffy omelet",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "chinese",
     "omlette"
@@ -45897,7 +46057,7 @@
   {
    "title": "Baked portobello mushrooms topped with quinoa, feta and micro herbs",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "fetta",
     "mushroom dinner",
@@ -46069,7 +46229,7 @@
   {
    "title": "Freekeh with cauliflower, pomegranate and mint",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [
     "cauliflower",
     "freekeh",
@@ -46294,8 +46454,9 @@
   {
    "title": "Chocolate cupcakes",
    "description": null,
-   "category_slug": "cake",
+   "section": "cake",
    "tags": [
+    "cake",
     "baking",
     "chocolate",
     "cupcakes"
@@ -46494,8 +46655,9 @@
   {
    "title": "THE BUTTERMILK PANCAKE RECIPE:",
    "description": null,
-   "category_slug": "breakfast",
+   "section": "breakfast",
    "tags": [
+    "breakfast",
     "buttermilk",
     "pancake"
    ],
@@ -46586,8 +46748,9 @@
   {
    "title": "Panforte bianco with pistachios, almonds and cherries",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "almond",
     "cherry",
     "christmas",
@@ -46743,8 +46906,9 @@
   {
    "title": "Panforte",
    "description": null,
-   "category_slug": "biscuits-slices",
+   "section": "biscuits-slices",
    "tags": [
+    "biscuits-slices",
     "chocolate",
     "christmas",
     "panforte"
@@ -46923,8 +47087,9 @@
   {
    "title": "Roulade with spiced pumpkin, macadamia, pear and tarragon stuffing",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "christmas",
     "macadamia",
     "pumpin",
@@ -47162,8 +47327,9 @@
   {
    "title": "Vegetable carpaccio with salsa verde and almonds",
    "description": null,
-   "category_slug": "sauces-dressings",
+   "section": "sauces-dressings",
    "tags": [
+    "sauces-dressings",
     "almond",
     "carparccio",
     "salsa verde",
@@ -47334,8 +47500,9 @@
   {
    "title": "Christmas coleslaw",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "christmas",
     "coleslaw"
    ],
@@ -47481,7 +47648,7 @@
   {
    "title": "Salad of freekeh with pickled red onion, cherries, toasted walnuts and mint",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "cherries",
     "freekeh",
@@ -47635,8 +47802,9 @@
   {
    "title": "Nut roast",
    "description": null,
-   "category_slug": "main-vegetarian",
+   "section": "main-vegetarian",
    "tags": [
+    "main-vegetarian",
     "nut roast",
     "vegetarian"
    ],
@@ -47824,7 +47992,7 @@
   {
    "title": "Fresh mozzarella, farro and cherry tomato salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "cherry tomato",
     "farro",
@@ -47985,8 +48153,9 @@
   {
    "title": "Salad of freekeh with pickled red onion, cherries, toasted walnuts and mint",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "cherries",
     "freekeh",
     "mint",
@@ -48137,7 +48306,7 @@
   {
    "title": "Mangomisu",
    "description": null,
-   "category_slug": "dessert",
+   "section": "dessert",
    "tags": [
     "dessert",
     "mango"
@@ -48279,8 +48448,9 @@
   {
    "title": "Prawns with Mango Salsa",
    "description": null,
-   "category_slug": "main-seafood",
+   "section": "main-seafood",
    "tags": [
+    "main-seafood",
     "mango",
     "prawns",
     "salsa"
@@ -48373,8 +48543,9 @@
   {
    "title": "BBQ salmon with lemon and herbs",
    "description": null,
-   "category_slug": "main-seafood",
+   "section": "main-seafood",
    "tags": [
+    "main-seafood",
     "bbq",
     "herb",
     "lemon",
@@ -48509,7 +48680,7 @@
   {
    "title": "Fennel, orange and burghul salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "burghul",
     "fennel",
@@ -48626,7 +48797,7 @@
   {
    "title": "Tomato, coriancer and white bean salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "coriander",
     "salad",
@@ -49003,7 +49174,7 @@
   {
    "title": "Asparagus and persian fetta salad",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "asparagus",
     "bean",
@@ -49166,8 +49337,9 @@
   {
    "title": "Salt and pepper squid",
    "description": null,
-   "category_slug": "main-seafood",
+   "section": "main-seafood",
    "tags": [
+    "main-seafood",
     "calamari",
     "seafood",
     "squid"
@@ -49275,7 +49447,7 @@
   {
    "title": "Untitled",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [],
    "servings": 6,
    "servings_note": "Serves 6",
@@ -49426,8 +49598,9 @@
   {
    "title": "Quinoa salad with crispy roast pumpkin and hazelnuts",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "hazelnut",
     "pumpkin",
     "quinoa"
@@ -49563,7 +49736,7 @@
   {
    "title": "Freekeh salad with persian fetta",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "freekeh",
     "persian fetta",
@@ -49709,7 +49882,7 @@
   {
    "title": "Salad of cannellini beans, zucchini and goat's cheese",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
     "bean",
     "salad",
@@ -49885,8 +50058,9 @@
   {
    "title": "Protein balls",
    "description": null,
-   "category_slug": "snack",
+   "section": "snack",
    "tags": [
+    "snack",
     "low-carb",
     "protein balls"
    ],
@@ -50020,8 +50194,9 @@
   {
    "title": "Flax Bread",
    "description": null,
-   "category_slug": "bread",
+   "section": "bread",
    "tags": [
+    "bread",
     "flax bread",
     "low-carb"
    ],
@@ -50257,7 +50432,7 @@
   {
    "title": "Gluten Free and Grain Free Chocolate Granola Recipe",
    "description": null,
-   "category_slug": null,
+   "section": null,
    "tags": [],
    "servings": 6,
    "servings_note": "Serves about 6",
@@ -50364,8 +50539,9 @@
   {
    "title": "Cauliflower, caramelised onion and gruyere gratin",
    "description": null,
-   "category_slug": "side",
+   "section": "side",
    "tags": [
+    "side",
     "cauliflower",
     "gratin",
     "gruyere",
@@ -50503,8 +50679,9 @@
   {
    "title": "Cauliflower and tahini fritters with warm quinoa tabouleh",
    "description": null,
-   "category_slug": "salad",
+   "section": "salad",
    "tags": [
+    "salad",
     "cauliflower",
     "fritter",
     "quinoa",

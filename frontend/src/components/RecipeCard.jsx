@@ -58,9 +58,9 @@ export default function RecipeCard({ recipe }) {
         )}
 
         <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
-          {recipe.category_name && (
+          {recipe.sections?.[0] && (
             <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent">
-              {recipe.category_name}
+              {recipe.sections[0]}
             </span>
           )}
           {time && <span>{time}</span>}

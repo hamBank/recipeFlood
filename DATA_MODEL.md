@@ -4,11 +4,11 @@ Tables are defined in [`backend/models.py`](backend/models.py); Alembic
 autogenerate reads `SQLModel.metadata` from there.
 
 ```
-Category ──< Recipe >──< RecipeTagLink >── Tag
-              │
-              ├──< RecipeIngredient >── Ingredient
-              ├──< RecipeStep
-              └──< PreparedEvent
+Recipe >──< RecipeTagLink >── Tag        (tags flagged `is_section`
+  │                                       are the navigation)
+  ├──< RecipeIngredient >── Ingredient
+  ├──< RecipeStep
+  └──< PreparedEvent
 User ──< Recipe.created_by, PreparedEvent.user_id
 ```
 
@@ -18,15 +18,29 @@ Same shape as pocketMoney: `google_sub`, `email` (unique), `name`,
 `avatar_url`, `role` (`admin` / `user`), `is_active`, `created_at`. The
 first allowlisted account to sign in becomes the admin.
 
-## `category` — a recipe's "Type"
+## `tag` / `recipetaglink` — the only taxonomy
 
-`slug` (unique), `name`, `description`, `sort_order`. Seeded from
-`data/categories.json`; see SPEC.md for why it's single-valued.
+| Column | Notes |
+|---|---|
+| `slug` (unique), `name` | |
+| `is_section` | Indexed. True = this tag is site navigation |
+| `sort_order` | Nav order; ignored for free-form tags |
+| `description` | Shown on the section chip in the entry form |
 
-## `tag` / `recipetaglink`
+`recipetaglink` is a composite PK of (`recipe_id`, `tag_id`). Tags are
+created on demand when a recipe names one — and a recipe naming `dessert`
+attaches to the **existing** Dessert section rather than forking a second
+tag. That is what lets a recipe declare its section through the same flat
+list as everything else, and what makes promotion free: flipping
+`is_section` on a tag moves every recipe already carrying it into the nav,
+with no recipe row touched.
 
-`tag`: `slug` (unique), `name`. `recipetaglink`: composite PK
-(`recipe_id`, `tag_id`). Tags are created on demand when a recipe names one.
+Sections are seeded from `data/sections.json` by
+`scripts/seed_sections.py`, which promotes an existing free tag rather than
+duplicating it. See SPEC.md for why this is one table and not two.
+
+`GET /recipes/{slug}` returns `tags` (every label) and `sections` (the
+navigation subset of it, in nav order) — a subset, not a disjoint list.
 
 ## `recipe`
 
@@ -37,7 +51,6 @@ first allowlisted account to sign in becomes the admin.
 | `description` | str? | |
 | `image_path` | str? | Relative to `UPLOAD_DIR`, served at `/media/...` |
 | `image_source_url` | str? | Original remote URL, kept for provenance |
-| `category_id` | FK? | |
 | `added_date` | datetime | Backdated to the post date on import |
 | `prep_minutes`, `cook_minutes` | int? | Null unless the source stated it |
 | `total_minutes_override` | int? | Null ⇒ total = prep + cook |
@@ -55,7 +68,7 @@ first allowlisted account to sign in becomes the admin.
 | `created_at`, `updated_at` | datetime | |
 
 **Derived, never stored:** `total_minutes`, `last_prepared_on`,
-`prepared_count`, `nutrition`, `nutrition_per_serving`, `cost`.
+`prepared_count`, `sections`, `nutrition`, `nutrition_per_serving`, `cost`.
 
 ## `recipeingredient`
 

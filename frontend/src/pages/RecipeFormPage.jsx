@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   createRecipe,
   getRecipe,
-  listCategories,
+  listSections,
   updateRecipe,
   uploadRecipeImage,
 } from '../api'
@@ -49,11 +49,16 @@ export default function RecipeFormPage() {
   const draft = location.state?.draft
   const editing = Boolean(slug)
 
-  const [categories, setCategories] = useState([])
+  const [sections, setSections] = useState([])
+  // Section slugs the recipe belongs to. They are merged into `tags` on
+  // submit — the API takes one flat tag list, and whether a tag is a
+  // section is a property of the tag, not of this recipe.
+  const [chosenSections, setChosenSections] = useState(() =>
+    draft?.section ? [draft.section] : [],
+  )
   const [form, setForm] = useState(() => ({
     title: draft?.title || '',
     description: draft?.description || '',
-    category_slug: draft?.category_slug || '',
     prep_minutes: draft?.prep_minutes ?? '',
     cook_minutes: draft?.cook_minutes ?? '',
     total_minutes_override: '',
@@ -64,7 +69,9 @@ export default function RecipeFormPage() {
     source_url: draft?.source_url || '',
     source_name: draft?.source_name || '',
     is_published: true,
-    tags: (draft?.tags || []).join(', '),
+    // The draft folds its section into `tags`; the chips own it here, so
+    // strip it back out of the free-text field to avoid showing it twice.
+    tags: (draft?.tags || []).filter((t) => t !== draft?.section).join(', '),
   }))
   const [ingredients, setIngredients] = useState(() =>
     draft?.ingredients?.length
@@ -88,7 +95,7 @@ export default function RecipeFormPage() {
   const [loading, setLoading] = useState(editing)
 
   useEffect(() => {
-    listCategories().then(setCategories).catch(() => {})
+    listSections().then(setSections).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -98,11 +105,13 @@ export default function RecipeFormPage() {
       try {
         const recipe = await getRecipe(slug)
         if (cancelled) return
+        const sectionSlugs = sections
+          .filter((section) => recipe.sections.includes(section.name))
+          .map((section) => section.slug)
+        setChosenSections(sectionSlugs)
         setForm({
           title: recipe.title,
           description: recipe.description || '',
-          category_slug:
-            categories.find((c) => c.id === recipe.category_id)?.slug || '',
           prep_minutes: recipe.prep_minutes ?? '',
           cook_minutes: recipe.cook_minutes ?? '',
           total_minutes_override: recipe.total_minutes_override ?? '',
@@ -113,8 +122,9 @@ export default function RecipeFormPage() {
           source_url: recipe.source_url || '',
           source_name: recipe.source_name || '',
           is_published: recipe.is_published,
-          tags: recipe.tags.join(', '),
-          _category_id: recipe.category_id,
+          tags: recipe.tags
+            .filter((tag) => !recipe.sections.includes(tag))
+            .join(', '),
         })
         setIngredients(
           recipe.ingredients.length
@@ -139,7 +149,7 @@ export default function RecipeFormPage() {
     return () => {
       cancelled = true
     }
-  }, [slug, editing, categories])
+  }, [slug, editing, sections])
 
   const set = (key, value) => setForm((previous) => ({ ...previous, [key]: value }))
 
@@ -162,8 +172,6 @@ export default function RecipeFormPage() {
     const payload = {
       title: form.title.trim(),
       description: form.description.trim() || null,
-      category_slug: form.category_slug || null,
-      category_id: form.category_slug ? null : form._category_id ?? null,
       prep_minutes: number(form.prep_minutes),
       cook_minutes: number(form.cook_minutes),
       total_minutes_override: number(form.total_minutes_override),
@@ -174,10 +182,14 @@ export default function RecipeFormPage() {
       source_url: form.source_url.trim() || null,
       source_name: form.source_name.trim() || null,
       is_published: form.is_published,
-      tags: form.tags
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean),
+      tags: [
+        // Sections first, so the nav badge order is predictable.
+        ...chosenSections,
+        ...form.tags
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      ],
       ingredients: ingredients
         .filter((item) => item.name.trim())
         .map((item) => ({
@@ -259,28 +271,50 @@ export default function RecipeFormPage() {
           </Field>
         </div>
 
-        <Field label="Type">
-          <select
-            value={form.category_slug}
-            onChange={(event) => set('category_slug', event.target.value)}
-            className={inputClass}
-          >
-            <option value="">— none —</option>
-            {categories.map((category) => (
-              <option key={category.slug} value={category.slug}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Tags" hint="Comma separated">
-          <input
-            value={form.tags}
-            onChange={(event) => set('tags', event.target.value)}
-            placeholder="baking, chocolate, christmas"
-            className={inputClass}
-          />
-        </Field>
+        <div className="sm:col-span-2">
+          <span className="text-sm font-medium text-ink">Sections</span>
+          <span className="mt-0.5 block text-xs text-ink-faint">
+            Where this shows up in the navigation. Pick as many as fit, or
+            none — sections are just tags we&rsquo;ve promoted.
+          </span>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {sections.map((section) => {
+              const active = chosenSections.includes(section.slug)
+              return (
+                <button
+                  key={section.slug}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() =>
+                    setChosenSections((previous) =>
+                      active
+                        ? previous.filter((slug) => slug !== section.slug)
+                        : [...previous, section.slug],
+                    )
+                  }
+                  title={section.description || undefined}
+                  className={`rounded-full px-2.5 py-1 text-xs transition ${
+                    active
+                      ? 'bg-accent text-[color:var(--accent-ink)]'
+                      : 'border border-edge text-ink-muted hover:bg-soft'
+                  }`}
+                >
+                  {section.name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div className="sm:col-span-2">
+          <Field label="Tags" hint="Comma separated. Anything that isn't a section.">
+            <input
+              value={form.tags}
+              onChange={(event) => set('tags', event.target.value)}
+              placeholder="chocolate, christmas, low-carb"
+              className={inputClass}
+            />
+          </Field>
+        </div>
 
         <Field label="Prep time (minutes)">
           <input

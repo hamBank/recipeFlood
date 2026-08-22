@@ -21,9 +21,9 @@ from typing import Any
 
 from .config import settings
 
-#: Kept in the prompt and validated on the way back, so a hallucinated
-#: category can't create junk taxonomy. Mirrors data/categories.json.
-CATEGORY_SLUGS = [
+#: The navigation sections — validated on the way back so a hallucinated
+#: one can't create junk taxonomy. Mirrors data/sections.json.
+SECTION_SLUGS = [
     "breakfast", "bread", "cake", "biscuits-slices", "pastry-tarts",
     "dessert", "salad", "soup", "main-vegetarian", "main-meat",
     "main-seafood", "pasta-noodles", "curry", "side", "snack",
@@ -47,9 +47,12 @@ Return ONLY a JSON object, no prose and no markdown fence, with keys:
   description      string - one or two sentences describing the dish.
                    Write one if the source has none; do not invent
                    provenance or claims about taste you cannot support.
-  category_slug    one of: {", ".join(CATEGORY_SLUGS)}
+  section          the single best fit from: {", ".join(SECTION_SLUGS)}
+                   This is the site's navigation, so pick the most
+                   specific one that is true. null if none fit.
   tags             array of short lowercase strings (ingredients,
-                   technique, occasion). 3-8 of them.
+                   technique, occasion). 3-8 of them. Do NOT repeat the
+                   section here; it is added automatically.
   servings         integer or null - only if the text states or clearly
                    implies it ("serves 8", "makes 24 biscuits" -> 24)
   servings_note    string or null - the original wording, e.g. "serves 8-10"
@@ -128,7 +131,7 @@ def parse_json_response(text: str) -> dict[str, Any]:
 def normalise_draft(raw: dict[str, Any]) -> dict[str, Any]:
     """Coerce a model response into the shape the API and importer expect.
 
-    Everything here is defensive: an out-of-vocabulary category becomes
+    Everything here is defensive: an out-of-vocabulary section becomes
     null rather than a bad link, a unit we don't know becomes null rather
     than a validation error, and a step list of dicts (which the model
     occasionally returns despite the prompt) is flattened to strings.
@@ -145,9 +148,9 @@ def normalise_draft(raw: dict[str, Any]) -> dict[str, Any]:
         except (TypeError, ValueError):
             return None
 
-    category = raw.get("category_slug")
-    if category not in CATEGORY_SLUGS:
-        category = None
+    section = raw.get("section")
+    if section not in SECTION_SLUGS:
+        section = None
 
     ingredients = []
     for item in raw.get("ingredients") or []:
@@ -182,11 +185,15 @@ def normalise_draft(raw: dict[str, Any]) -> dict[str, Any]:
         for tag in (raw.get("tags") or [])
         if str(tag).strip()
     ]
+    # The section is just another tag as far as a recipe is concerned —
+    # carrying it in `section` too is only so the importer can report it.
+    if section and section not in tags:
+        tags.insert(0, section)
 
     return {
         "title": (raw.get("title") or "").strip(),
         "description": (raw.get("description") or None),
-        "category_slug": category,
+        "section": section,
         "tags": tags[:12],
         "servings": as_int(raw.get("servings")),
         "servings_note": raw.get("servings_note") or None,

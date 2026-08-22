@@ -15,7 +15,7 @@ from backend import auth as auth_module
 from backend.config import settings
 from backend.database import get_session
 from backend.main import create_app
-from backend.models import Category, Ingredient, User, UserRole
+from backend.models import Ingredient, Tag, User, UserRole
 
 
 @pytest.fixture
@@ -112,12 +112,13 @@ def admin(session):
 
 
 @pytest.fixture
-def category(session):
-    category = Category(slug="cake", name="Cake", sort_order=30)
-    session.add(category)
+def section(session):
+    """A navigation section — a tag flagged `is_section`."""
+    tag = Tag(slug="cake", name="Cake", is_section=True, sort_order=30)
+    session.add(tag)
     session.commit()
-    session.refresh(category)
-    return category
+    session.refresh(tag)
+    return tag
 
 
 @pytest.fixture

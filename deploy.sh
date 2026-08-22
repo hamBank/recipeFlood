@@ -39,8 +39,8 @@ update_code() {
     sudo -u "$APP_USER" .venv/bin/pip install -q -r requirements.txt
     sudo -u "$APP_USER" bash -c "set -a && source .env 2>/dev/null; .venv/bin/alembic upgrade head"
 
-    log "seeding categories"
-    sudo -u "$APP_USER" bash -c "set -a && source .env 2>/dev/null; .venv/bin/python scripts/seed_categories.py"
+    log "seeding navigation sections"
+    sudo -u "$APP_USER" bash -c "set -a && source .env 2>/dev/null; .venv/bin/python scripts/seed_sections.py"
 
     log "frontend build"
     (cd frontend && sudo -u "$APP_USER" npm ci --silent && sudo -u "$APP_USER" npm run build)

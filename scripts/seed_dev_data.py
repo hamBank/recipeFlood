@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Optional local fixtures: categories, the starter pantry, and a couple of
-prepared-log entries so the "recently cooked" views have something in them.
+"""Optional local fixtures: the navigation sections, the starter pantry, and
+some prepared-log entries so the "recently cooked" views aren't empty.
 
     python scripts/seed_dev_data.py
 
@@ -23,15 +23,15 @@ from sqlmodel import Session, select  # noqa: E402
 
 from backend.database import engine  # noqa: E402
 from backend.models import PreparedEvent, Recipe  # noqa: E402
-from scripts.seed_categories import CATEGORIES_PATH, seed  # noqa: E402
+from scripts.seed_sections import SECTIONS_PATH, seed  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> int:
     with Session(engine) as session:
-        created, updated = seed(session, json.loads(CATEGORIES_PATH.read_text()))
-        print(f"categories: {created} created, {updated} updated")
+        created, updated = seed(session, json.loads(SECTIONS_PATH.read_text()))
+        print(f"sections: {created} created, {updated} updated")
 
     subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "seed_pantry.py")], check=True)
 

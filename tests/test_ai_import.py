@@ -6,7 +6,7 @@ model response and the database, which is where the real risk is.
 
 import pytest
 
-from backend.ai_import import CATEGORY_SLUGS, normalise_draft, parse_json_response
+from backend.ai_import import SECTION_SLUGS, normalise_draft, parse_json_response
 
 
 class TestParseJsonResponse:
@@ -26,13 +26,24 @@ class TestParseJsonResponse:
 
 
 class TestNormaliseDraft:
-    def test_keeps_a_valid_category(self):
-        assert normalise_draft({"category_slug": "cake"})["category_slug"] == "cake"
+    def test_keeps_a_valid_section(self):
+        draft = normalise_draft({"section": "cake"})
+        assert draft["section"] == "cake"
+        # ...and folds it into the tag list, which is what a recipe stores.
+        assert draft["tags"] == ["cake"]
 
-    def test_drops_an_invented_category(self):
-        # A hallucinated slug must not create junk taxonomy.
-        assert normalise_draft({"category_slug": "puddings"})["category_slug"] is None
-        assert all(slug in CATEGORY_SLUGS for slug in CATEGORY_SLUGS)
+    def test_drops_an_invented_section(self):
+        # A hallucinated slug must not create junk navigation.
+        draft = normalise_draft({"section": "puddings", "tags": ["sweet"]})
+        assert draft["section"] is None
+        assert draft["tags"] == ["sweet"]
+
+    def test_does_not_duplicate_a_section_already_in_tags(self):
+        draft = normalise_draft({"section": "cake", "tags": ["cake", "chocolate"]})
+        assert draft["tags"] == ["cake", "chocolate"]
+
+    def test_every_section_slug_is_a_string(self):
+        assert SECTION_SLUGS and all(isinstance(s, str) for s in SECTION_SLUGS)
 
     def test_drops_an_unknown_unit(self):
         draft = normalise_draft(

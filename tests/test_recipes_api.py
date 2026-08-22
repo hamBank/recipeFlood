@@ -4,17 +4,17 @@ import pytest
 
 
 @pytest.fixture
-def recipe_payload(category):
+def recipe_payload(section):
     return {
         "title": "Chocolate Walnut Cake",
         "description": "A dense flourless cake.",
-        "category_slug": "cake",
         "servings": 8,
         "prep_minutes": 20,
         "cook_minutes": 40,
         "storage": "Airtight, 4 days",
         "source_url": "https://example.test/cake",
-        "tags": ["baking", "chocolate"],
+        # "cake" is a section tag; the other two are free-form. One list.
+        "tags": ["cake", "baking", "chocolate"],
         "ingredients": [
             {"name": "plain flour", "quantity": 2, "unit": "cup"},
             {"name": "caster sugar", "quantity": 1, "unit": "cup"},
@@ -37,8 +37,9 @@ class TestCreate:
         assert len(recipe["ingredients"]) == 3
         assert len(recipe["steps"]) == 2
         assert recipe["steps"][1]["position"] == 1
-        assert sorted(recipe["tags"]) == ["baking", "chocolate"]
-        assert recipe["category_name"] == "Cake"
+        assert sorted(recipe["tags"]) == ["Cake", "baking", "chocolate"]
+        # `sections` is the navigation subset of `tags`, not a separate field
+        assert recipe["sections"] == ["Cake"]
 
     def test_total_time_is_derived_from_prep_plus_cook(self, client, recipe_payload):
         assert create(client, recipe_payload)["total_minutes"] == 60
@@ -91,11 +92,13 @@ class TestRead:
         assert len(client.get("/recipes?q=walnut").json()) == 1
         assert len(client.get("/recipes?q=lasagne").json()) == 0
 
-    def test_filter_by_category_and_tag(self, client, recipe_payload):
+    def test_one_tag_filter_serves_sections_and_free_tags_alike(
+        self, client, recipe_payload
+    ):
         create(client, recipe_payload)
-        assert len(client.get("/recipes?category=cake").json()) == 1
-        assert len(client.get("/recipes?category=soup").json()) == 0
-        assert len(client.get("/recipes?tag=chocolate").json()) == 1
+        assert len(client.get("/recipes?tag=cake").json()) == 1  # a section
+        assert len(client.get("/recipes?tag=chocolate").json()) == 1  # free-form
+        assert len(client.get("/recipes?tag=soup").json()) == 0
 
     def test_sort_by_title(self, client, recipe_payload):
         create(client, recipe_payload)

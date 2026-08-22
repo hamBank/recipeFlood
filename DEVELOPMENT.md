@@ -16,7 +16,7 @@ cd recipeFlood
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head                     # creates local SQLite DB
-python scripts/seed_categories.py        # the 20 recipe types
+python scripts/seed_sections.py          # the 20 navigation sections
 
 # The whole blog collection — 321 recipes, no API key needed
 python -m scripts.load_snapshot --heuristic
@@ -95,11 +95,11 @@ exactly that.
 ### Which parser?
 
 The AI parser is the intended one: it writes descriptions, splits run-on
-method paragraphs sensibly, picks categories, and reads servings and times
+method paragraphs sensibly, picks sections, and reads servings and times
 out of prose. The rule parser (`backend/blog_parser.py`) exists so the
 pipeline is testable without a key and so the collection can always be
 rebuilt from the repo. On the 321 posts it manages ≥3 ingredients on 291
-of them and a category on 283, and it flags every recipe for review.
+of them and a section on 283, and it flags every recipe for review.
 
 ## Tests
 

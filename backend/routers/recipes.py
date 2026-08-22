@@ -25,7 +25,6 @@ from sqlmodel import Session, func, or_, select
 from ..config import settings
 from ..database import get_session
 from ..models import (
-    Category,
     PreparedEvent,
     PreparedEventCreate,
     PreparedEventRead,
@@ -48,7 +47,6 @@ from ..recipes_service import (
     apply_tags,
     recipe_read,
     recipe_summary,
-    resolve_category,
     total_minutes,
     touch,
 )
@@ -84,8 +82,7 @@ def list_recipes(
     session: Session = Depends(get_session),
     user: User | None = Depends(allow_public_read),
     q: str | None = Query(None, description="Free text over title/description"),
-    category: str | None = Query(None, description="Category slug"),
-    tag: str | None = Query(None, description="Tag slug"),
+    tag: str | None = Query(None, description="Tag slug — sections are tags too"),
     ingredient: str | None = Query(None, description="Master ingredient slug"),
     needs_review: bool | None = None,
     include_unpublished: bool = False,
@@ -108,10 +105,6 @@ def list_recipes(
         pattern = f"%{q.strip()}%"
         statement = statement.where(
             or_(Recipe.title.ilike(pattern), Recipe.description.ilike(pattern))
-        )
-    if category:
-        statement = statement.join(Category, Category.id == Recipe.category_id).where(
-            Category.slug == category
         )
     if tag:
         statement = (
@@ -194,7 +187,6 @@ def create_recipe(
         description=body.description,
         image_path=body.image_path,
         image_source_url=body.image_source_url,
-        category_id=resolve_category(session, body.category_id, body.category_slug),
         added_date=body.added_date or utcnow(),
         prep_minutes=body.prep_minutes,
         cook_minutes=body.cook_minutes,
@@ -239,11 +231,6 @@ def update_recipe(
     tags = fields.pop("tags", None)
     ingredients = fields.pop("ingredients", None)
     steps = fields.pop("steps", None)
-    category_slug = fields.pop("category_slug", None)
-    if category_slug is not None or "category_id" in fields:
-        recipe.category_id = resolve_category(
-            session, fields.pop("category_id", None), category_slug
-        )
 
     if "title" in fields and fields["title"]:
         new_title = fields["title"].strip()

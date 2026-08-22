@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { listCategories, listRecipes, listTags } from '../api'
+import { listRecipes, listSections, listTags } from '../api'
 import { useSession } from '../App'
 import RecipeCard from '../components/RecipeCard'
 
@@ -18,7 +18,7 @@ export default function RecipeListPage() {
   // Filters live in the URL so a filtered view is a shareable link and the
   // back button steps through searches the way people expect.
   const [params, setParams] = useSearchParams()
-  const [categories, setCategories] = useState([])
+  const [sections, setSections] = useState([])
   const [tags, setTags] = useState([])
   const [recipes, setRecipes] = useState([])
   const [total, setTotal] = useState(0)
@@ -27,7 +27,10 @@ export default function RecipeListPage() {
   const [search, setSearch] = useState(params.get('q') || '')
 
   const q = params.get('q') || ''
-  const category = params.get('category') || ''
+  // Sections and free tags both filter through the same `tag` parameter —
+  // a section is a tag. They stay separate in the URL only so the select
+  // and the chip row don't fight over one value.
+  const section = params.get('section') || ''
   const tag = params.get('tag') || ''
   const sort = params.get('sort') || 'added'
   const order = params.get('order') || (sort === 'title' ? 'asc' : 'desc')
@@ -50,8 +53,8 @@ export default function RecipeListPage() {
   useEffect(() => {
     ;(async () => {
       try {
-        const [cats, tagList] = await Promise.all([listCategories(), listTags(2)])
-        setCategories(cats.filter((c) => c.recipe_count > 0))
+        const [sectionList, tagList] = await Promise.all([listSections(), listTags(2)])
+        setSections(sectionList.filter((s) => s.recipe_count > 0))
         setTags(tagList.slice(0, 30))
       } catch {
         // Filters are a convenience; the grid below still works without them.
@@ -66,8 +69,8 @@ export default function RecipeListPage() {
       try {
         const result = await listRecipes({
           q,
-          category,
-          tag,
+          // Both narrow by tag slug; sending both intersects them.
+          tag: tag || section,
           sort,
           order,
           limit: PAGE_SIZE,
@@ -87,7 +90,7 @@ export default function RecipeListPage() {
     return () => {
       cancelled = true
     }
-  }, [q, category, tag, sort, order, page, reviewOnly, user])
+  }, [q, section, tag, sort, order, page, reviewOnly, user])
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -107,14 +110,14 @@ export default function RecipeListPage() {
           className="min-w-0 flex-1 rounded-lg border border-edge bg-card px-3 py-2 text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
         />
         <select
-          value={category}
-          onChange={(event) => update({ category: event.target.value })}
+          value={section}
+          onChange={(event) => update({ section: event.target.value, tag: '' })}
           className="rounded-lg border border-edge bg-card px-3 py-2 text-sm text-ink"
         >
-          <option value="">All types</option>
-          {categories.map((c) => (
-            <option key={c.slug} value={c.slug}>
-              {c.name} ({c.recipe_count})
+          <option value="">All sections</option>
+          {sections.map((s) => (
+            <option key={s.slug} value={s.slug}>
+              {s.name} ({s.recipe_count})
             </option>
           ))}
         </select>
@@ -173,7 +176,7 @@ export default function RecipeListPage() {
 
       <p className="text-sm text-ink-muted">
         {loading ? 'Loading…' : `${total} recipe${total === 1 ? '' : 's'}`}
-        {(q || category || tag) && !loading && ' matching your filters'}
+        {(q || section || tag) && !loading && ' matching your filters'}
       </p>
 
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

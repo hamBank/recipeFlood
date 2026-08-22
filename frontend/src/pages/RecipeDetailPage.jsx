@@ -24,6 +24,14 @@ function Meta({ label, children }) {
   )
 }
 
+/** Mirrors backend/slugs.py well enough for a filter link. */
+const slugify = (text) =>
+  text
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+
 /** Group ingredients by their optional sub-heading ("For the sauce"). */
 function groupIngredients(ingredients) {
   const groups = new Map()
@@ -73,6 +81,9 @@ export default function RecipeDetailPage() {
   if (error) return <p className="rounded-lg bg-red-50 p-4 text-red-700">{error}</p>
   if (!recipe) return <p className="text-ink-muted">Loading…</p>
 
+  // Sections already show as badges under the title; don't repeat them.
+  const freeTags = recipe.tags.filter((tag) => !recipe.sections?.includes(tag))
+
   const remove = async () => {
     if (!window.confirm(`Delete “${recipe.title}”? This cannot be undone.`)) return
     await deleteRecipe(recipe.slug)
@@ -87,10 +98,18 @@ export default function RecipeDetailPage() {
             <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
               {recipe.title}
             </h1>
-            {recipe.category_name && (
-              <span className="mt-1 inline-block rounded bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
-                {recipe.category_name}
-              </span>
+            {recipe.sections?.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {recipe.sections.map((section) => (
+                  <Link
+                    key={section}
+                    to={`/?tag=${encodeURIComponent(slugify(section))}`}
+                    className="rounded bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent"
+                  >
+                    {section}
+                  </Link>
+                ))}
+              </div>
             )}
           </div>
           {user && (
@@ -262,14 +281,14 @@ export default function RecipeDetailPage() {
             perServing={recipe.nutrition_per_serving}
           />
 
-          {recipe.tags.length > 0 && (
+          {freeTags.length > 0 && (
             <div className="rounded-xl border border-edge bg-card p-5">
               <h2 className="font-semibold text-ink">Tags</h2>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {recipe.tags.map((tag) => (
+                {freeTags.map((tag) => (
                   <Link
                     key={tag}
-                    to={`/?tag=${encodeURIComponent(tag.toLowerCase().replace(/\s+/g, '-'))}`}
+                    to={`/?tag=${encodeURIComponent(slugify(tag))}`}
                     className="rounded-full border border-edge px-2.5 py-1 text-xs text-ink-muted hover:bg-soft"
                   >
                     {tag}

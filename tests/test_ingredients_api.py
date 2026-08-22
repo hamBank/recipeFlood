@@ -4,14 +4,14 @@ import pytest
 
 
 @pytest.fixture
-def cake(client, category, flour):
+def cake(client, section, flour):
     """A recipe whose flour is measured in cups, so its weight depends
     entirely on what the pantry says about flour."""
     response = client.post(
         "/recipes",
         json={
             "title": "Test Cake",
-            "category_slug": "cake",
+            "tags": ["cake"],
             "servings": 4,
             "ingredients": [
                 {"name": "plain flour", "quantity": 2, "unit": "cup"},
@@ -93,7 +93,7 @@ class TestUpdateRederivesWeights:
         assert egg["weight_grams"] == pytest.approx(180.0)
         assert egg["weight_source"] == "converted"
 
-    def test_an_explicit_weight_is_never_overwritten(self, client, category, flour):
+    def test_an_explicit_weight_is_never_overwritten(self, client, section, flour):
         recipe = client.post(
             "/recipes",
             json={

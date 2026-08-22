@@ -15,7 +15,6 @@ from sqlmodel import Session, select
 
 from .costing import compute_cost
 from .models import (
-    Category,
     Ingredient,
     PreparedEvent,
     PreparedEventRead,
@@ -114,21 +113,13 @@ def get_or_create_ingredient(session: Session, name: str) -> Ingredient:
     return ingredient
 
 
-def resolve_category(
-    session: Session, category_id: int | None, category_slug: str | None
-) -> int | None:
-    if category_id is not None:
-        return category_id
-    if category_slug:
-        category = session.exec(
-            select(Category).where(Category.slug == category_slug)
-        ).first()
-        if category:
-            return category.id
-    return None
-
-
 def get_or_create_tag(session: Session, name: str) -> Tag:
+    """Find a tag by slug, or create it as a plain free-form tag.
+
+    A recipe naming "dessert" attaches to the *existing* Dessert section
+    rather than making a second tag — which is what lets a recipe declare
+    its section through the same list as everything else.
+    """
     slug = slugify(name)
     tag = session.exec(select(Tag).where(Tag.slug == slug)).first()
     if tag is None:
@@ -155,14 +146,23 @@ def apply_tags(session: Session, recipe: Recipe, names: list[str]) -> None:
         session.add(RecipeTagLink(recipe_id=recipe.id, tag_id=tag.id))
 
 
-def recipe_tags(session: Session, recipe_id: int) -> list[str]:
+def recipe_tags(session: Session, recipe_id: int) -> tuple[list[str], list[str]]:
+    """Return (all tag names, section tag names) for a recipe.
+
+    Sections come back in nav order; everything else alphabetically. The
+    section list is a subset of the first, not a disjoint one — callers
+    that want only the free-form chips subtract it.
+    """
     rows = session.exec(
         select(Tag)
         .join(RecipeTagLink, RecipeTagLink.tag_id == Tag.id)
         .where(RecipeTagLink.recipe_id == recipe_id)
         .order_by(Tag.name)
     ).all()
-    return [tag.name for tag in rows]
+    sections = sorted(
+        (tag for tag in rows if tag.is_section), key=lambda t: (t.sort_order, t.name)
+    )
+    return [tag.name for tag in rows], [tag.name for tag in sections]
 
 
 def build_ingredient_row(
@@ -286,27 +286,20 @@ def prepared_summary(session: Session, recipe_id: int) -> tuple[date | None, int
     return (events[0].prepared_on if events else None), len(events)
 
 
-def category_name(session: Session, category_id: int | None) -> str | None:
-    if category_id is None:
-        return None
-    category = session.get(Category, category_id)
-    return category.name if category else None
-
-
 def recipe_summary(session: Session, recipe: Recipe) -> RecipeSummary:
     last_prepared, prepared_count = prepared_summary(session, recipe.id)
+    tags, sections = recipe_tags(session, recipe.id)
     return RecipeSummary(
         id=recipe.id,
         slug=recipe.slug,
         title=recipe.title,
         description=recipe.description,
         image_path=recipe.image_path,
-        category_id=recipe.category_id,
-        category_name=category_name(session, recipe.category_id),
         added_date=recipe.added_date,
         total_minutes=total_minutes(recipe),
         servings=recipe.servings,
-        tags=recipe_tags(session, recipe.id),
+        tags=tags,
+        sections=sections,
         last_prepared_on=last_prepared,
         prepared_count=prepared_count,
         needs_review=recipe.needs_review,
@@ -343,6 +336,8 @@ def recipe_read(
         session, list(lines), servings=recipe.servings
     )
 
+    tags, sections = recipe_tags(session, recipe.id)
+
     user_names: dict[int, str] = {}
     for event in events:
         if event.user_id and event.user_id not in user_names:
@@ -356,8 +351,6 @@ def recipe_read(
         description=recipe.description,
         image_path=recipe.image_path,
         image_source_url=recipe.image_source_url,
-        category_id=recipe.category_id,
-        category_name=category_name(session, recipe.category_id),
         added_date=recipe.added_date,
         prep_minutes=recipe.prep_minutes,
         cook_minutes=recipe.cook_minutes,
@@ -376,7 +369,8 @@ def recipe_read(
         is_published=recipe.is_published,
         created_at=recipe.created_at,
         updated_at=recipe.updated_at,
-        tags=recipe_tags(session, recipe.id),
+        tags=tags,
+        sections=sections,
         ingredients=[
             RecipeIngredientRead(
                 id=line.id,

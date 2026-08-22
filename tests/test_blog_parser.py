@@ -8,7 +8,7 @@ headings anywhere. That shape is the entire problem this parser solves.
 from backend.blog_parser import (
     classify_line,
     find_servings,
-    guess_category,
+    guess_section,
     html_to_lines,
     is_heading,
     normalise_steps,
@@ -108,23 +108,26 @@ class TestMetadata:
         assert find_servings("Makes 24 biscuits") == (24, "Makes 24")
         assert find_servings("no yield here") == (None, None)
 
-    def test_category_from_the_longest_matching_label(self):
-        assert guess_category(["Cauliflower", "warm salad"], "") == "salad"
-        assert guess_category(["baking", "cake", "chocolate"], "") == "cake"
+    def test_section_from_the_longest_matching_label(self):
+        assert guess_section(["Cauliflower", "warm salad"], "") == "salad"
+        assert guess_section(["baking", "cake", "chocolate"], "") == "cake"
 
-    def test_category_falls_back_to_the_title(self):
-        assert guess_category([], "Leek and Potato Soup") == "soup"
+    def test_section_falls_back_to_the_title(self):
+        assert guess_section([], "Leek and Potato Soup") == "soup"
 
-    def test_no_signal_means_no_category(self):
-        assert guess_category([], "A thing") is None
+    def test_no_signal_means_no_section(self):
+        assert guess_section([], "A thing") is None
 
 
 class TestParsePost:
     def test_produces_the_ai_draft_shape(self):
         draft = parse_post(POST)
         assert draft["title"] == POST["title"]
-        assert draft["category_slug"] == "salad"
-        assert draft["tags"] == ["cauliflower", "fritter", "quinoa", "warm salad"]
+        assert draft["section"] == "salad"
+        # The section is folded into `tags` — a recipe carries one flat list.
+        assert draft["tags"] == [
+            "salad", "cauliflower", "fritter", "quinoa", "warm salad",
+        ]
         assert len(draft["ingredients"]) == 6
         assert len(draft["steps"]) >= 3
         assert draft["servings"] == 4

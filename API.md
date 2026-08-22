@@ -37,14 +37,22 @@ Auth is a bearer JWT: `Authorization: Bearer <token>` from `POST /auth/google`.
 
 An admin cannot demote or deactivate themselves.
 
-## Taxonomy
+## Tags
+
+One taxonomy. A tag flagged `is_section` is site navigation; everything
+else is a free-form label. There is no `/categories`.
 
 | Method | Path | Access | Notes |
 |---|---|---|---|
-| GET | `/categories` | public | With `recipe_count` per category |
-| POST | `/categories` | admin | |
-| GET | `/tags?min_count=1` | public | Sorted by usage, descending |
-| DELETE | `/tags/{id}` | admin | Also removes its links |
+| GET | `/tags` | public | All tags with `recipe_count`, sections first |
+| GET | `/tags?section=true` | public | **The navigation**, in `sort_order`. Empty sections included, so an editor can still file into one |
+| GET | `/tags?section=false&min_count=2` | public | Free-form tags, most-used first. `min_count` drops the long tail — over half the imported labels are used exactly once |
+| GET | `/tags/{slug\|id}` | public | |
+| POST | `/tags` | admin | `{name, slug?, is_section?, sort_order?, description?}` |
+| PATCH | `/tags/{key}` | admin | Rename, or **promote/demote** with `is_section`. Promotion moves every recipe already carrying the tag into the nav — no recipe is modified |
+| DELETE | `/tags/{key}` | admin | Also removes its links |
+
+`min_count` never hides a section — the nav must survive filtering.
 
 ## Recipes
 
@@ -64,8 +72,7 @@ An admin cannot demote or deactivate themselves.
 | Param | Notes |
 |---|---|
 | `q` | Free text over title and description |
-| `category` | Category slug |
-| `tag` | Tag slug |
+| `tag` | Tag slug. Sections are tags, so this filters both |
 | `ingredient` | Master ingredient slug — "what can I make with tahini?" |
 | `needs_review` | bool |
 | `include_unpublished` | bool; ignored for guests |
@@ -89,6 +96,11 @@ Responds with `RecipeSummary[]` and an **`X-Total-Count`** header.
 `PATCH` applies only the keys present in the body. `tags`, `ingredients`
 and `steps` are **replaced wholesale** when sent and left untouched when
 omitted — sending `[]` clears them.
+
+`tags` on write is one flat list of every label, sections included — a
+recipe does not say which of its tags are sections, because that is a
+property of the tag. On read you get back `tags` (all of them) plus
+`sections` (the navigation subset, in nav order).
 
 Saving an edit clears `needs_review`. Renaming reallocates the slug; any
 other edit leaves it alone so links keep working.

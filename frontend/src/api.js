@@ -91,9 +91,15 @@ export const uploadRecipeImage = (key, file) => {
   return apiUpload(`/recipes/${key}/image`, form)
 }
 
-// Taxonomy
-export const listCategories = () => apiFetch('/categories')
-export const listTags = (minCount = 1) => apiFetch(`/tags?min_count=${minCount}`)
+// Tags. Sections are tags flagged for the navigation, so they come from
+// the same endpoint — there is no separate category concept.
+export const listSections = () => apiFetch('/tags?section=true')
+export const listTags = (minCount = 1) =>
+  apiFetch(`/tags?section=false&min_count=${minCount}`)
+export const createTag = (data) => apiFetch('/tags', { method: 'POST', body: data })
+export const updateTag = (key, data) =>
+  apiFetch(`/tags/${key}`, { method: 'PATCH', body: data })
+export const deleteTag = (key) => apiFetch(`/tags/${key}`, { method: 'DELETE' })
 
 // Master ingredients (signed-in only — this is where cost lives)
 export const listIngredients = (params) => apiFetchPaged(`/ingredients${query(params)}`)

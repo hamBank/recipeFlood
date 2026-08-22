@@ -28,6 +28,11 @@ Three things distinguish it from a plain CRUD app:
 3. **A reproducible import pipeline.** 321 posts scraped from a Blogger
    site, structured by Claude, committed as a JSON snapshot, loaded
    idempotently. The collection can be rebuilt from this repo alone.
+4. **One taxonomy, two roles.** Tags are the only labelling concept; a
+   curated few carry `is_section` and form the navigation. Promoting a
+   free tag to a section moves every recipe already carrying it, with no
+   recipe row touched. See SPEC.md for why not categories, and why not
+   tags alone.
 
 - **Repo:** `https://github.com/hamBank/recipeFlood` (default branch `main`)
 - **Production:** `https://recipeflood.hups.club` on `camelidcastle.hups.club`
@@ -71,7 +76,7 @@ backend/
   routers/
     auth_router.py   # /auth/google, /auth/me, /auth/config
     users.py         # /users admin management
-    taxonomy.py      # /categories, /tags
+    taxonomy.py      # /tags (sections are tags flagged for the nav)
     recipes.py       # /recipes CRUD, prepared log, image upload
     ingredients.py   # /ingredients master list (signed-in only)
     imports.py       # /imports/paste, /imports/image
@@ -82,14 +87,16 @@ data/
   blog_raw.json          # committed: the 321-post feed snapshot
   recipes.heuristic.json # committed: rule-parsed structured snapshot
   recipes.json           # the AI-parsed snapshot (produced by parse_blog.py)
-  categories.json        # the 20-category taxonomy seed
-  images/                # downloaded post images + index.json
+  sections.json          # the 20 navigation section tags
+  pantry.json            # densities + rough prices for 60 common items
+  images/                # downloaded post images (gitignored — see SPEC.md)
 scripts/
   fetch_blog.py      # 1. Blogger feed  -> data/blog_raw.json
   fetch_images.py    # 2. post images   -> data/images/
   parse_blog.py      # 3. Claude (or --offline rules) -> data/recipes*.json
   load_snapshot.py   # 4. snapshot      -> database (idempotent)
-  seed_categories.py # categories from data/categories.json
+  seed_sections.py   # navigation sections from data/sections.json
+  seed_pantry.py     # densities/prices from data/pantry.json
   seed_dev_data.py   # a small local fixture set
 frontend/
   src/
@@ -109,14 +116,14 @@ deploy.sh            # idempotent server provisioning + --update mode
 Hierarchy (details in [DATA_MODEL.md](DATA_MODEL.md)):
 
 ```
-Category ──< Recipe >──< RecipeTagLink >── Tag
-              │
-              ├──< RecipeIngredient >── Ingredient   (the master pantry list:
-              │                                       price, density, nutrition)
-              ├──< RecipeStep                        (ordered method)
-              └──< PreparedEvent                     (each time it was cooked;
-                                                      the newest is the
-                                                      Last Prepared Date)
+Recipe >──< RecipeTagLink >── Tag          (one taxonomy; tags flagged
+  │                                         `is_section` are the navigation)
+  ├──< RecipeIngredient >── Ingredient     (the master pantry list:
+  │                                         price, density, nutrition)
+  ├──< RecipeStep                          (ordered method)
+  └──< PreparedEvent                       (each time it was cooked;
+                                            the newest is the
+                                            Last Prepared Date)
 ```
 
 ## Two numeric conventions
@@ -148,6 +155,7 @@ says "at least $3.40, 4 of 12 ingredients priced" instead of "$3.40".
 See [API.md](API.md) for the full list. Highlights:
 
 - `GET /recipes`, `GET /recipes/{slug}` — public; cost omitted for guests
+- `GET /tags?section=true` — the navigation; `PATCH /tags/{key}` promotes
 - `POST/PATCH/DELETE /recipes/{key}` — signed in
 - `POST /recipes/{key}/prepared` — record a cook
 - `GET/PATCH /ingredients/{key}` — the pantry; **401 for guests**
@@ -172,7 +180,7 @@ bundle is **not** committed; it is built server-side during deploy.
 **Production deploy:** `deploy.sh` (idempotent). A push to `main` triggers
 redeploy via the `/deploy` webhook (HMAC-signed, `DEPLOY_SECRET`) which
 touches `.deploy-trigger`; a systemd path unit runs `deploy.sh --update`
-(git pull → npm build → alembic upgrade → seed categories → restart).
+(git pull → npm build → alembic upgrade → seed sections → restart).
 
 ## Conventions / gotchas
 

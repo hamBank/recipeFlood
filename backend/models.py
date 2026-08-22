@@ -211,42 +211,32 @@ class IngredientRead(SQLModel):
 # --------------------------------------------------------------------------
 
 
-class Category(SQLModel, table=True):
-    """The recipe's single primary "Type" (Cake, Salad, Dessert...).
+class Tag(SQLModel, table=True):
+    """A label on a recipe. One concept, two roles.
 
-    One per recipe, deliberately: technique and theme words ("baking",
-    "christmas", "low-carb") are Tags, which are many-per-recipe. Keeping
-    Type single-valued is what makes the browse-by-type navigation useful
-    — see SPEC.md.
+    Most tags are free-form and arrive from the source blog — 266 of them,
+    over half used exactly once ("moghrabieh", "carparccio"). They are for
+    search and for the "more like this" chips, not for navigation.
+
+    A small curated set is flagged `is_section`: Cake, Salad, Dessert,
+    Bread. Those are the site's navigation, ordered by `sort_order`. The
+    distinction is a property of the *tag*, not of the recipe — so a recipe
+    just carries tags, and some of them happen to be sections.
+
+    Why not a separate Category table with exactly one per recipe: it makes
+    the model carry two concepts to express one idea, and it forces a
+    chocolate tart to choose between Dessert and Pastry & Tarts. Why not
+    tags alone: the blog's own labels reach only 68% of the collection from
+    a top-20 nav, stranding about a hundred recipes behind search.
     """
 
     id: int | None = Field(default=None, primary_key=True)
     slug: str = Field(unique=True, index=True)
     name: str
+    # Section tags form the navigation; everything else is free-form.
+    is_section: bool = Field(default=False, index=True)
+    sort_order: int = 0  # ordering within the nav; ignored for free tags
     description: str | None = None
-    sort_order: int = 0
-
-
-class CategoryCreate(SQLModel):
-    name: str
-    slug: str | None = None  # derived from the name when omitted
-    description: str | None = None
-    sort_order: int = 0
-
-
-class CategoryRead(SQLModel):
-    id: int
-    slug: str
-    name: str
-    description: str | None
-    sort_order: int
-    recipe_count: int = 0
-
-
-class Tag(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    slug: str = Field(unique=True, index=True)
-    name: str
 
 
 class RecipeTagLink(SQLModel, table=True):
@@ -258,7 +248,27 @@ class TagRead(SQLModel):
     id: int
     slug: str
     name: str
+    is_section: bool
+    sort_order: int
+    description: str | None
     recipe_count: int = 0
+
+
+class TagCreate(SQLModel):
+    name: str
+    slug: str | None = None  # derived from the name when omitted
+    is_section: bool = False
+    sort_order: int = 0
+    description: str | None = None
+
+
+class TagUpdate(SQLModel):
+    """Also how a tag is promoted to a section, or demoted back."""
+
+    name: str | None = None
+    is_section: bool | None = None
+    sort_order: int | None = None
+    description: str | None = None
 
 
 # --------------------------------------------------------------------------
@@ -284,8 +294,6 @@ class Recipe(SQLModel, table=True):
     # keeps the original remote URL for provenance after self-hosting.
     image_path: str | None = None
     image_source_url: str | None = None
-
-    category_id: int | None = Field(default=None, foreign_key="category.id", index=True)
 
     # "Added Date" in the spec. Defaults to now for manual entry; the blog
     # importer backdates it to the original post date.
@@ -497,8 +505,6 @@ class RecipeCost(SQLModel):
 class RecipeCreate(SQLModel):
     title: str
     description: str | None = None
-    category_id: int | None = None
-    category_slug: str | None = None  # convenience alternative to category_id
     image_path: str | None = None
     image_source_url: str | None = None
     added_date: datetime | None = None
@@ -513,6 +519,8 @@ class RecipeCreate(SQLModel):
     source_name: str | None = None
     units_system: str | None = None
     is_published: bool = True
+    # Every label, section or not — whether a tag is a section is a
+    # property of the tag, not of this recipe.
     tags: list[str] = Field(default_factory=list)
     ingredients: list[RecipeIngredientIn] = Field(default_factory=list)
     steps: list[RecipeStepIn] = Field(default_factory=list)
@@ -521,8 +529,6 @@ class RecipeCreate(SQLModel):
 class RecipeUpdate(SQLModel):
     title: str | None = None
     description: str | None = None
-    category_id: int | None = None
-    category_slug: str | None = None
     image_path: str | None = None
     image_source_url: str | None = None
     added_date: datetime | None = None
@@ -554,12 +560,13 @@ class RecipeSummary(SQLModel):
     title: str
     description: str | None
     image_path: str | None
-    category_id: int | None
-    category_name: str | None
     added_date: datetime
     total_minutes: int | None
     servings: int | None
+    # `tags` is every label; `sections` is the navigation subset of it,
+    # in nav order. The card badges sections[0].
     tags: list[str] = Field(default_factory=list)
+    sections: list[str] = Field(default_factory=list)
     last_prepared_on: date | None = None
     prepared_count: int = 0
     needs_review: bool = False
@@ -573,8 +580,6 @@ class RecipeRead(SQLModel):
     description: str | None
     image_path: str | None
     image_source_url: str | None
-    category_id: int | None
-    category_name: str | None
     added_date: datetime
     prep_minutes: int | None
     cook_minutes: int | None
@@ -594,6 +599,7 @@ class RecipeRead(SQLModel):
     created_at: datetime
     updated_at: datetime
     tags: list[str] = Field(default_factory=list)
+    sections: list[str] = Field(default_factory=list)
     ingredients: list[RecipeIngredientRead] = Field(default_factory=list)
     steps: list[RecipeStepRead] = Field(default_factory=list)
     last_prepared_on: date | None = None

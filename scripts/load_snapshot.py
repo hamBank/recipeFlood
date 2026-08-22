@@ -41,7 +41,6 @@ from sqlmodel import Session, select  # noqa: E402
 from backend.config import settings  # noqa: E402
 from backend.database import engine  # noqa: E402
 from backend.models import (  # noqa: E402
-    Category,
     ImportSource,
     MeasureUnit,
     Recipe,
@@ -55,7 +54,7 @@ from backend.recipes_service import (  # noqa: E402
     apply_tags,
 )
 from backend.slugs import slugify  # noqa: E402
-from scripts.seed_categories import CATEGORIES_PATH, seed  # noqa: E402
+from scripts.seed_sections import SECTIONS_PATH, seed  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AI_SNAPSHOT = REPO_ROOT / "data" / "recipes.json"
@@ -153,10 +152,10 @@ def main() -> int:
 
     created = updated = 0
     with Session(engine) as session:
-        seed(session, json.loads(CATEGORIES_PATH.read_text()))
-        categories = {
-            c.slug: c.id for c in session.exec(select(Category)).all()
-        }
+        # Seed the navigation sections first: they are tags, so a recipe
+        # naming "dessert" then attaches to the existing section rather
+        # than creating a second, free-form tag with the same name.
+        seed(session, json.loads(SECTIONS_PATH.read_text()))
 
         for record in recipes:
             source_url = record.get("source_url")
@@ -180,7 +179,6 @@ def main() -> int:
                 updated += 1
 
             recipe.description = record.get("description")
-            recipe.category_id = categories.get(record.get("category_slug") or "")
             recipe.added_date = parse_published(record.get("published")) or recipe.added_date
             recipe.prep_minutes = record.get("prep_minutes")
             recipe.cook_minutes = record.get("cook_minutes")
@@ -208,7 +206,13 @@ def main() -> int:
                 attach_image(recipe, image_index, record.get("image_source_url"))
                 session.add(recipe)
 
-            apply_tags(session, recipe, record.get("tags") or [])
+            # The snapshot already folds the section into `tags`; this is
+            # belt-and-braces for a hand-edited one that didn't.
+            tags = list(record.get("tags") or [])
+            section = record.get("section")
+            if section and section not in tags:
+                tags.insert(0, section)
+            apply_tags(session, recipe, tags)
             # auto_create: this is what populates the master ingredient list.
             apply_ingredients(
                 session,

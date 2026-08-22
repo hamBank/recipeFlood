@@ -12,7 +12,7 @@ extended with manual entry and AI-assisted import.
 |---|---|
 | Anyone | Browse, search and read every published recipe, including nutrition |
 | Signed in (allowlisted Google account) | All of the above, plus add/edit recipes, record cooks, use AI import, and **see ingredient costs** |
-| Admin | All of the above, plus delete recipes, merge/delete pantry items, manage users |
+| Admin | All of the above, plus delete recipes, promote/demote and delete tags, merge/delete pantry items, manage users |
 
 Cost is the only thing hidden from the public. Nutrition is not sensitive
 and is shown to everyone. Setting `PUBLIC_READ=false` puts the whole site
@@ -34,20 +34,42 @@ behind the allowlist without any code change.
 | Storage | Free text. |
 | Nutritional information | **Computed** from the master ingredient list, per recipe and per serving, with a coverage figure. Plus a free-text note. |
 | Link to source | URL + a source name. |
-| Type | Exactly one category (see below). |
 | Ingredients | Ordered; name, amount, unit, weight in grams, optional note/group. |
 | Process | Ordered list of steps. |
-| Tags | Many, free-form. |
+| Tags | Many, free-form. A curated few are **sections** — see below. |
 
-### Type — the category list
+### Tags, and the sections among them
 
-One per recipe, deliberately. "Baking" is a *technique* that applies to
-78 posts and overlaps everything; making it a Type would mean a cake is
-both "Baking" and "Cake" and browse-by-type stops being useful. So Type is
-the single most specific answer to "what is this?", and technique, occasion
-and ingredient words are Tags.
+There is one taxonomy: tags. A recipe carries a flat list of them.
 
-The 20 seeded categories (`data/categories.json`, editable):
+A small curated set is flagged as **sections**, and those are the site's
+navigation. Everything else is a free-form label for search and for the
+"more like this" chips. Whether a tag is a section is a property of the
+*tag*, not of the recipe — so a recipe just lists tags, and some of them
+happen to be navigation.
+
+That split exists because neither extreme works on this collection:
+
+- **Tags alone can't navigate.** The blog's 266 labels are 53% singletons;
+  only 11 are used ten or more times, and those eleven are
+  `baking, dessert, salad, chocolate, cake, warm salad, caramel, banana,
+  slice, fritter, tart` — a mix of techniques, ingredients and dish types.
+  A nav built from the top 20 reaches 68% of recipes and strands about a
+  hundred behind search.
+- **A single-valued Category needs a second concept** to express one idea,
+  and forces a chocolate tart to choose between Dessert and Pastry.
+
+Sections give navigation without either cost, and a recipe may sit in
+none, one, or several. Promotion is the growth path: a free tag that turns
+out to be load-bearing becomes a section with one PATCH, and every recipe
+already carrying it joins immediately — because they all link to the same
+tag row.
+
+The trade-off accepted: section counts no longer partition the collection,
+so a recipe in two sections is counted twice. For a home recipe site
+that's more honest than forcing a choice.
+
+The 20 seeded sections (`data/sections.json`, editable):
 
 Breakfast · Bread · Cake · Biscuits & Slices · Pastry & Tarts · Dessert ·
 Salad · Soup · Main — Vegetarian · Main — Meat · Main — Seafood ·
@@ -57,6 +79,9 @@ Sauces & Dressings · Preserves & Chutney · Drinks · Basics & Components
 "Basics & Components" is for the things used *inside* other recipes —
 pastry cream, honeycomb, caramelised onions — which the blog has a
 surprising number of.
+
+Of the 321 imported recipes, 283 land in a section from the rule parser
+alone; the rest stay reachable by search and tags until someone files them.
 
 ### Ingredients and weight
 

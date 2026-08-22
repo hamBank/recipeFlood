@@ -9,11 +9,11 @@ const base = {
   title: 'Flax Bread',
   description: 'A low-carb loaf.',
   image_path: null,
-  category_name: 'Bread',
   added_date: '2014-01-11T00:00:00Z',
   total_minutes: 45,
   servings: 8,
-  tags: ['low-carb'],
+  tags: ['Bread', 'low-carb'],
+  sections: ['Bread'],
   last_prepared_on: null,
   prepared_count: 0,
   needs_review: false,
@@ -28,11 +28,19 @@ const renderCard = (overrides = {}) =>
   )
 
 describe('RecipeCard', () => {
-  it('shows the title, category and time', () => {
+  it('shows the title, section and time', () => {
     renderCard()
     expect(screen.getByText('Flax Bread')).toBeDefined()
     expect(screen.getByText('Bread')).toBeDefined()
     expect(screen.getByText('45 min')).toBeDefined()
+  })
+
+  it('copes with a recipe that sits in no section', () => {
+    // queryByText matches an element's whole text, so the "Flax Bread"
+    // heading doesn't count as a "Bread" badge.
+    renderCard({ tags: ['low-carb'], sections: [] })
+    expect(screen.queryByText('Bread')).toBeNull()
+    expect(screen.getByText('Flax Bread')).toBeDefined()
   })
 
   it('links to the recipe by slug', () => {

@@ -35,9 +35,9 @@ _STEP_VERBS = frozenset(
 )
 _UNIT_WORDS = frozenset(UNIT_ALIASES)
 
-#: Blog labels that imply a category. Checked longest-first, so
+#: Blog labels that imply a navigation section. Checked longest-first, so
 #: "warm salad" resolves before "salad".
-_LABEL_CATEGORY = {
+_LABEL_SECTION = {
     "panforte": "biscuits-slices", "biscuit": "biscuits-slices",
     "shortbread": "biscuits-slices", "slice": "biscuits-slices",
     "brownie": "biscuits-slices", "bar": "biscuits-slices",
@@ -227,8 +227,8 @@ def find_servings(text: str) -> tuple[int | None, str | None]:
     return int(match.group(1)), match.group(0).strip()
 
 
-def guess_category(labels: list[str], title: str) -> str | None:
-    """Map the post's Blogger labels onto a category slug.
+def guess_section(labels: list[str], title: str) -> str | None:
+    """Map the post's Blogger labels onto a navigation section slug.
 
     Longest label match wins so "warm salad" beats "salad"; the title is a
     fallback for the 40-odd posts with no labels at all.
@@ -236,13 +236,13 @@ def guess_category(labels: list[str], title: str) -> str | None:
     haystack = [label.lower() for label in labels]
     best: tuple[int, str] | None = None
     for label in haystack:
-        for key, slug in _LABEL_CATEGORY.items():
+        for key, slug in _LABEL_SECTION.items():
             if key == label and (best is None or len(key) > best[0]):
                 best = (len(key), slug)
     if best:
         return best[1]
     lowered = f" {title.lower()} "
-    for key, slug in sorted(_LABEL_CATEGORY.items(), key=lambda kv: -len(kv[0])):
+    for key, slug in sorted(_LABEL_SECTION.items(), key=lambda kv: -len(kv[0])):
         if f" {key}" in lowered:
             return slug
     return None
@@ -280,6 +280,10 @@ def parse_post(post: dict) -> dict:
         )
 
     servings, servings_note = find_servings(plain)
+    section = guess_section(post.get("labels", []), post.get("title", ""))
+    tags = [label.lower() for label in post.get("labels", [])]
+    if section and section not in tags:
+        tags.insert(0, section)
 
     # Confidence is deliberately capped below the AI path's: even a
     # well-formed post gives no description, times or storage, so these
@@ -298,8 +302,8 @@ def parse_post(post: dict) -> dict:
     return {
         "title": post.get("title") or "Untitled",
         "description": None,
-        "category_slug": guess_category(post.get("labels", []), post.get("title", "")),
-        "tags": [label.lower() for label in post.get("labels", [])],
+        "section": section,
+        "tags": tags,
         "servings": servings,
         "servings_note": servings_note,
         "prep_minutes": None,

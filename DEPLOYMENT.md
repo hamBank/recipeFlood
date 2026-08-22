@@ -35,8 +35,8 @@ Idempotent script that:
 4. Creates the uploads directory
 5. Creates the Postgres role and `recipeflood` database
 6. Installs/refreshes the systemd service, path unit, Apache vhost and cron
-7. Runs `alembic upgrade head`, seeds categories, builds the frontend,
-   restarts the service
+7. Runs `alembic upgrade head`, seeds the navigation sections, builds the
+   frontend, restarts the service
 
 `deploy.sh --update` runs only the code-update part (used by the webhook).
 
