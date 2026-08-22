@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/* Semantic color tokens — components use bg-page/bg-card/text-ink/etc.
+   and each theme overrides the underlying CSS variables. */
+@theme inline {
+  --color-page: var(--page);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-edge: var(--edge);
+  --color-soft: var(--soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+}
+
+:root,
+[data-theme="light"] {
+  --page: #faf7f2;
+  --card: #ffffff;
+  --ink: #292524;
+  --ink-muted: #78716c;
+  --ink-faint: #a8a29e;
+  --edge: #e7e0d6;
+  --soft: #f3ede4;
+  --accent: #c2410c;
+  --accent-soft: #ffedd5;
+  --accent-ink: #ffffff;
+}
+
+[data-theme="dark"] {
+  --page: #1c1917;
+  --card: #292524;
+  --ink: #f5f5f4;
+  --ink-muted: #a8a29e;
+  --ink-faint: #78716c;
+  --edge: #44403c;
+  --soft: #3a3532;
+  --accent: #fb923c;
+  --accent-soft: #431407;
+  --accent-ink: #1c1917;
+}
+
+[data-theme="herb"] {
+  --page: #f4f7f2;
+  --card: #ffffff;
+  --ink: #1f2d21;
+  --ink-muted: #55705a;
+  --ink-faint: #93b19a;
+  --edge: #d7e4d8;
+  --soft: #e8f0e8;
+  --accent: #2f7d4f;
+  --accent-soft: #dcf0e3;
+  --accent-ink: #ffffff;
+}
+
+[data-theme="berry"] {
+  --page: #fdf4f6;
+  --card: #ffffff;
+  --ink: #3f1725;
+  --ink-muted: #8a4358;
+  --ink-faint: #c98da0;
+  --edge: #f3d9e0;
+  --soft: #fbe8ed;
+  --accent: #a8324f;
+  --accent-soft: #fbe0e7;
+  --accent-ink: #ffffff;
+}
+
+body {
+  background-color: var(--page);
+  color: var(--ink);
+}
+
+/* Long recipe methods read better with a touch more line height than
+   Tailwind's default, and the numbering is generated rather than typed. */
+.method-list {
+  counter-reset: step;
+}
+.method-list > li {
+  counter-increment: step;
+}
+.method-list > li::before {
+  content: counter(step);
+}

@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch .deploy-trigger and redeploy Recipe Flood
+
+[Path]
+PathChanged=/opt/recipeFlood/.deploy-trigger
+
+[Install]
+WantedBy=multi-user.target

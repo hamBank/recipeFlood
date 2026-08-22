@@ -1,0 +1,6 @@
+[Unit]
+Description=Recipe Flood redeploy (triggered by recipeflood-deploy.path)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/recipeFlood/deploy.sh --update
