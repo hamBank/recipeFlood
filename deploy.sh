@@ -18,22 +18,78 @@
 #          .venv/bin/python -m scripts.load_snapshot --heuristic'
 #      (or run scripts/parse_blog.py first for the AI-parsed snapshot —
 #       see DEVELOPMENT.md "Importing the blog")
-set -euo pipefail
+# -E so the ERR trap below fires for failures inside functions too; without
+# it the trap only sees top-level commands and every real failure is silent.
+set -Eeuo pipefail
 
 APP_DIR=/opt/recipeFlood
 REPO_URL=https://github.com/hamBank/recipeFlood.git
 APP_USER=recipeFlood
 SERVICE=recipeflood
 DB_NAME=recipeflood
+SERVER_NAME=recipeflood.hups.club
+VHOST_NAME="$SERVER_NAME.conf"
+VHOST_PATH="/etc/apache2/sites-available/$VHOST_NAME"
 LOG=/var/log/recipeFlood-deploy.log
+SYSTEM_FILES_INSTALLED=0
 
 log() { echo "[$(date -Is)] $*" | tee -a "$LOG"; }
+
+# `set -e` aborts at the first failure, and the Apache and cron steps are near
+# the end — so an early failure means no vhost, with nothing in the log saying
+# why. Name the failing line instead of stopping silently.
+trap 'rc=$?; log "ERROR: ${BASH_SOURCE[0]}:${LINENO} exited $rc — the step named above is where it stopped, and nothing after it ran. Fix and re-run."; exit $rc' ERR
+
+# Copy the systemd units, Apache vhost and cron file out of the repo into
+# their system locations. Called by BOTH provision and --update: a push that
+# changes deploy/ has to actually reach the server, or you get a "successful"
+# deploy that silently left the old unit file running.
+install_system_files() {
+    log "systemd units"
+    cp "$APP_DIR"/deploy/recipeflood.service /etc/systemd/system/"$SERVICE".service
+    cp "$APP_DIR"/deploy/recipeflood-deploy.service /etc/systemd/system/recipeflood-deploy.service
+    cp "$APP_DIR"/deploy/recipeflood-deploy.path /etc/systemd/system/recipeflood-deploy.path
+    systemctl daemon-reload
+
+    log "apache vhost"
+    a2enmod -q proxy proxy_http
+    if [ -f "$VHOST_PATH" ]; then
+        # certbot rewrites this vhost in place when it adds TLS (and writes a
+        # separate -le-ssl.conf). Overwriting it on every deploy would throw
+        # away the http->https redirect certbot inserted, so once it exists
+        # it belongs to the server, not to the repo.
+        log "  $VHOST_PATH already exists — leaving it alone (certbot may own it)."
+        log "  To apply repo changes: cp $APP_DIR/deploy/$VHOST_NAME $VHOST_PATH && certbot --apache -d $SERVER_NAME"
+    else
+        cp "$APP_DIR/deploy/$VHOST_NAME" "$VHOST_PATH"
+        a2ensite -q "$SERVER_NAME"
+    fi
+    # Never reload Apache onto a broken config — on a webhook-triggered
+    # deploy that would take the site down with nobody watching.
+    if apache2ctl configtest >/dev/null 2>&1; then
+        systemctl reload apache2
+    else
+        log "  WARNING: apache configtest failed, not reloading. Run: apache2ctl configtest"
+    fi
+
+    log "cron jobs"
+    cp "$APP_DIR"/deploy/recipeflood.cron /etc/cron.d/recipeflood
+    chmod 644 /etc/cron.d/recipeflood
+}
 
 update_code() {
     log "updating code"
     cd "$APP_DIR"
     sudo -u "$APP_USER" git fetch origin main
     sudo -u "$APP_USER" git reset --hard origin/main
+
+    # Before the build, not after: the units, vhost and cron are independent
+    # of whether pip or npm succeed, and a failed build must not be the
+    # reason a corrected unit file never reaches the server. provision()
+    # has already done this, hence the guard.
+    if [ "${SYSTEM_FILES_INSTALLED:-0}" != "1" ]; then
+        install_system_files
+    fi
 
     log "python deps + migrations"
     sudo -u "$APP_USER" .venv/bin/pip install -q -r requirements.txt
@@ -59,7 +115,14 @@ provision() {
         postgresql apache2 curl
 
     log "system user + app dir"
-    id -u "$APP_USER" &>/dev/null || useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER"
+    if ! id -u "$APP_USER" &>/dev/null; then
+        # shadow-utils >= 4.13 (Ubuntu 24.04, Debian 13) rejects a mixed-case
+        # username outright: "invalid user name 'recipeFlood': use --badname
+        # to ignore". Older releases accept it, and --badname does not exist
+        # there — so try the plain form first and fall back.
+        useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER" 2>/dev/null ||
+            useradd --badname --system --create-home --shell /usr/sbin/nologin "$APP_USER"
+    fi
     mkdir -p "$APP_DIR" /var/backups/recipeflood
     chown "$APP_USER":"$APP_USER" "$APP_DIR"
     chown postgres:postgres /var/backups/recipeflood
@@ -90,28 +153,24 @@ provision() {
         log "NOTE: fill in $APP_DIR/.env before the app will fully work"
     fi
 
-    log "deploy trigger + systemd units"
+    log "deploy trigger"
     sudo -u "$APP_USER" touch "$APP_DIR/.deploy-trigger"
-    cp "$APP_DIR"/deploy/recipeflood.service /etc/systemd/system/"$SERVICE".service
-    cp "$APP_DIR"/deploy/recipeflood-deploy.service /etc/systemd/system/recipeflood-deploy.service
-    cp "$APP_DIR"/deploy/recipeflood-deploy.path /etc/systemd/system/recipeflood-deploy.path
-    systemctl daemon-reload
+
+    install_system_files
+    SYSTEM_FILES_INSTALLED=1
     systemctl enable "$SERVICE" recipeflood-deploy.path
-
-    log "apache vhost"
-    a2enmod -q proxy proxy_http
-    cp "$APP_DIR"/deploy/recipeflood.hups.club.conf /etc/apache2/sites-available/
-    a2ensite -q recipeflood.hups.club
-    systemctl reload apache2
-
-    log "cron jobs"
-    cp "$APP_DIR"/deploy/recipeflood.cron /etc/cron.d/recipeflood
-    chmod 644 /etc/cron.d/recipeflood
 
     update_code
     systemctl start recipeflood-deploy.path
     log "=== provision done — see header of deploy.sh for the remaining manual steps ==="
 }
+
+# Both paths write to /etc and drive systemctl. Fail with a clear message
+# rather than half-way through with a permission error.
+if [ "$(id -u)" -ne 0 ]; then
+    echo "deploy.sh must be run as root — try: sudo $0 ${1:-}" >&2
+    exit 1
+fi
 
 if [ "${1:-}" = "--update" ]; then
     update_code

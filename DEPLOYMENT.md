@@ -38,7 +38,48 @@ Idempotent script that:
 7. Runs `alembic upgrade head`, seeds the navigation sections, builds the
    frontend, restarts the service
 
-`deploy.sh --update` runs only the code-update part (used by the webhook).
+`deploy.sh --update` runs the code-update part plus a refresh of the systemd
+units, Apache vhost and cron file — used by the webhook. Both modes must be
+run as root; the script says so and exits rather than failing part-way.
+
+### What `--update` does and does not touch
+
+| | `deploy.sh` | `--update` |
+|---|---|---|
+| Packages, system user, Postgres role/db, `.env` | ✅ | — |
+| Code, deps, migrations, sections, frontend build | ✅ | ✅ |
+| systemd units, cron file | ✅ | ✅ (re-copied every run) |
+| Apache vhost | ✅ if absent | ✅ if absent |
+
+The vhost is installed **only when it does not already exist**. Once it is
+there it belongs to the server, because `certbot --apache` edits that file
+in place to add the http→https redirect — re-copying the repo's plain :80
+version over it on every deploy would silently undo TLS redirection. To
+apply a repo change to the vhost:
+
+```bash
+sudo cp /opt/recipeFlood/deploy/recipeflood.hups.club.conf \
+        /etc/apache2/sites-available/recipeflood.hups.club.conf
+sudo certbot --apache -d recipeflood.hups.club   # re-add the TLS bits
+sudo apache2ctl configtest && sudo systemctl reload apache2
+```
+
+Apache is only reloaded after `apache2ctl configtest` passes, so a bad
+config can't take the site down during an unattended webhook deploy.
+
+### When a deploy stops early
+
+`deploy.sh` runs under `set -Eeuo pipefail` and aborts at the first failure.
+The Apache and cron steps are near the end, so **an early failure means no
+vhost**. The log names the step it was in and the line it died on:
+
+```bash
+tail -20 /var/log/recipeFlood-deploy.log
+# ... ERROR: /opt/recipeFlood/deploy.sh:145 exited 1 — the step named above
+#     is where it stopped, and nothing after it ran. Fix and re-run.
+```
+
+Re-running is safe — every step is idempotent.
 
 The built `backend/static/` is produced on the server at deploy time — it
 is **not** committed.
