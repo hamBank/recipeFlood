@@ -119,7 +119,8 @@ One row per pantry item, referenced by every recipe that uses it.
 | Is food | False for the things that come home from the shops but never go in a recipe — batteries, shampoo, cat litter. They stay in the pantry so it remains a complete shopping lookup, but they are kept out of the "needs a price" work queues. |
 | Density (g/ml) | Turns "1 cup" into grams. |
 | Grams per piece | Turns "2 onions" into grams. |
-| Nutrition per 100g | Energy (kJ), calories, protein, fat, saturated fat, carbs, sugars, fibre, sodium, plus where the figures came from. |
+| Nutrition per 100g | Energy (kJ), calories, protein, fat, saturated fat, carbs, sugars, fibre, sodium, plus where the figures came from (`nutrition_source`) and when. |
+| Cost | Stored as cents per kg. `cost_source` records where the price came from — "manual", an AI estimate, or blank. |
 
 The last seven sources came from importing a real shopping list: the first
 seven were a guess, and the export showed the shopping actually happens at
@@ -134,7 +135,31 @@ together with the merge action, which repoints recipe lines, inherits any
 data the absorbed row had, and keeps the old name as an alias.
 
 The Pantry page's "missing a price" and "missing nutrition" filters are the
-work queues for filling this in.
+work queues for filling this in — and `scripts/enrich_pantry.py` can fill
+most of it automatically.
+
+### Filling the pantry automatically
+
+Nutrition and cost are held to different accuracy bars, deliberately.
+
+**Nutrition should be right.** The primary source is the Australian Food
+Composition Database (AFCD, FSANZ Release 3) — real government-published
+per-100g figures, matched locally to a pantry name with no AI involved.
+When AFCD doesn't have a confident match (compound names, brands, the
+~80% of a scraped pantry it simply doesn't cover), Claude fills the gap
+from its knowledge of standard food composition — genuinely solid for
+common whole foods, weaker for the obscure. Every value carries
+`nutrition_source` recording exactly which one answered, so an estimate is
+never mistaken for a verified figure, and a bad AFCD match (matching is
+name-based, not a real lookup key — see `backend/afcd.py`) is something a
+human can see and correct.
+
+**Cost only needs to be in the right neighbourhood.** It exists to keep a
+recipe's cost panel from being empty, not to reconcile a receipt — a
+mid-season, mid-tier Australian retail estimate is enough, and
+`cost_source` says so plainly.
+
+Neither pass ever overwrites a value already on the row.
 
 ## Prepared log
 

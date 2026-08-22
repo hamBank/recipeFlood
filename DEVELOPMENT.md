@@ -154,6 +154,57 @@ Anything the rules get wrong is fixable in one place: `KNOWN_MISSPELLINGS`,
 `backend/shopping_list.py`. `--report` writes a per-item CSV of every
 decision, which is the fastest way to spot one.
 
+## Filling in nutrition and cost
+
+The pantry starts with names only. Two passes fill in the rest,
+run together by one command:
+
+```bash
+python scripts/fetch_afcd.py                 # once — downloads ~3MB, local only
+python -m scripts.enrich_pantry --dry-run
+python -m scripts.enrich_pantry --report /tmp/enrich.csv
+```
+
+**Nutrition, in order of preference:**
+
+1. **AFCD** — the Australian Food Composition Database (FSANZ, Release 3),
+   matched locally against the pantry name with no network call
+   (`backend/afcd.py`). When it finds a confident match, the numbers are
+   the actual government-published figures for that food, and
+   `nutrition_source` records exactly which AFCD entry answered — e.g.
+   `AFCD (Chicken, breast, lean flesh, raw)` — so a wrong match is
+   something you can see and fix on the Pantry page, not a black box.
+   Matches ~15-20% of a typical scraped pantry; the rest are compound
+   names, brand names, or genuinely not in AFCD's ~1,600 entries.
+2. **Claude**, for everything AFCD didn't confidently match. Labelled
+   `nutrition_source = "AI estimate (Claude)"` — a well-informed guess
+   from trained knowledge of standard food composition, not a lookup.
+   Genuinely solid for common whole foods (rice, chicken, olive oil);
+   weaker for obscure or branded ones.
+
+**Cost** always comes from Claude — AFCD carries no price data — and is
+held to a much lower bar on purpose: a mid-season, mid-tier Australian
+retail estimate, labelled `cost_source = "AI estimate (mid-season,
+indicative) YYYY-MM"`. It exists so a recipe's cost panel isn't empty, not
+to reconcile a receipt.
+
+**Reclassification.** The same Claude pass asks whether each name is
+actually human food at all, catching what `backend/shopping_list.py`'s
+keyword filter missed on the way in (a shopping list's "cat mince" has no
+food keyword in it to catch). A confident no sets `is_food = False` and
+writes nothing else to that row.
+
+**Neither pass overwrites anything already on a row** — this only fills
+blanks, so it's safe to re-run after fixing something by hand, and a
+second run does nothing (`AFCD matches: 0`).
+
+Useful flags: `--only nutrition` / `--only price` restricts what's asked
+for and written; `--limit N` / `--resume-from N` bound and continue a run;
+`--skip-afcd` goes straight to Claude. `data/afcd/` is gitignored — FSANZ's
+download page states plain copyright with no licence grant, so the
+dataset isn't redistributed in this repo; the fetch script is the way to
+get it.
+
 ## Tests
 
 ```bash

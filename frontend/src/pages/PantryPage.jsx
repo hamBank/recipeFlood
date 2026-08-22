@@ -240,6 +240,18 @@ export default function PantryPage() {
                 </td>
                 <td className="px-3 py-2 text-ink-muted">
                   {formatCostPerKg(item.cost_per_kg_cents, symbol) || '—'}
+                  {item.cost_source && (
+                    <span
+                      title={item.cost_source}
+                      className={`ml-1 text-[10px] ${
+                        item.cost_source.startsWith('AI estimate')
+                          ? 'text-ink-faint italic'
+                          : 'text-ink-faint'
+                      }`}
+                    >
+                      {item.cost_source.startsWith('AI estimate') ? '~' : ''}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-ink-muted">
                   {formatCents(item.package_cost_cents, symbol) || '—'}
@@ -249,7 +261,16 @@ export default function PantryPage() {
                 </td>
                 <td className="px-3 py-2">
                   {item.has_nutrition ? (
-                    <span className="text-accent">✓</span>
+                    <span
+                      title={item.nutrition_source || 'nutrition recorded'}
+                      className={
+                        item.nutrition_source?.startsWith('AI estimate')
+                          ? 'text-ink-faint italic'
+                          : 'text-accent'
+                      }
+                    >
+                      {item.nutrition_source?.startsWith('AI estimate') ? '~' : '✓'}
+                    </span>
                   ) : (
                     <span className="text-ink-faint">—</span>
                   )}
