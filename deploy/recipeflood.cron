@@ -1,0 +1,10 @@
+# /etc/cron.d/recipeflood — Recipe Flood scheduled jobs
+SHELL=/bin/bash
+
+# Nightly database backup (02:45) — 7-day rotation by weekday number.
+# Staggered off pocketMoney's 02:30 slot so the two dumps don't overlap.
+45 2 * * * postgres pg_dump recipeflood | gzip > /var/backups/recipeflood/recipeflood-$(date +\%u).sql.gz
+
+# Nightly image backup (03:15). Uploaded photos are the only app data that
+# isn't in Postgres or git, so they need their own copy.
+15 3 * * * recipeFlood tar czf /var/backups/recipeflood/uploads-$(date +\%u).tar.gz -C /opt/recipeFlood uploads

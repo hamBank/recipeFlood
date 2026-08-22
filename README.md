@@ -19,6 +19,9 @@ blog, plus manual entry and AI-assisted import from a photo or a paste.
 - **Honest panels.** Nutrition reports the share of the recipe's weight it
   could account for; cost reports how many ingredients had a price. No
   confident-looking undercounts.
+- **One taxonomy.** Tags are the only labelling concept; a curated few are
+  flagged as *sections* and become the navigation. Promoting a tag moves
+  every recipe already carrying it — no recipe row is touched.
 
 ## Docs
 
@@ -37,7 +40,7 @@ blog, plus manual entry and AI-assisted import from a photo or a paste.
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
-python scripts/seed_categories.py
+python scripts/seed_sections.py
 python -m scripts.load_snapshot --heuristic     # 321 recipes, no API key needed
 
 AUTH_ENABLED=false python -m uvicorn backend.main:app --reload
