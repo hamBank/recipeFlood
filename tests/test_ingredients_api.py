@@ -147,3 +147,64 @@ class TestDelete:
         line = next(i for i in after["ingredients"] if i["name"] == "plain flour")
         assert line["ingredient_id"] is None
         assert line["raw_text"]  # the recipe still reads correctly
+
+
+class TestAliasMatching:
+    """The alias lookup is what stops a re-import creating a second row."""
+
+    def test_an_alias_is_matched_after_normalisation(self, client, session, flour):
+        # The bug this covers: find_ingredient compared the *normalised*
+        # query against *raw* aliases, so an alias only matched when
+        # normalisation was a no-op. The alias "pinenuts" never matched a
+        # line reading "pinenut", and re-importing a shopping list created
+        # a duplicate row every time.
+        from backend.models import Ingredient
+        from backend.recipes_service import find_ingredient
+
+        session.add(Ingredient(slug="pine-nuts", name="pine nuts", aliases=["pinenuts"]))
+        session.commit()
+
+        assert find_ingredient(session, "pinenuts").name == "pine nuts"
+        assert find_ingredient(session, "pinenut").name == "pine nuts"
+        assert find_ingredient(session, "PINENUTS").name == "pine nuts"
+
+    def test_an_unrelated_name_still_misses(self, client, session, flour):
+        from backend.recipes_service import find_ingredient
+
+        assert find_ingredient(session, "dragonfruit") is None
+
+
+class TestIsFood:
+    def test_defaults_to_food(self, client):
+        created = client.post("/ingredients", json={"name": "quinoa"}).json()
+        assert created["is_food"] is True
+
+    def test_can_be_flagged_and_filtered(self, client):
+        client.post("/ingredients", json={"name": "quinoa"})
+        client.post("/ingredients", json={"name": "cat litter", "is_food": False})
+
+        food = [i["slug"] for i in client.get("/ingredients?is_food=true").json()]
+        not_food = [i["slug"] for i in client.get("/ingredients?is_food=false").json()]
+        assert "quinoa" in food and "cat-litter" not in food
+        assert not_food == ["cat-litter"]
+
+    def test_can_be_toggled(self, client):
+        client.post("/ingredients", json={"name": "cat litter", "is_food": False})
+        updated = client.patch("/ingredients/cat-litter", json={"is_food": True}).json()
+        assert updated["is_food"] is True
+
+
+class TestExtendedSources:
+    def test_the_shops_from_the_shopping_list_are_accepted(self, client):
+        for name, source in [
+            ("ling fillet", "fishmonger"),
+            ("burger bun", "bakery"),
+            ("marsala", "bottle_shop"),
+            ("fondant", "cake_supplies"),
+        ]:
+            created = client.post("/ingredients", json={"name": name, "source": source}).json()
+            assert created["source"] == source
+
+    def test_an_unknown_source_is_rejected(self, client):
+        response = client.post("/ingredients", json={"name": "x", "source": "spaceport"})
+        assert response.status_code == 422

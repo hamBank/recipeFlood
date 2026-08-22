@@ -106,7 +106,8 @@ identity worth preserving across an edit.
 | `aliases` | JSON list, lowercased; matched against recipe lines |
 | `package_size_grams` | float? |
 | `cost_per_kg_cents` | **int?** — see below |
-| `source` | `markets` / `supermarket` / `butcher` / `nut_shop` / `deli` / `asian_grocery` / `other` |
+| `source` | Where it is bought. Fourteen values — see `IngredientSource`. Stored as a plain VARCHAR with no database CHECK: the first seven were a guess and a real shopping list added seven more, so the next addition should not need a migration that behaves differently on SQLite and Postgres |
+| `is_food` | Indexed. False for batteries, shampoo, cat litter — in the pantry as a shopping lookup, out of the ingredient work queues |
 | `density_g_per_ml` | float? — converts volumes to grams |
 | `grams_per_piece` | float? — converts counts to grams |
 | `energy_kj`, `calories_kcal`, `protein_g`, `fat_g`, `saturated_fat_g`, `carbs_g`, `sugars_g`, `fibre_g`, `sodium_mg` | float?, all **per 100g** |
@@ -122,6 +123,12 @@ Cents-per-kilogram keeps it an integer (`250`), gives four significant
 figures on the per-gram price, and prices a 2g pinch of saffron and a 1kg
 bag of flour with the same arithmetic. `cost_per_gram` is derived on read,
 for display only.
+
+`aliases` is load-bearing beyond search: the shopping-list importer records
+every spelling it saw on the row it resolved to, so a re-import is a no-op
+and a recipe line reading "capcicum" finds the capsicum row. `find_ingredient`
+normalises both sides when comparing, so the alias "pinenuts" also matches a
+line reading "pinenut".
 
 Every nutrition column is nullable and independently so: a recipe's panel
 reports which fields it actually has rather than filling gaps with zeros.

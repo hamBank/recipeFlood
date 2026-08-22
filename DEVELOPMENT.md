@@ -101,6 +101,59 @@ pipeline is testable without a key and so the collection can always be
 rebuilt from the repo. On the 321 posts it manages ≥3 ingredients on 291
 of them and a section on 283, and it flags every recipe for review.
 
+## Importing a shopping list
+
+A four-column export — `Item, Weight, Location, Price` — becomes pantry
+rows:
+
+```bash
+python -m scripts.import_pantry_csv data/shopping_list.csv --dry-run
+python -m scripts.import_pantry_csv data/shopping_list.csv --report /tmp/report.csv
+python -m scripts.import_pantry_csv data/shopping_list.csv
+```
+
+**The file is not committed.** A real shopping list names family members
+and their medications, and this repository is public; `.gitignore` excludes
+`data/shopping_list*.csv`. Keep yours there and re-run the import when it
+changes.
+
+The rules live in [`backend/shopping_list.py`](backend/shopping_list.py)
+and are unit-tested in `tests/test_shopping_list.py`. What they do, on the
+2,303-row export this was built against:
+
+| Step | Effect |
+|---|---|
+| Trim, collapse whitespace, lowercase, drop a leading amount | `"1/4 red cabbage"` → `red cabbage`; `"00 flour"` is left alone |
+| Correct spelling toward known words | 73 rewrites: `capcicum` → `capsicum`, `muchrooms` → `mushroom` |
+| Group on the normalised name | 2,303 rows → 1,871 items |
+| Match against the existing pantry | 316 already there, updated in place |
+| Map the shop | 47 spellings → 14 sources |
+| Flag non-food | 72 items marked `is_food=false` |
+
+**Nothing is duplicated and nothing is overwritten.** Candidates are matched
+with the same matcher the recipe importer uses — name, slug, alias, and a
+normalised form — and an existing row only ever gains values it was missing.
+Every spelling seen becomes an alias on the row it resolved to, which is
+what makes a re-import a no-op and also lets a recipe written with
+`capcicum` find the capsicum row. Re-running creates zero rows.
+
+### Two things the rules deliberately refuse to do
+
+**Guess at short words.** One edit apart is as likely to be a different food
+as a typo, so nothing under six characters is corrected. Earlier versions
+produced `peas`→`pear`, `sake`→`sage`, `foil`→`oil` and `milo`→`milk`.
+
+**Treat repetition as spelling evidence.** A correction target must come
+from the existing pantry or the density tables, never from the file's own
+frequency — the list uses `vegimite` and `mozarella` more than once, and
+counting that as evidence corrected the *right* spellings onto the wrong
+ones.
+
+Anything the rules get wrong is fixable in one place: `KNOWN_MISSPELLINGS`,
+`NEVER_MERGE`, `NON_FOOD_WORDS` and `FOOD_EXCEPTIONS` in
+`backend/shopping_list.py`. `--report` writes a per-item CSV of every
+decision, which is the fastest way to spot one.
+
 ## Tests
 
 ```bash

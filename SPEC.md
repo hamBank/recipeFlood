@@ -115,14 +115,21 @@ One row per pantry item, referenced by every recipe that uses it.
 | Name | Plus aliases used when matching recipe lines ("fetta"/"feta"). |
 | Usual package size | Grams. |
 | Cost | Stored as integer **cents per kilogram**; displayed per kg and per package. This is what gives a useful per-gram resolution. |
-| Source | Markets · Supermarket · Butcher · Nut shop · Deli · Asian grocery · Other |
+| Source | Markets · Supermarket · Butcher · Nut shop · Deli · Asian grocery · Fishmonger · Bakery · Bottle shop · Cake supplies · Chemist · Hardware · Newsagent · Other |
+| Is food | False for the things that come home from the shops but never go in a recipe — batteries, shampoo, cat litter. They stay in the pantry so it remains a complete shopping lookup, but they are kept out of the "needs a price" work queues. |
 | Density (g/ml) | Turns "1 cup" into grams. |
 | Grams per piece | Turns "2 onions" into grams. |
 | Nutrition per 100g | Energy (kJ), calories, protein, fat, saturated fat, carbs, sugars, fibre, sodium, plus where the figures came from. |
 
+The last seven sources came from importing a real shopping list: the first
+seven were a guess, and the export showed the shopping actually happens at
+a fishmonger, a bakery and a bottle shop too.
+
 Importing the blog creates a stub row for every distinct ingredient phrase,
 so the pantry arrives pre-populated and ready to be priced rather than
-empty. Near-duplicates ("onion" / "red onion" / "onions") are folded
+empty. A shopping-list export can be imported on top of it
+(`scripts/import_pantry_csv.py`), which adds the items the recipes never
+mention and fills in where each one is bought. Near-duplicates ("onion" / "red onion" / "onions") are folded
 together with the merge action, which repoints recipe lines, inherits any
 data the absorbed row had, and keeps the old name as an alias.
 

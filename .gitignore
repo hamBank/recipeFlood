@@ -30,3 +30,10 @@ backend/uploads/
 # to use them.
 data/images/*
 !data/images/README.md
+
+# Shopping-list exports. NOT committed: a real one names family members and
+# their medications ("kid nurofen", "locec script", "Astrid shampoo"), and
+# this repository is public. Keep the file here and import from it — see
+# DEVELOPMENT.md "Importing a shopping list".
+data/shopping_list*.csv
+data/pantry_import_report.csv

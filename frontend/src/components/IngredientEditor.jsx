@@ -48,6 +48,7 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
     density_g_per_ml: ingredient.density_g_per_ml ?? '',
     grams_per_piece: ingredient.grams_per_piece ?? '',
     nutrition_source: ingredient.nutrition_source || '',
+    is_food: ingredient.is_food,
     notes: ingredient.notes || '',
     ...Object.fromEntries(NUTRIENTS.map(([key]) => [key, ingredient[key] ?? ''])),
   }))
@@ -72,6 +73,7 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
         cost_per_kg_cents:
           form.cost_per_kg === '' ? null : Math.round(Number(form.cost_per_kg) * 100),
         source: form.source,
+        is_food: form.is_food,
         density_g_per_ml: number(form.density_g_per_ml),
         grams_per_piece: number(form.grams_per_piece),
         nutrition_source: form.nutrition_source.trim() || null,
@@ -134,6 +136,17 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
           <Field label="Notes">
             <input value={form.notes} onChange={(e) => set('notes', e.target.value)} className={inputClass} />
           </Field>
+          <label className="flex items-center gap-2 self-end text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={form.is_food}
+              onChange={(e) => set('is_food', e.target.checked)}
+            />
+            It&rsquo;s food
+            <span className="text-xs text-ink-faint">
+              (uncheck for batteries, shampoo and the like)
+            </span>
+          </label>
         </div>
 
         <fieldset className="rounded-lg border border-edge p-4">

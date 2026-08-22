@@ -60,15 +60,20 @@ def list_ingredients(
     _user: User = Depends(require_user_role),
     q: str | None = None,
     source: str | None = None,
+    is_food: bool | None = None,
     missing_cost: bool | None = None,
     missing_nutrition: bool | None = None,
     sort: str = Query("name", pattern="^(name|cost|usage|updated)$"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ):
-    """List the pantry. The `missing_cost` / `missing_nutrition` filters are
-    the work queues for filling this table in after the blog import created
-    a few hundred bare stubs."""
+    """List the pantry.
+
+    `missing_cost` / `missing_nutrition` are the work queues for filling
+    this table in. `is_food=false` finds the things that come home from the
+    shops but never go in a recipe — batteries, shampoo, cat litter — which
+    the shopping-list import flags on the way in.
+    """
     statement = select(Ingredient)
     if q:
         pattern = f"%{q.strip()}%"
@@ -77,6 +82,8 @@ def list_ingredients(
         )
     if source:
         statement = statement.where(Ingredient.source == source)
+    if is_food is not None:
+        statement = statement.where(Ingredient.is_food == is_food)  # noqa: E712
     if missing_cost is True:
         statement = statement.where(Ingredient.cost_per_kg_cents.is_(None))
     elif missing_cost is False:

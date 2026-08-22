@@ -17,7 +17,10 @@ Two numeric conventions worth knowing before reading anything else:
 from datetime import date, datetime, timezone
 from enum import Enum
 
+# SAEnum, not Enum: a bare `Enum` here shadows enum.Enum and every
+# `class Foo(str, Enum)` below stops being an enum.
 from sqlalchemy import JSON, Column
+from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel  # noqa: F401
 
 
@@ -73,7 +76,14 @@ class UserInvite(SQLModel):
 
 
 class IngredientSource(str, Enum):
-    """Where this ingredient is usually bought."""
+    """Where this item is usually bought.
+
+    Stored as a plain string column rather than a database ENUM. The first
+    seven values were a guess; importing a real shopping list added seven
+    more, and that list will keep growing. A VARCHAR plus this class for
+    validation means the next addition is a one-line change instead of an
+    `ALTER TYPE` that behaves differently on SQLite and Postgres.
+    """
 
     markets = "markets"
     supermarket = "supermarket"
@@ -81,6 +91,15 @@ class IngredientSource(str, Enum):
     nut_shop = "nut_shop"
     deli = "deli"
     asian_grocery = "asian_grocery"
+    # Added from the shopping list — these are where the shopping actually
+    # happens, as opposed to where I assumed it did.
+    fishmonger = "fishmonger"
+    bakery = "bakery"
+    bottle_shop = "bottle_shop"
+    cake_supplies = "cake_supplies"
+    chemist = "chemist"
+    hardware = "hardware"
+    newsagent = "newsagent"
     other = "other"
 
 
@@ -102,7 +121,26 @@ class Ingredient(SQLModel, table=True):
 
     package_size_grams: float | None = None
     cost_per_kg_cents: int | None = None
-    source: IngredientSource = Field(default=IngredientSource.supermarket)
+    # native_enum=False + create_constraint=False: stored as a plain VARCHAR
+    # with no database-level CHECK, so adding a shop needs no migration —
+    # but SQLAlchemy still hands back an IngredientSource on read rather
+    # than a bare string, which every caller would otherwise have to
+    # remember. Names and values are identical on this enum, so what lands
+    # in the column is the value either way.
+    source: IngredientSource = Field(
+        default=IngredientSource.supermarket,
+        sa_column=Column(
+            SAEnum(IngredientSource, native_enum=False, create_constraint=False, length=32),
+            nullable=False,
+            server_default="supermarket",
+        ),
+    )
+
+    # False for the things that come home from the shops but never go in a
+    # recipe — batteries, shampoo, cat litter. They stay in the pantry so it
+    # remains a complete shopping lookup, but they are filtered out of the
+    # ingredient pickers and the "needs a price" queue.
+    is_food: bool = Field(default=True, index=True)
 
     # Conversion helpers. density_g_per_ml turns "1 cup" into grams;
     # grams_per_piece turns "2 onions" into grams. Both optional — without
@@ -153,6 +191,7 @@ class IngredientCreate(SQLModel):
     source: IngredientSource = IngredientSource.supermarket
     density_g_per_ml: float | None = Field(default=None, gt=0)
     grams_per_piece: float | None = Field(default=None, gt=0)
+    is_food: bool = True
     notes: str | None = None
 
 
@@ -164,6 +203,7 @@ class IngredientUpdate(SQLModel):
     source: IngredientSource | None = None
     density_g_per_ml: float | None = Field(default=None, gt=0)
     grams_per_piece: float | None = Field(default=None, gt=0)
+    is_food: bool | None = None
     notes: str | None = None
     # Nutrition fields are updatable through the same PATCH.
     energy_kj: float | None = None
@@ -188,6 +228,7 @@ class IngredientRead(SQLModel):
     cost_per_gram: float | None  # derived: dollars, 5dp — display only
     package_cost_cents: int | None  # derived: cost of one usual package
     source: IngredientSource
+    is_food: bool
     density_g_per_ml: float | None
     grams_per_piece: float | None
     energy_kj: float | None

@@ -83,10 +83,17 @@ def find_ingredient(session: Session, name: str) -> Ingredient | None:
         if found:
             return found
     normalised = normalise_ingredient_name(name)
+    if not normalised:
+        return None
     for ingredient in session.exec(select(Ingredient)).all():
-        aliases = ingredient.aliases or []
-        if normalised and normalised in [a.lower() for a in aliases]:
-            return ingredient
+        # Normalise both sides. Comparing the normalised name against raw
+        # aliases only matched when normalisation happened to be a no-op:
+        # the alias "pinenuts" never matched a line reading "pinenut",
+        # because the left side had been singularised and the right side
+        # had not.
+        for alias in ingredient.aliases or []:
+            if normalise_ingredient_name(alias) == normalised:
+                return ingredient
     return None
 
 

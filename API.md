@@ -115,7 +115,7 @@ filename.
 
 | Method | Path | Access | Notes |
 |---|---|---|---|
-| GET | `/ingredients` | user | `q`, `source`, `missing_cost`, `missing_nutrition`, `sort` (`name`/`cost`/`usage`/`updated`), `limit`, `offset`; sets `X-Total-Count` |
+| GET | `/ingredients` | user | `q`, `source`, `is_food`, `missing_cost`, `missing_nutrition`, `sort` (`name`/`cost`/`usage`/`updated`), `limit`, `offset`; sets `X-Total-Count` |
 | GET | `/ingredients/{slug\|id}` | user | |
 | POST | `/ingredients` | user | 409 if the name already matches an existing row |
 | PATCH | `/ingredients/{key}` | user | Changing density or grams-per-piece **re-derives the weight of every recipe line using it**, except `explicit` ones |
@@ -124,6 +124,10 @@ filename.
 
 Reads include derived `cost_per_gram`, `package_cost_cents`,
 `has_nutrition` and `recipe_count`.
+
+`is_food=false` lists the non-recipe items a shopping-list import flagged —
+batteries, shampoo, cat litter. `source` accepts any of the fourteen
+`IngredientSource` values; anything else is a 422.
 
 ## AI import
 
