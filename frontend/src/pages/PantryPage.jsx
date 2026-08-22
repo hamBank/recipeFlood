@@ -49,6 +49,11 @@ export default function PantryPage() {
         offset: (page - 1) * PAGE_SIZE,
         missing_cost: filter === 'cost' ? 'true' : '',
         missing_nutrition: filter === 'nutrition' ? 'true' : '',
+        // The work queues are about ingredients, so they exclude the
+        // non-food items the shopping-list import flagged; there is no
+        // point being nagged to price the cat litter.
+        is_food:
+          filter === 'nonfood' ? 'false' : filter === 'cost' || filter === 'nutrition' ? 'true' : '',
       })
       setItems(result.items)
       setTotal(result.total)
@@ -167,6 +172,7 @@ export default function PantryPage() {
           <option value="">Everything</option>
           <option value="cost">Missing a price</option>
           <option value="nutrition">Missing nutrition</option>
+          <option value="nonfood">Not food</option>
         </select>
         <select
           value={sort}
@@ -214,6 +220,14 @@ export default function PantryPage() {
               <tr key={item.id} className="border-b border-edge/60 last:border-0">
                 <td className="px-3 py-2 font-medium text-ink">
                   {item.name}
+                  {!item.is_food && (
+                    <span
+                      title="Not a recipe ingredient — flagged on import from the shopping list"
+                      className="ml-1.5 rounded bg-soft px-1.5 py-0.5 text-[11px] text-ink-muted"
+                    >
+                      not food
+                    </span>
+                  )}
                   {item.aliases?.length > 0 && (
                     <span className="ml-1 text-xs text-ink-faint">
                       ({item.aliases.join(', ')})

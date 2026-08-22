@@ -72,6 +72,7 @@ backend/
   slugs.py           # URL slug allocation
   recipes_service.py # persistence + read-model assembly shared by every writer
   blog_parser.py     # deterministic fallback parser for the Blogger posts
+  shopping_list.py   # rationalising a shopping-list export into pantry rows
   ai_import.py       # Claude prompt + response normalisation (3 callers)
   routers/
     auth_router.py   # /auth/google, /auth/me, /auth/config
@@ -97,6 +98,7 @@ scripts/
   load_snapshot.py   # 4. snapshot      -> database (idempotent)
   seed_sections.py   # navigation sections from data/sections.json
   seed_pantry.py     # densities/prices from data/pantry.json
+  import_pantry_csv.py # a shopping-list export -> the master ingredient list
   seed_dev_data.py   # a small local fixture set
 frontend/
   src/
@@ -191,6 +193,12 @@ touches `.deploy-trigger`; a systemd path unit runs `deploy.sh --update`
 - Both importers and manual entry auto-create master ingredient stubs. An
   unlinked ingredient line can never be priced, so a stub beats a dangling
   string; the Pantry page merges duplicates.
+- `Ingredient.aliases` is how spellings stay bound to one row. The
+  shopping-list importer writes every variant it saw there, which makes a
+  re-import a no-op; `find_ingredient` normalises both sides, so an alias
+  matches whether or not the query needed singularising.
+- `Ingredient.source` is a plain VARCHAR, not a database ENUM — the value
+  list has already grown once and will again.
 - Re-slugging happens only when a title genuinely changes, so editing a
   description never breaks a link.
 - An `explicit` weight is never recomputed, even when the pantry's density

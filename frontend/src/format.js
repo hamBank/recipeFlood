@@ -99,5 +99,12 @@ export const SOURCE_LABEL = {
   nut_shop: 'Nut shop',
   deli: 'Deli',
   asian_grocery: 'Asian grocery',
+  fishmonger: 'Fishmonger',
+  bakery: 'Bakery',
+  bottle_shop: 'Bottle shop',
+  cake_supplies: 'Cake supplies',
+  chemist: 'Chemist',
+  hardware: 'Hardware',
+  newsagent: 'Newsagent',
   other: 'Other',
 }
