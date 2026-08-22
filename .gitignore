@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Local databases
+*.db
+
+# Node
+node_modules/
+
+# Built frontend — produced by `npm run build` / deploy, never committed
+backend/static/
+frontend/public/version.json
+
+# Recipe images written at runtime (manual uploads / AI imports). The
+# blog-scrape images live in data/images/ and ARE committed — see
+# scripts/load_snapshot.py, which copies them in here on load.
+backend/uploads/
+
+# Local config
+.env
+
+# Downloaded blog images. NOT committed: every one of the source blog's 44
+# images is a hotlink to a commercial recipe site (goodfood.com.au,
+# taste.com.au, ABC, BBC Good Food) rather than the blog's own photo, and
+# this repository is public — see SPEC.md "Images". Run
+# scripts/fetch_images.py to recreate the directory locally if you decide
+# to use them.
+data/images/*
+!data/images/README.md
