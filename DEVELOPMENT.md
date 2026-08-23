@@ -156,14 +156,31 @@ decision, which is the fastest way to spot one.
 
 ## Filling in nutrition and cost
 
-The pantry starts with names only. Two passes fill in the rest,
-run together by one command:
+The pantry starts with names only. Two passes fill in the rest — a local
+one and a network one — and they can be run separately, which is what you
+want on a pantry of a few thousand items:
 
 ```bash
-python scripts/fetch_afcd.py                 # once — downloads ~3MB, local only
-python -m scripts.enrich_pantry --dry-run
-python -m scripts.enrich_pantry --report /tmp/enrich.csv
+python scripts/fetch_afcd.py                       # once — ~3MB, local only
+
+python -m scripts.enrich_pantry --phase local      # AFCD only: seconds, free, no key
+python -m scripts.enrich_pantry --phase network    # Claude: the slow, costed half
+python -m scripts.enrich_pantry                    # both, in that order (default)
 ```
+
+`--phase local` needs no API key and no network, finishes in seconds, and
+tells you how many items are left for the network pass. Run it first, look
+at what it did, then spend money.
+
+The network pass sends batches concurrently (`--concurrency`, default 4)
+and can be bounded with `--limit` and `--resume-from` while you sanity-check
+a sample. `--only nutrition` / `--only price` narrows what is asked for.
+
+A batch whose response is cut short by the model's output limit no longer
+loses the whole batch: the complete items are kept and the remainder is
+automatically retried in smaller batches, as is a batch that fails
+outright. `--concurrency 1` restores fully serial behaviour if you're
+debugging.
 
 **Nutrition, in order of preference:**
 
