@@ -26,6 +26,16 @@ from .models import (
 )
 from .shopping import scale_factor
 
+#: The `description` scripts/import_recipe_history.py stamps on every
+#: CookList it creates or extends. Shared here (rather than living only in
+#: the script) so the API can filter these out too — see
+#: `list_cook_lists`'s `exclude_imported`: a cooking-history import can
+#: create hundreds of these, backdated close to "now" by definition (that
+#: was the household's last real cooked-something), and a plain
+#: newest-first sort would otherwise happily hand quick-add one of them
+#: instead of the list someone is actually planning.
+IMPORTED_COOK_LIST_DESCRIPTION = "Cooking history import"
+
 
 def _recipe_map(session: Session, entries: list[CookListRecipe]) -> dict[int, Recipe]:
     ids = {e.recipe_id for e in entries}

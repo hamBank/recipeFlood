@@ -72,7 +72,7 @@ export default function RecipeListPage() {
     }
     ;(async () => {
       try {
-        const { items } = await listCookLists({ limit: 1 })
+        const { items } = await listCookLists({ limit: 1, exclude_imported: true })
         setCookList(items[0] || null)
       } catch {
         // Quick-add is a convenience; the grid works fine without it.

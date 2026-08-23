@@ -8,9 +8,9 @@ it (SPEC.md "Visibility").
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 
-from ..cook_lists import cook_list_read, shopping_lines
+from ..cook_lists import IMPORTED_COOK_LIST_DESCRIPTION, cook_list_read, shopping_lines
 from ..database import get_session
 from ..models import (
     AddToShoppingResult,
@@ -79,6 +79,16 @@ def list_cook_lists(
     _user: User = Depends(require_user_role),
     since: date | None = None,
     until: date | None = None,
+    exclude_imported: bool = Query(
+        False,
+        description=(
+            "Skip cooking-history import batches. A CSV import can create "
+            "hundreds of these, backdated close to 'now' by definition — "
+            "without this, quick-add's 'most recent list' lookup would "
+            "readily land on one instead of a list someone is actually "
+            "planning."
+        ),
+    ),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
@@ -88,6 +98,17 @@ def list_cook_lists(
         statement = statement.where(CookList.cook_date >= since)
     if until:
         statement = statement.where(CookList.cook_date <= until)
+    if exclude_imported:
+        # description != ... alone would also drop every list that simply
+        # has no description at all: SQL's three-valued logic makes
+        # `NULL != 'x'` unknown, not true, so the plain comparison silently
+        # excludes them too. Most lists never get a description.
+        statement = statement.where(
+            or_(
+                CookList.description != IMPORTED_COOK_LIST_DESCRIPTION,
+                CookList.description.is_(None),
+            )
+        )
     statement = statement.order_by(CookList.cook_date.desc(), CookList.id.desc())
 
     rows = list(session.exec(statement).all())
