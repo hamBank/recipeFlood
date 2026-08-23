@@ -194,6 +194,88 @@ class TestIsFood:
         assert updated["is_food"] is True
 
 
+class TestMeasureKind:
+    """Most groceries are weighed, but most liquids are sold and shelf-
+    priced by volume — see backend/models.py's MeasureKind."""
+
+    def test_defaults_to_weight(self, client):
+        created = client.post("/ingredients", json={"name": "quinoa"}).json()
+        assert created["measure_kind"] == "weight"
+        assert created["cost_per_ml"] is None
+
+    def test_a_volume_ingredient_is_priced_and_packaged_by_the_litre(self, client):
+        created = client.post(
+            "/ingredients",
+            json={
+                "name": "milk",
+                "measure_kind": "volume",
+                "package_size_ml": 2000,
+                "cost_per_litre_cents": 200,
+            },
+        ).json()
+        assert created["cost_per_ml"] == pytest.approx(0.002)
+        assert created["package_cost_cents"] == 400  # 2L at $2/L
+
+    def test_a_weight_ingredients_volume_price_is_never_read(self, client, flour):
+        # flour is measure_kind=weight with only cost_per_kg_cents set;
+        # package_cost_cents must come from that, not silently be None
+        # because someone looks at the wrong pair of fields.
+        row = client.get("/ingredients/plain-flour").json()
+        assert row["measure_kind"] == "weight"
+        assert row["package_cost_cents"] == 250  # 1kg at $2.50/kg, from flour fixture
+
+    def test_can_be_reclassified(self, client):
+        client.post("/ingredients", json={"name": "olive oil"})
+        updated = client.patch(
+            "/ingredients/olive-oil",
+            json={"measure_kind": "volume", "cost_per_litre_cents": 900},
+        ).json()
+        assert updated["measure_kind"] == "volume"
+        assert updated["cost_per_ml"] == pytest.approx(0.009)
+
+    def test_changing_the_litre_price_stamps_provenance_like_the_kilo_price_does(
+        self, client
+    ):
+        created = client.post(
+            "/ingredients", json={"name": "milk", "measure_kind": "volume"}
+        ).json()
+        assert created["cost_updated_at"] is None
+
+        updated = client.patch(
+            "/ingredients/milk", json={"cost_per_litre_cents": 200}
+        ).json()
+        assert updated["cost_updated_at"] is not None
+        assert updated["cost_source"] == "manual"
+
+    def test_an_unchanged_price_does_not_restamp(self, client):
+        created = client.post(
+            "/ingredients",
+            json={"name": "milk", "measure_kind": "volume", "cost_per_litre_cents": 200},
+        ).json()
+        stamped = client.patch(
+            "/ingredients/milk", json={"cost_per_litre_cents": 200}
+        ).json()
+        assert stamped["cost_updated_at"] == created["cost_updated_at"]
+
+    def test_merging_inherits_the_volume_fields_the_survivor_was_missing(
+        self, client, admin
+    ):
+        client.post(
+            "/ingredients",
+            json={"name": "full cream milk", "measure_kind": "volume", "package_size_ml": 1000, "cost_per_litre_cents": 220},
+        )
+        client.post("/ingredients", json={"name": "milk"})
+        merged = client.post(
+            "/ingredients/milk/merge/full-cream-milk"
+        ).json()
+        assert merged["package_size_ml"] == 1000
+        assert merged["cost_per_litre_cents"] == 220
+        # Reclassifying is not part of the merge — the survivor's own
+        # measure_kind (its default, weight) is left as it was rather than
+        # silently flipped by whatever the absorbed row happened to be.
+        assert merged["measure_kind"] == "weight"
+
+
 class TestExtendedSources:
     def test_the_shops_from_the_shopping_list_are_accepted(self, client):
         for name, source in [

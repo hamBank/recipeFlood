@@ -8,17 +8,44 @@ list; coming home with two separate onion lines is a mild annoyance.
 
 ## What merges
 
-Two lines merge when they are **the same pantry ingredient** and both have
-a weight in grams. That is the only case where the arithmetic is real.
+Two lines merge when they are **the same pantry ingredient** and state the
+same *kind* of amount — both a weight, both a volume, or both a count in
+the same unit. Those are the only cases where the arithmetic is real.
+
+Weight and volume merge on different terms. Weight needs a density (explicit
+or estimated) to turn "2 cups" into grams, so two weight amounts are only
+comparable once that conversion has already happened. Volume needs nothing
+of the kind: "2 cups" and "500ml" both convert to millilitres by fixed
+unit arithmetic alone (see `units.to_ml`), so they merge exactly regardless
+of whether anyone has ever told the pantry this ingredient's density. That is
+what makes a liquid with no known density still mergeable and priceable —
+see `Ingredient.measure_kind` in models.py.
+
+An ingredient with a known density gets both a weight and a volume for the
+same line; which one the shopping list aggregates on follows the
+ingredient's `measure_kind` (weight ingredients merge on weight even when a
+density happens to be set, volume ingredients merge on volume even when a
+weight happens to be derivable) — that is also what its cost is computed
+from, so the two stay in step.
+
+One exception: a *guessed* weight never outranks an exact volume. Weight
+conversion has a keyword-table fallback for common ingredient names (see
+units.DENSITIES) that fires even with no linked pantry density — "milk",
+"stock" and "honey" are all in that table — and it produces
+`WeightSource.estimated`, the same tier the recipe-detail page already
+marks with an asterisk as "not to be trusted." A weight-measure_kind
+ingredient only merges on weight when the conversion was stated outright
+or came from a real linked density (`explicit`/`converted`); an estimated
+weight defers to the exact millilitre figure when one is available.
 
 Everything else stays separate:
 
 * **Unlinked lines never merge**, even when the text is identical. Without
   a pantry row there is no evidence that "1 bunch coriander" from one
   recipe and "coriander leaves" from another are the same purchase.
-* **Same ingredient, no weight** ("1 bunch parsley", "salt to taste") stays
-  its own line. Adding 1 bunch to 30g would mean inventing a bunch weight
-  the pantry hasn't been told.
+* **Same ingredient, no weight and no volume** ("1 bunch parsley", "salt to
+  taste") stays its own line. Adding 1 bunch to 30g would mean inventing a
+  bunch weight the pantry hasn't been told.
 
 The result is a list that sometimes says "onion 400g" and "onion, 1 bunch
 spring" on two lines. That is the honest rendering of what the recipes
@@ -45,16 +72,18 @@ from __future__ import annotations
 
 from sqlmodel import Session, select
 
-from .costing import cost_per_gram  # noqa: F401  (re-exported for callers)
+from .costing import amount_cost_cents, cost_per_gram  # noqa: F401  (cost_per_gram re-exported)
 from .models import (
     Ingredient,
     IngredientSource,
+    MeasureKind,
     MeasureUnit,
     Recipe,
     RecipeIngredient,
     ShoppingItem,
     ShoppingItemRead,
     ShoppingListRead,
+    WeightSource,
     utcnow,
 )
 from .units import format_amount
@@ -117,18 +146,30 @@ def scale_factor(recipe: Recipe, wanted_servings: int | None) -> tuple[float, bo
     return wanted_servings / recipe.servings, True
 
 
+def _render_grams(grams: float) -> str:
+    if grams >= 1000:
+        return f"{grams / 1000:g} kg"
+    return f"{round(grams):g} g"
+
+
+def _render_ml(ml: float) -> str:
+    if ml >= 1000:
+        return f"{ml / 1000:g} l"
+    return f"{round(ml):g} ml"
+
+
 def amount_text(item: ShoppingItem) -> str:
     """Render an item's amount for display.
 
-    Weight wins when present: it is what merging produced and what the cost
-    is computed from. Whole grams below a kilo, kilos above — "1.2 kg" reads
-    better than "1200 g" on a phone in a supermarket.
+    Weight or volume wins when present — whichever merging produced, since
+    an item only ever has one of the two populated (see `add_lines`). Whole
+    units below the next size up, the bigger unit above — "1.2 kg"/"1.2 l"
+    read better than "1200 g"/"1200 ml" on a phone in a supermarket.
     """
     if item.weight_grams:
-        grams = item.weight_grams
-        if grams >= 1000:
-            return f"{grams / 1000:g} kg"
-        return f"{round(grams):g} g"
+        return _render_grams(item.weight_grams)
+    if item.volume_ml:
+        return _render_ml(item.volume_ml)
     if item.quantity is not None:
         return format_amount(item.quantity, None, item.unit)
     if item.unit in UNQUANTIFIABLE:
@@ -139,14 +180,14 @@ def amount_text(item: ShoppingItem) -> str:
 def item_cost_cents(item: ShoppingItem, ingredient: Ingredient | None) -> int | None:
     """What this line costs, or None when it can't be known.
 
-    Only weights can be priced: prices are per kilogram, and "1 bunch" has
-    no weight until someone tells the pantry what a bunch weighs.
+    Delegates to costing.amount_cost_cents, which picks weight or volume
+    to price by from the ingredient's `measure_kind` — the same choice
+    `line_cost_cents` makes for a recipe line, kept in one place so the two
+    can't drift apart on how a volume ingredient gets priced.
     """
-    if ingredient is None or ingredient.cost_per_kg_cents is None:
-        return None
-    if not item.weight_grams:
-        return None
-    return round(item.weight_grams / 1000 * ingredient.cost_per_kg_cents)
+    return amount_cost_cents(
+        ingredient, weight_grams=item.weight_grams, volume_ml=item.volume_ml
+    )
 
 
 def item_read(
@@ -221,19 +262,23 @@ def read_list(session: Session, *, with_cost: bool) -> ShoppingListRead:
 def _mergeable(item: ShoppingItem, line_ingredient_id: int | None, kind: str, unit) -> bool:
     """Whether an existing list row can absorb an incoming line.
 
-    Three kinds of line, three rules — and all of them require the same
+    Four kinds of line, four rules — and all of them require the same
     pantry ingredient, because without one there is no evidence two lines
     are the same purchase.
 
     * ``weight``   — both sides have grams. Add them.
-    * ``quantity`` — neither has grams and the units match ("1 bunch" plus
-      "2 bunch"). Same arithmetic, different unit.
+    * ``volume``   — both sides have millilitres. Add them — this is exact
+      regardless of which volume unit either line was originally written
+      in ("2 cups" and "500ml" both merge here).
+    * ``quantity`` — neither has grams or millilitres, and the units match
+      ("1 bunch" plus "2 bunch"). Same arithmetic, different unit.
     * ``bare``     — neither side states any amount at all. Nothing to add;
       the two lines are simply the same shopping trip.
 
-    A weighted line never merges into an amount-less one or vice versa:
-    folding an unknown amount into a known one would present a number that
-    is quietly missing some of the food.
+    A line never merges into a row of a different kind: folding an unknown
+    amount into a known one, or a volume into a weight, would present a
+    number that is quietly missing some of the food (or double-counting
+    it, if both got summed independently).
 
     Checked items are excluded throughout. Adding to something already in
     the trolley would silently reopen it and the shopper would walk past.
@@ -244,13 +289,16 @@ def _mergeable(item: ShoppingItem, line_ingredient_id: int | None, kind: str, un
         return False
     if kind == "weight":
         return item.weight_grams is not None
+    if kind == "volume":
+        return item.weight_grams is None and item.volume_ml is not None
     if kind == "quantity":
         return (
             item.weight_grams is None
+            and item.volume_ml is None
             and item.quantity is not None
             and item.unit == unit
         )
-    return item.weight_grams is None and item.quantity is None
+    return item.weight_grams is None and item.volume_ml is None and item.quantity is None
 
 
 def add_lines(
@@ -275,6 +323,14 @@ def add_lines(
     caller commits.
     """
     existing = list(session.exec(select(ShoppingItem)).all())
+    ingredient_ids = {line.ingredient_id for line, _, _ in lines if line.ingredient_id}
+    ingredients: dict[int, Ingredient] = {}
+    if ingredient_ids:
+        for row in session.exec(
+            select(Ingredient).where(Ingredient.id.in_(ingredient_ids))
+        ).all():
+            ingredients[row.id] = row
+
     touched: dict[int, ShoppingItem] = {}
     new_items: list[ShoppingItem] = []
     added = merged = 0
@@ -286,22 +342,49 @@ def add_lines(
             skipped.append(f"{recipe.title}: {line.raw_text}")
             continue
 
+        ingredient = ingredients.get(line.ingredient_id) if line.ingredient_id else None
         grams = line.weight_grams * factor if line.weight_grams else None
+        millilitres = line.volume_ml * factor if line.volume_ml else None
         quantity = line.quantity * factor if line.quantity is not None else None
-        if grams is not None:
+        # A weight this codebase actually stands behind — stated outright,
+        # or converted via a real linked density — as opposed to a keyword
+        # guess from units.DENSITIES (WeightSource.estimated). That guess
+        # exists as a last resort for solids with nowhere else to go; it
+        # should never outrank an exact millilitre figure, which is what
+        # "weight is available so prefer weight" would otherwise do for
+        # any liquid whose name happens to match a density keyword (most
+        # of them: "milk", "stock", "honey", ...).
+        confident_weight = grams is not None and line.weight_source in (
+            WeightSource.explicit,
+            WeightSource.converted,
+        )
+
+        # An ingredient priced by volume aggregates on volume even when a
+        # density also happens to make a weight derivable, and vice versa —
+        # this has to match what its cost is computed from (costing.py), or
+        # the merged total and the price it's multiplied by would silently
+        # stop corresponding to the same amount.
+        prefer_volume = ingredient is not None and ingredient.measure_kind == MeasureKind.volume
+        if prefer_volume:
+            kind = "volume" if millilitres is not None else "weight" if grams is not None else None
+        elif confident_weight:
             kind = "weight"
-        elif quantity is not None:
-            kind = "quantity"
         else:
-            kind = "bare"
+            kind = "volume" if millilitres is not None else "weight" if grams is not None else None
+        if kind is None:
+            kind = "quantity" if quantity is not None else "bare"
 
         contribution = {
             "recipe": recipe.title,
             "recipe_slug": recipe.slug,
             "amount": (
-                f"{round(grams)} g"
-                if grams is not None
+                _render_grams(grams)
+                if kind == "weight"
+                else _render_ml(millilitres)
+                if kind == "volume"
                 else format_amount(quantity, None, line.unit)
+                if kind == "quantity"
+                else ""
             ),
         }
 
@@ -319,6 +402,8 @@ def add_lines(
         if target is not None:
             if kind == "weight":
                 target.weight_grams = (target.weight_grams or 0) + grams
+            elif kind == "volume":
+                target.volume_ml = (target.volume_ml or 0) + millilitres
             elif kind == "quantity":
                 target.quantity = (target.quantity or 0) + quantity
             target.contributions = [*(target.contributions or []), contribution]
@@ -329,16 +414,17 @@ def add_lines(
             merged += 1
             continue
 
+        # A weighted or volumed line's quantity is already expressed by that
+        # amount; keeping both would show "400 g" and "4 piece" for the same
+        # onions. The unit survives only for quantity/bare, so an
+        # amount-less "salt, to taste" can still say so.
         item = ShoppingItem(
             ingredient_id=line.ingredient_id,
             name=name,
-            weight_grams=grams,
-            # A weighted line's quantity is already expressed by the
-            # weight; keeping both would show "400 g" and "4 piece" for the
-            # same onions. The unit survives either way, so an amount-less
-            # "salt, to taste" can still say so.
-            quantity=None if grams is not None else quantity,
-            unit=None if grams is not None else line.unit,
+            weight_grams=grams if kind == "weight" else None,
+            volume_ml=millilitres if kind == "volume" else None,
+            quantity=quantity if kind == "quantity" else None,
+            unit=line.unit if kind in ("quantity", "bare") else None,
             note=line.note,
             source=_source_for(cook_list_id),
             cook_list_id=cook_list_id,

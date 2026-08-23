@@ -44,6 +44,25 @@ def parsley(session):
     return ingredient
 
 
+@pytest.fixture
+def milk(session):
+    """Sold and shelf-priced by the litre, no density set — the case
+    volume merging exists for."""
+    from backend.models import MeasureKind
+
+    ingredient = Ingredient(
+        slug="milk",
+        name="milk",
+        measure_kind=MeasureKind.volume,
+        cost_per_litre_cents=200,  # $2/L
+        source=IngredientSource.supermarket,
+    )
+    session.add(ingredient)
+    session.commit()
+    session.refresh(ingredient)
+    return ingredient
+
+
 def make_recipe(client, title, ingredients, **extra):
     response = client.post(
         "/recipes",
@@ -237,6 +256,90 @@ class TestScaling:
         assert refreshed["recipes"][0]["scale_factor"] == 2.0
 
 
+class TestVolumeMerging:
+    """Liquids merge on millilitres, computed straight from the unit —
+    no density, and no prior reclassification of the pantry row, required.
+    See backend/shopping.py's module docstring."""
+
+    def test_different_volume_units_of_the_same_liquid_merge_exactly(
+        self, client, milk
+    ):
+        """"2 cups" and "500ml" are the same amount by fixed unit
+        arithmetic alone — this is the improvement over the old
+        exact-unit-only "quantity" merge, which would have kept these as
+        two separate lines."""
+        a = make_recipe(client, "Pancakes", [{"name": "milk", "quantity": 2, "unit": "cup"}])
+        b = make_recipe(client, "White sauce", [{"name": "milk", "quantity": 500, "unit": "ml"}])
+        cook_list = make_list(client, [a, b])
+
+        result = client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping").json()
+        assert result["merged"] == 1
+
+        items = client.get("/shopping").json()["items"]
+        assert len(items) == 1
+        assert items[0]["volume_ml"] == pytest.approx(1000)  # 500ml (2 cups) + 500ml
+        assert items[0]["weight_grams"] is None
+        assert items[0]["amount_text"] == "1 l"
+
+    def test_a_freshly_auto_created_liquid_still_merges_on_volume(self, client):
+        """The pantry row for a brand-new ingredient defaults to
+        measure_kind=weight and has no density — exactly the state a
+        recipe importer leaves it in. It should still merge on volume
+        rather than fail to merge at all."""
+        a = make_recipe(client, "One", [{"name": "vegetable stock", "quantity": 1, "unit": "cup"}])
+        b = make_recipe(client, "Two", [{"name": "vegetable stock", "quantity": 250, "unit": "ml"}])
+        cook_list = make_list(client, [a, b])
+        client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping")
+
+        items = client.get("/shopping").json()["items"]
+        assert len(items) == 1
+        assert items[0]["volume_ml"] == pytest.approx(500)
+
+    def test_a_volume_ingredient_with_a_density_still_merges_on_volume(
+        self, client, session, milk
+    ):
+        """Costing prices milk per litre; merging on weight instead — just
+        because a density happens to be set — would leave volume_ml unset
+        on the merged item and the whole line unpriceable."""
+        milk.density_g_per_ml = 1.03
+        session.add(milk)
+        session.commit()
+
+        recipe = make_recipe(client, "Soup", [{"name": "milk", "quantity": 500, "unit": "ml"}])
+        cook_list = make_list(client, [recipe])
+        client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping")
+
+        item = client.get("/shopping").json()["items"][0]
+        assert item["volume_ml"] == pytest.approx(500)
+        assert item["weight_grams"] is None
+        assert item["cost_cents"] == 100  # 500ml at $2/L
+
+    def test_a_weight_ingredient_with_no_density_keeps_grams_and_ml_apart(
+        self, client
+    ):
+        """measure_kind=weight (the default) with no density: a line in
+        grams gets weight_grams straight away (mass needs no conversion),
+        while a line in ml has nothing to convert it to grams with and
+        falls back to volume. Genuinely two different kinds for the same
+        ingredient, and merging them would need a density nobody
+        supplied."""
+        a = make_recipe(client, "One", [{"name": "honey", "quantity": 500, "unit": "g"}])
+        b = make_recipe(client, "Two", [{"name": "honey", "quantity": 500, "unit": "ml"}])
+        cook_list = make_list(client, [a, b])
+        client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping")
+
+        items = client.get("/shopping").json()["items"]
+        assert len(items) == 2
+        assert {items[0]["weight_grams"], items[1]["weight_grams"]} == {500, None}
+        assert {items[0]["volume_ml"], items[1]["volume_ml"]} == {500, None}
+
+    def test_a_volume_line_is_priced_correctly_through_the_api(self, client, milk):
+        recipe = make_recipe(client, "Soup", [{"name": "milk", "quantity": 1, "unit": "l"}])
+        cook_list = make_list(client, [recipe])
+        result = client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping").json()
+        assert result["items"][0]["cost_cents"] == 200  # 1L at $2/L
+
+
 class TestShops:
     def test_items_are_grouped_by_where_they_are_bought(
         self, client, session, onion, flour
@@ -382,6 +485,19 @@ class TestAmountText:
     )
     def test_weights_read_as_grams_below_a_kilo_and_kilos_above(self, grams, expected):
         assert amount_text(ShoppingItem(name="x", weight_grams=grams)) == expected
+
+    @pytest.mark.parametrize(
+        "ml,expected",
+        [(450, "450 ml"), (1000, "1 l"), (1250, "1.25 l"), (0.5, "0 ml")],
+    )
+    def test_volumes_read_as_ml_below_a_litre_and_litres_above(self, ml, expected):
+        assert amount_text(ShoppingItem(name="x", volume_ml=ml)) == expected
+
+    def test_weight_wins_over_volume_when_somehow_both_are_set(self):
+        # Shouldn't happen in practice (add_lines populates only one), but
+        # weight is the higher-precision figure if it ever does.
+        item = ShoppingItem(name="x", weight_grams=500, volume_ml=500)
+        assert amount_text(item) == "500 g"
 
     def test_a_countable_amount_keeps_its_unit(self):
         item = ShoppingItem(name="x", quantity=2, unit=MeasureUnit.bunch)

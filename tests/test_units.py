@@ -9,6 +9,7 @@ from backend.units import (
     parse_amount,
     parse_quantity,
     to_grams,
+    to_ml,
 )
 
 
@@ -108,6 +109,35 @@ class TestToGrams:
     def test_unquantifiable_units(self):
         assert to_grams(1, MeasureUnit.pinch, "salt") == (None, WeightSource.unknown)
         assert to_grams(None, MeasureUnit.g, "salt") == (None, WeightSource.unknown)
+
+
+class TestToMl:
+    def test_australian_cup_is_250ml(self):
+        assert to_ml(2, MeasureUnit.cup) == 500.0
+
+    def test_australian_tablespoon_is_20ml(self):
+        # Same convention to_grams uses — the whole point of units_system.
+        assert to_ml(1, MeasureUnit.tbsp) == 20.0
+        assert to_ml(1, MeasureUnit.tbsp, system="us") == 15.0
+
+    def test_millilitres_and_litres_pass_through(self):
+        assert to_ml(500, MeasureUnit.ml) == 500.0
+        assert to_ml(1.2, MeasureUnit.l) == 1200.0
+
+    def test_needs_no_density_or_ingredient(self):
+        # The whole reason this exists separately from to_grams: a stated
+        # volume converts to millilitres by fixed unit arithmetic alone.
+        assert to_ml(2, MeasureUnit.cup) == to_ml(2, MeasureUnit.cup)
+
+    def test_mass_units_are_not_a_volume(self):
+        assert to_ml(500, MeasureUnit.g) is None
+
+    def test_count_units_are_not_a_volume(self):
+        assert to_ml(2, MeasureUnit.piece) is None
+
+    def test_no_quantity_or_no_unit(self):
+        assert to_ml(None, MeasureUnit.cup) is None
+        assert to_ml(2, None) is None
 
 
 class TestDensityTable:

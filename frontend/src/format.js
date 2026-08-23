@@ -37,6 +37,12 @@ export function formatCostPerKg(centsPerKg, symbol = '$') {
   return `${symbol}${(centsPerKg / 100).toFixed(2)}/kg`
 }
 
+/** Same idea as formatCostPerKg, for ingredients priced by volume. */
+export function formatCostPerLitre(centsPerLitre, symbol = '$') {
+  if (centsPerLitre === null || centsPerLitre === undefined) return null
+  return `${symbol}${(centsPerLitre / 100).toFixed(2)}/L`
+}
+
 export function formatDate(value) {
   if (!value) return null
   const date = new Date(value)

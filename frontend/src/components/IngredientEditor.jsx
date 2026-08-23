@@ -38,11 +38,16 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
   const [form, setForm] = useState(() => ({
     name: ingredient.name,
     aliases: (ingredient.aliases || []).join(', '),
+    measure_kind: ingredient.measure_kind || 'weight',
     package_size_grams: ingredient.package_size_grams ?? '',
-    // Prices are entered per kilogram — nobody knows a price per gram, and
-    // the backend stores cents/kg anyway.
+    // Prices are entered per kilogram/litre — nobody knows a price per
+    // gram or ml, and the backend stores cents/kg or cents/litre anyway.
     cost_per_kg: ingredient.cost_per_kg_cents !== null && ingredient.cost_per_kg_cents !== undefined
       ? (ingredient.cost_per_kg_cents / 100).toFixed(2)
+      : '',
+    package_size_ml: ingredient.package_size_ml ?? '',
+    cost_per_litre: ingredient.cost_per_litre_cents !== null && ingredient.cost_per_litre_cents !== undefined
+      ? (ingredient.cost_per_litre_cents / 100).toFixed(2)
       : '',
     cost_source: ingredient.cost_source || '',
     source: ingredient.source,
@@ -58,6 +63,7 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
 
   const set = (key, value) => setForm((previous) => ({ ...previous, [key]: value }))
   const number = (value) => (value === '' ? null : Number(value))
+  const byVolume = form.measure_kind === 'volume'
 
   const submit = async (event) => {
     event.preventDefault()
@@ -71,9 +77,13 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
           .split(',')
           .map((alias) => alias.trim())
           .filter(Boolean),
+        measure_kind: form.measure_kind,
         package_size_grams: number(form.package_size_grams),
         cost_per_kg_cents:
           form.cost_per_kg === '' ? null : Math.round(Number(form.cost_per_kg) * 100),
+        package_size_ml: number(form.package_size_ml),
+        cost_per_litre_cents:
+          form.cost_per_litre === '' ? null : Math.round(Number(form.cost_per_litre) * 100),
         source: form.source,
         is_food: form.is_food,
         density_g_per_ml: number(form.density_g_per_ml),
@@ -119,14 +129,37 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
             <input value={form.aliases} onChange={(e) => set('aliases', e.target.value)} className={inputClass} />
           </Field>
 
-          <Field label="Usual package size (g)">
-            <input type="number" step="any" min="0" value={form.package_size_grams}
-              onChange={(e) => set('package_size_grams', e.target.value)} className={inputClass} />
+          <Field label="Measured by" hint="Most liquids are sold and shelf-priced by volume, not weight">
+            <select value={form.measure_kind} onChange={(e) => set('measure_kind', e.target.value)} className={inputClass}>
+              <option value="weight">Weight</option>
+              <option value="volume">Volume (liquids)</option>
+            </select>
           </Field>
-          <Field label={`Cost per kg (${symbol})`} hint="Stored as cents per kg — plenty of resolution for a per-gram price">
-            <input type="number" step="0.01" min="0" value={form.cost_per_kg}
-              onChange={(e) => set('cost_per_kg', e.target.value)} className={inputClass} />
-          </Field>
+          <div />
+
+          {byVolume ? (
+            <>
+              <Field label="Usual package size (mL)">
+                <input type="number" step="any" min="0" value={form.package_size_ml}
+                  onChange={(e) => set('package_size_ml', e.target.value)} className={inputClass} />
+              </Field>
+              <Field label={`Cost per litre (${symbol})`} hint="Stored as cents per litre — plenty of resolution for a per-mL price">
+                <input type="number" step="0.01" min="0" value={form.cost_per_litre}
+                  onChange={(e) => set('cost_per_litre', e.target.value)} className={inputClass} />
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="Usual package size (g)">
+                <input type="number" step="any" min="0" value={form.package_size_grams}
+                  onChange={(e) => set('package_size_grams', e.target.value)} className={inputClass} />
+              </Field>
+              <Field label={`Cost per kg (${symbol})`} hint="Stored as cents per kg — plenty of resolution for a per-gram price">
+                <input type="number" step="0.01" min="0" value={form.cost_per_kg}
+                  onChange={(e) => set('cost_per_kg', e.target.value)} className={inputClass} />
+              </Field>
+            </>
+          )}
           <Field
             label="Price source"
             hint={
@@ -165,7 +198,9 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
           <legend className="px-1 text-sm font-semibold text-ink">Weight conversion</legend>
           <p className="mb-2 text-xs text-ink-faint">
             Saving either of these re-derives the weight of every recipe line that
-            uses this ingredient.
+            uses this ingredient. Worth setting even when this ingredient is
+            measured by volume above — nutrition figures are always per 100g,
+            so density is what lets a volume amount contribute to them.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Density (g per ml)" hint="1 AU cup = 250ml, so flour at 0.6 = 150g per cup">

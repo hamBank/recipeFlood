@@ -308,6 +308,22 @@ def lookup_piece_weight(name: str) -> float | None:
     return _longest_match(name, PIECE_WEIGHTS)
 
 
+def to_ml(quantity: float | None, unit: MeasureUnit | None, *, system: str = "au") -> float | None:
+    """Convert an amount to millilitres, or None if `unit` isn't a volume.
+
+    Unlike `to_grams`, this never needs a density, a linked ingredient, or a
+    confidence tier: a stated volume unit converts to millilitres by fixed
+    convention alone (see VOLUME_ML), so the result is exact whenever it
+    exists at all.
+    """
+    if quantity is None or unit is None:
+        return None
+    volumes = VOLUME_ML.get(system, VOLUME_ML["au"])
+    if unit not in volumes:
+        return None
+    return round(quantity * volumes[unit], 3)
+
+
 def to_grams(
     quantity: float | None,
     unit: MeasureUnit | None,

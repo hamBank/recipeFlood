@@ -103,6 +103,21 @@ class IngredientSource(str, Enum):
     other = "other"
 
 
+class MeasureKind(str, Enum):
+    """Which unit family this ingredient is naturally bought and priced in.
+
+    Most groceries are weighed — flour, meat, cheese — but liquids
+    (milk, stock, oil, wine) are sold and shelf-priced by volume, and
+    forcing them through a density guess just to get a cost is both
+    unnecessary and a source of error the density might not deserve.
+    `weight` is the default so every ingredient created before this field
+    existed keeps behaving exactly as it did.
+    """
+
+    weight = "weight"
+    volume = "volume"
+
+
 class Ingredient(SQLModel, table=True):
     """A pantry item, priced and (eventually) nutritionally described once,
     then referenced by every recipe that uses it.
@@ -110,6 +125,10 @@ class Ingredient(SQLModel, table=True):
     Nutrition columns are all "per 100g" and all nullable: a recipe's
     nutrition panel reports the share of its weight it could actually
     account for rather than silently under-reporting (see nutrition.py).
+    Nutrition science is always mass-based, so a volume-measured ingredient
+    still needs `density_g_per_ml` (or the keyword estimate in units.py) to
+    contribute to that panel — `measure_kind` below only changes how the
+    ingredient is *purchased and costed*.
     """
 
     id: int | None = Field(default=None, primary_key=True)
@@ -119,13 +138,32 @@ class Ingredient(SQLModel, table=True):
     # "coriander"/"cilantro"). Lowercased on write.
     aliases: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
+    # native_enum=False: see IngredientSource.source below for why plain
+    # VARCHAR beats a database enum here.
+    measure_kind: MeasureKind = Field(
+        default=MeasureKind.weight,
+        sa_column=Column(
+            SAEnum(MeasureKind, native_enum=False, create_constraint=False, length=16),
+            nullable=False,
+            server_default="weight",
+        ),
+    )
+
     package_size_grams: float | None = None
     cost_per_kg_cents: int | None = None
+    # The volume-native siblings of the two fields above. Which pair is
+    # authoritative is decided by `measure_kind`, not by which happens to be
+    # set — see costing.py. Both can be populated at once (nothing stops a
+    # volume ingredient from also having a density and a weight-based
+    # price); costing just picks the one matching `measure_kind` first.
+    package_size_ml: float | None = None
+    cost_per_litre_cents: int | None = None
     # Where the price came from and when — mirrors nutrition_source /
     # nutrition_updated_at below. "manual" once a human edits it via the
     # Pantry page; an enrichment script sets its own label (e.g. "AI
     # estimate (mid-season, 2026-08)") so a rough guess is never mistaken
-    # for a price someone actually paid.
+    # for a price someone actually paid. Shared between both cost bases —
+    # editing either one is "a human looked and this is what it costs."
     cost_source: str | None = None
     cost_updated_at: datetime | None = None
     # native_enum=False + create_constraint=False: stored as a plain VARCHAR
@@ -195,8 +233,11 @@ class IngredientNutrition(SQLModel):
 class IngredientCreate(SQLModel):
     name: str
     aliases: list[str] = Field(default_factory=list)
+    measure_kind: MeasureKind = MeasureKind.weight
     package_size_grams: float | None = Field(default=None, gt=0)
     cost_per_kg_cents: int | None = Field(default=None, ge=0)
+    package_size_ml: float | None = Field(default=None, gt=0)
+    cost_per_litre_cents: int | None = Field(default=None, ge=0)
     source: IngredientSource = IngredientSource.supermarket
     density_g_per_ml: float | None = Field(default=None, gt=0)
     grams_per_piece: float | None = Field(default=None, gt=0)
@@ -207,8 +248,11 @@ class IngredientCreate(SQLModel):
 class IngredientUpdate(SQLModel):
     name: str | None = None
     aliases: list[str] | None = None
+    measure_kind: MeasureKind | None = None
     package_size_grams: float | None = Field(default=None, gt=0)
     cost_per_kg_cents: int | None = Field(default=None, ge=0)
+    package_size_ml: float | None = Field(default=None, gt=0)
+    cost_per_litre_cents: int | None = Field(default=None, ge=0)
     source: IngredientSource | None = None
     cost_source: str | None = None
     density_g_per_ml: float | None = Field(default=None, gt=0)
@@ -233,10 +277,14 @@ class IngredientRead(SQLModel):
     slug: str
     name: str
     aliases: list[str]
+    measure_kind: MeasureKind
     package_size_grams: float | None
     cost_per_kg_cents: int | None
     cost_per_gram: float | None  # derived: dollars, 5dp — display only
-    package_cost_cents: int | None  # derived: cost of one usual package
+    package_size_ml: float | None
+    cost_per_litre_cents: int | None
+    cost_per_ml: float | None  # derived: dollars, 5dp — display only
+    package_cost_cents: int | None  # derived: cost of one usual package, either basis
     cost_source: str | None
     cost_updated_at: datetime | None
     source: IngredientSource
@@ -436,6 +484,12 @@ class RecipeIngredient(SQLModel, table=True):
 
     weight_grams: float | None = None
     weight_source: WeightSource = Field(default=WeightSource.unknown)
+    # Set whenever `unit` is a volume unit — pure unit arithmetic ("2 cups"
+    # -> 500ml), no density or ingredient link required, so unlike
+    # weight_grams this never needs a source/confidence tier: it either
+    # applies exactly or it's null. See units.to_ml and recipes_service
+    # .build_ingredient_row.
+    volume_ml: float | None = None
 
     note: str | None = None  # "finely chopped", "at room temperature"
     optional: bool = False
@@ -466,6 +520,7 @@ class RecipeIngredientRead(SQLModel):
     unit: MeasureUnit | None
     weight_grams: float | None
     weight_source: WeightSource
+    volume_ml: float | None
     note: str | None
     optional: bool
     group: str | None
@@ -737,10 +792,15 @@ class ShoppingItem(SQLModel, table=True):
     )
     name: str  # display text; the ingredient's name when linked
 
-    # Aggregated amount. weight_grams is what merging actually works on;
-    # quantity/unit survive for the lines that have no weight ("1 bunch
+    # Aggregated amount. Exactly one of weight_grams / volume_ml / quantity
+    # is normally populated per item — see shopping.add_lines for how a
+    # line picks which. weight_grams is the highest-precision merge target;
+    # volume_ml is its exact, density-free counterpart for liquids ("2
+    # cups" + "500ml" both merge on this without needing a density);
+    # quantity/unit survive for lines that are neither ("1 bunch
     # coriander") so the list can still say something useful.
     weight_grams: float | None = None
+    volume_ml: float | None = None
     quantity: float | None = None
     # VARCHAR, not the native `measureunit` enum the recipe tables use.
     # That type already exists in Postgres from the baseline migration, and
@@ -839,6 +899,7 @@ class ShoppingItemCreate(SQLModel):
     name: str
     ingredient_id: int | None = None
     weight_grams: float | None = Field(default=None, ge=0)
+    volume_ml: float | None = Field(default=None, ge=0)
     quantity: float | None = Field(default=None, ge=0)
     unit: MeasureUnit | None = None
     note: str | None = None
@@ -847,6 +908,7 @@ class ShoppingItemCreate(SQLModel):
 class ShoppingItemUpdate(SQLModel):
     name: str | None = None
     weight_grams: float | None = Field(default=None, ge=0)
+    volume_ml: float | None = Field(default=None, ge=0)
     quantity: float | None = Field(default=None, ge=0)
     unit: MeasureUnit | None = None
     note: str | None = None
@@ -858,6 +920,7 @@ class ShoppingItemRead(SQLModel):
     ingredient_id: int | None
     name: str
     weight_grams: float | None
+    volume_ml: float | None
     quantity: float | None
     unit: MeasureUnit | None
     note: str | None

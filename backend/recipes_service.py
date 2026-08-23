@@ -35,7 +35,7 @@ from .models import (
 )
 from .nutrition import compute_nutrition
 from .slugs import slugify, unique_slug
-from .units import format_amount, to_grams
+from .units import format_amount, to_grams, to_ml
 
 #: Words stripped from an ingredient name before matching it against the
 #: master list, so "finely chopped fresh flat-leaf parsley" finds "parsley".
@@ -206,6 +206,11 @@ def build_ingredient_row(
             grams_per_piece=ingredient.grams_per_piece if ingredient else None,
             system=units_system,
         )
+    # Pure unit arithmetic, independent of any linked ingredient — see
+    # units.to_ml. Populated whenever the recipe stated a volume amount,
+    # which is what lets a liquid with no known density still be merged
+    # correctly on the shopping list (backend/shopping.py).
+    millilitres = to_ml(data.quantity, data.unit, system=units_system)
 
     raw_text = data.raw_text
     if not raw_text:
@@ -223,6 +228,7 @@ def build_ingredient_row(
         unit=data.unit,
         weight_grams=grams,
         weight_source=source,
+        volume_ml=millilitres,
         note=data.note,
         optional=data.optional,
         group=data.group,
@@ -390,6 +396,7 @@ def recipe_read(
                 unit=line.unit,
                 weight_grams=line.weight_grams,
                 weight_source=line.weight_source,
+                volume_ml=line.volume_ml,
                 note=line.note,
                 optional=line.optional,
                 group=line.group,
