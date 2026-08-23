@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { deletePrepared, deleteRecipe, getRecipe, markPrepared } from '../api'
+import {
+  deletePrepared,
+  deleteRecipe,
+  getRecipe,
+  listCookLists,
+  markPrepared,
+} from '../api'
 import { useSession } from '../App'
 import CostPanel from '../components/CostPanel'
 import NutritionPanel from '../components/NutritionPanel'
 import PreparedLog from '../components/PreparedLog'
+import QuickAddToCookList from '../components/QuickAddToCookList'
 import {
   formatCents,
   formatDate,
@@ -49,6 +56,7 @@ export default function RecipeDetailPage() {
   const { user, config } = useSession()
   const [recipe, setRecipe] = useState(null)
   const [error, setError] = useState(null)
+  const [cookList, setCookList] = useState(null)
   const symbol = config?.currency_symbol || '$'
 
   const load = async () => {
@@ -77,6 +85,25 @@ export default function RecipeDetailPage() {
       cancelled = true
     }
   }, [slug])
+
+  useEffect(() => {
+    if (!user) {
+      setCookList(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { items } = await listCookLists({ limit: 1 })
+        if (!cancelled) setCookList(items[0] || null)
+      } catch {
+        // Quick-add is a convenience; the rest of the page works without it.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user])
 
   if (error) return <p className="rounded-lg bg-red-50 p-4 text-red-700">{error}</p>
   if (!recipe) return <p className="text-ink-muted">Loading…</p>
@@ -261,6 +288,29 @@ export default function RecipeDetailPage() {
         </div>
 
         <aside className="space-y-6">
+          {user && (
+            <div className="rounded-xl border border-edge bg-card p-5">
+              <h2 className="font-semibold text-ink">Cooking list</h2>
+              {cookList ? (
+                <div className="mt-2">
+                  <QuickAddToCookList
+                    recipeId={recipe.id}
+                    cookList={cookList}
+                    onChange={setCookList}
+                  />
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-ink-muted">
+                  No cooking list yet.{' '}
+                  <Link to="/cooking" className="text-accent hover:underline">
+                    Start one
+                  </Link>
+                  .
+                </p>
+              )}
+            </div>
+          )}
+
           <PreparedLog
             recipe={recipe}
             canEdit={Boolean(user)}
