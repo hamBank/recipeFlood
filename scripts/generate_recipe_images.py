@@ -79,7 +79,13 @@ def main() -> int:
         default=None,
         help="stop before estimated spend would exceed this many dollars",
     )
-    parser.add_argument("--quality", choices=sorted(COST_PER_IMAGE_USD), default="medium")
+    parser.add_argument(
+        "--quality",
+        choices=sorted(COST_PER_IMAGE_USD),
+        default="low",
+        help="'low' is the cheapest tier (~$0.011/image) and the default; "
+        "'medium'/'high' cost more for better detail",
+    )
     parser.add_argument("--size", default="1024x1024")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

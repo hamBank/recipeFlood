@@ -63,7 +63,7 @@ def build_prompt(title: str, description: str | None, section: str | None) -> st
 
 
 def generate_image(
-    prompt: str, *, quality: str = "medium", size: str = "1024x1024"
+    prompt: str, *, quality: str = "low", size: str = "1024x1024"
 ) -> bytes:
     """One image, as raw bytes (PNG unless `size`/model says otherwise).
 
