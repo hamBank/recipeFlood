@@ -197,6 +197,7 @@ def create_recipe(
         nutrition_note=body.nutrition_note,
         source_url=body.source_url,
         source_name=body.source_name,
+        source_page=body.source_page,
         units_system=body.units_system or settings.units_system,
         is_published=body.is_published,
         created_by=user.id,

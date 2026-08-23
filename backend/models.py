@@ -382,6 +382,15 @@ class ImportSource(str, Enum):
     blog = "blog"  # scraped from foobie-rcp.blogspot.com
     ai_image = "ai_image"  # phase 2: photo of a recipe
     ai_paste = "ai_paste"  # phase 2: pasted text
+    # A recipe fetched from someone else's site, per the cooking-history
+    # CSV import (scripts/import_recipe_history.py) — structured from the
+    # page's schema.org JSON-LD when present, else from stripped page text
+    # via the same AI pipeline ai_paste uses. Kept distinct from `blog`
+    # (this household's own site, self-hosted images allowed) and from
+    # `ai_paste` (a human chose to submit this one) — see SPEC.md's
+    # "Importing cooking history" for why third-party content reached this
+    # way is never written into the committed blog snapshot.
+    web = "web"
 
 
 class Recipe(SQLModel, table=True):
@@ -414,10 +423,27 @@ class Recipe(SQLModel, table=True):
 
     source_url: str | None = None
     source_name: str | None = None
+    # A page number within source_name, for a recipe cited from a book or
+    # magazine rather than a URL — "Plenty More", page 133. Null whenever
+    # source_url is set; the two describe different kinds of source.
+    source_page: int | None = None
 
     units_system: str = "au"  # conversion convention for this recipe's amounts
 
-    import_source: ImportSource = Field(default=ImportSource.manual)
+    # native_enum=False: this started as a Postgres-native enum with four
+    # fixed values, which is exactly the trap `IngredientSource` above
+    # documents — adding `web` needed a dual-dialect migration to widen it
+    # (ALTER TYPE ... ADD VALUE doesn't exist on SQLite; see the migration
+    # that made this change). Plain VARCHAR from here on, so the next
+    # import source is a one-line enum addition.
+    import_source: ImportSource = Field(
+        default=ImportSource.manual,
+        sa_column=Column(
+            SAEnum(ImportSource, native_enum=False, create_constraint=False, length=16),
+            nullable=False,
+            server_default="manual",
+        ),
+    )
     # Set by the importers when a field was guessed rather than read. Drives
     # the "needs review" queue so nothing AI-derived is silently trusted.
     needs_review: bool = Field(default=False, index=True)
@@ -625,6 +651,7 @@ class RecipeCreate(SQLModel):
     nutrition_note: str | None = None
     source_url: str | None = None
     source_name: str | None = None
+    source_page: int | None = Field(default=None, gt=0)
     units_system: str | None = None
     is_published: bool = True
     # Every label, section or not — whether a tag is a section is a
@@ -649,6 +676,7 @@ class RecipeUpdate(SQLModel):
     nutrition_note: str | None = None
     source_url: str | None = None
     source_name: str | None = None
+    source_page: int | None = Field(default=None, gt=0)
     units_system: str | None = None
     is_published: bool | None = None
     needs_review: bool | None = None
@@ -699,6 +727,7 @@ class RecipeRead(SQLModel):
     nutrition_note: str | None
     source_url: str | None
     source_name: str | None
+    source_page: int | None
     units_system: str
     import_source: ImportSource
     needs_review: bool

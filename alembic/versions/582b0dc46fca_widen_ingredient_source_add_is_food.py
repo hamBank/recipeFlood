@@ -71,10 +71,19 @@ def downgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
         op.execute(f"CREATE TYPE ingredientsource AS ENUM ({placeholders})")
+        # Postgres won't implicitly cast a column's DEFAULT expression when
+        # changing its type — only the USING clause covers existing data,
+        # not the default — so the plain VARCHAR default has to come off
+        # before the type change and go back on after. (Found running the
+        # downgrade against a real Postgres instance for a later migration
+        # that copies this same shape — this one had never actually been
+        # exercised down to here.)
+        op.execute("ALTER TABLE ingredient ALTER COLUMN source DROP DEFAULT")
         op.execute(
             "ALTER TABLE ingredient ALTER COLUMN source TYPE ingredientsource "
             "USING source::ingredientsource"
         )
+        op.execute("ALTER TABLE ingredient ALTER COLUMN source SET DEFAULT 'supermarket'")
     else:
         with op.batch_alter_table("ingredient") as batch:
             batch.alter_column(
