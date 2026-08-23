@@ -187,3 +187,22 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_ingredient_name'), table_name='ingredient')
     op.drop_table('ingredient')
     # ### end Alembic commands ###
+
+    # Postgres native enum types are independent catalog objects — DROP
+    # TABLE never drops the enum type a column used, only the column.
+    # Left out, a full downgrade to base leaves all five behind, and the
+    # next upgrade's CREATE TYPE collides with them (DuplicateObject).
+    # Found running a full downgrade-to-base/upgrade-to-head round trip
+    # in CI against a real Postgres instance — every earlier verification
+    # of the later enum-widening migrations only ever tested one step at
+    # a time, which never exercised getting all the way back down to here.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        for enum_name in (
+            "ingredientsource",
+            "userrole",
+            "importsource",
+            "measureunit",
+            "weightsource",
+        ):
+            op.execute(f"DROP TYPE IF EXISTS {enum_name}")

@@ -16,6 +16,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: alembic upgrade head
+      - run: alembic check
       - run: pytest
 
   frontend:
@@ -48,3 +49,45 @@ jobs:
       - run: pip install -r requirements.txt
       - run: alembic upgrade head
       - run: python -m scripts.load_snapshot --heuristic
+
+  migrations-postgres:
+    # The `backend` job above only ever exercises migrations against
+    # SQLite, but production runs Postgres — and the two dialects have
+    # genuinely diverged here before (see the enum-widening migrations'
+    # git history). A real Postgres instance, a full downgrade back to
+    # base and an upgrade back to head is what actually catches that,
+    # rather than a second SQLite run under a different name.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: recipeflood_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # +psycopg2, matching requirements.txt (psycopg2-binary) and
+      # .env.example's production URL — not +psycopg (v3), which isn't
+      # installed by requirements.txt at all and would only "work" here
+      # by accident if a dev machine happened to have it lying around.
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/recipeflood_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: alembic upgrade head
+      - run: alembic check
+      - name: Round-trip every migration's downgrade
+        run: alembic downgrade base
+      - run: alembic upgrade head
+      - run: alembic check
