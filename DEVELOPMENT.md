@@ -351,7 +351,29 @@ alembic revision --autogenerate -m "add recipe.oven_temp_c"
 alembic upgrade head
 ```
 
-Keep migrations SQLite-compatible so local dev and CI stay on SQLite.
+Keep migrations SQLite-compatible — local dev runs SQLite. Production
+runs Postgres, and the two have genuinely diverged before: a native enum
+column needs `ALTER TYPE ... ADD VALUE` on Postgres versus a table
+rebuild on SQLite (see `IngredientSource`/`ImportSource`'s `native_enum
+=False` fields for the pattern that avoids it), and a Postgres `ALTER
+COLUMN ... TYPE` on a column with a `DEFAULT` needs the default dropped
+and re-added around it (SQLite has no such restriction). If a migration
+touches an enum-like column or changes a column's type, verify it by
+hand against a real Postgres instance, not just SQLite — `alembic
+upgrade head`, `alembic downgrade base`, `alembic upgrade head` again,
+`alembic check` clean throughout.
+
+CI's `migrations-postgres` job (`.github/workflows/ci.yml`) runs exactly
+that round trip against a real `postgres:16` service container on every
+PR — added after a downgrade-to-base/upgrade-to-head round trip (run by
+hand, not by CI, since CI didn't check this yet) turned up a real bug:
+the baseline migration's `downgrade()` dropped every table but never the
+Postgres enum types those tables' columns had created, so a full
+teardown left five orphaned types behind and the next `CREATE TYPE`
+collided with them. Every enum-widening migration since had only ever
+been verified one step at a time (`downgrade -1` / `upgrade head`),
+which never happened to reach all the way back down to the migration
+that first created those types.
 
 ## Git workflow
 
@@ -361,3 +383,23 @@ Keep migrations SQLite-compatible so local dev and CI stay on SQLite.
    gitignored.
 4. Push, open a PR, merge to `main`. A push to `main` triggers production
    redeploy via the `/deploy` webhook (see [DEPLOYMENT.md](DEPLOYMENT.md)).
+
+### CI as the merge gate
+
+Every PR runs all four `.github/workflows/ci.yml` jobs — `backend`,
+`frontend`, `snapshot`, `migrations-postgres` — plus a GitHub Copilot
+review requested on open (advisory only; it doesn't block anything).
+Green CI is meant to be sufficient to merge, no human/AI approval
+required — but that only actually holds once two repo-level settings
+(Settings tab, not something a PR can carry) are turned on:
+
+- **Settings → General → Pull Requests → "Allow auto-merge"** — without
+  this, `enable_pr_auto_merge` on a PR fails outright.
+- **Settings → Branches → protect `main` → "Require status checks to
+  pass before merging"**, with all four jobs above selected — without
+  this, auto-merge waits for *no* checks in particular and can fire
+  before CI even finishes. Leave "Require approvals" off to match "green
+  CI is enough."
+
+Once both are set, a PR whose CI is green can carry `enable_pr_auto_merge`
+and merge itself the moment the last required job finishes.
