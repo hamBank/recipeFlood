@@ -43,3 +43,13 @@ data/pantry_import_report.csv
 # plain copyright with no licence grant, so the dataset isn't
 # redistributed in this public repo. Run the fetch script locally.
 data/afcd/
+
+# Cooking-history export and what scripts/import_recipe_history.py makes
+# of it. NOT committed: the export is someone's personal cooking/browsing
+# history going back years, the HTML cache is scraped third-party page
+# content (see SPEC.md "Recipes from other sites, and copyright" — never
+# preserved beyond the facts pulled into a Recipe row), and the look-up
+# CSV is that same personal history for rows the importer couldn't place.
+data/recipe_history*.csv
+data/recipe_html/
+data/recipes_to_look_up.csv

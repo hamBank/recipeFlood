@@ -268,16 +268,25 @@ most-cooked" both work, and so a note like "halved the sugar" survives.
 
 ## Import
 
-Three ways in, all landing in the same entry form for review:
+Four ways in:
 
 1. **Manual entry** — the form.
 2. **Paste** — paste any recipe text; Claude structures it.
 3. **Photo** — photograph a cookbook page or handwritten card.
+4. **Cooking-history import** — an offline, one-off batch run over a whole
+   spreadsheet of past cooking at once. See "Importing cooking history"
+   below.
 
-Neither AI path writes to the database. Both return a *draft* that
-pre-fills the form, because a model misreading "¼ tsp" as "¼ cup" should
-cost a correction, not a ruined recipe. Drafts carry a confidence score and
-a list of things the model was unsure about, both shown above the form.
+The first three land in the same entry form for review, and neither AI
+path (paste or photo) writes to the database directly — both return a
+*draft* that pre-fills the form, because a model misreading "¼ tsp" as
+"¼ cup" should cost a correction, not a ruined recipe. Drafts carry a
+confidence score and a list of things the model was unsure about, both
+shown above the form.
+
+The history import is the odd one out: there is no form to review 800
+recipes through one at a time, so it writes straight to the database and
+leans on `needs_review` instead (see below).
 
 ## Recipes from other sites, and copyright
 
@@ -340,3 +349,58 @@ technical one. So `--with-images` is **off by default**: imported recipes
 keep `image_source_url` for provenance and show a generated placeholder
 tile. Turn it on if you want them; better still, photograph the dishes and
 upload your own, which the recipe form already supports.
+
+## Importing cooking history
+
+A household's own spreadsheet — one row per dish cooked, going back years
+— is a different shape of import from the blog: it names hundreds of
+distinct third-party sites rather than one source, and most rows are a
+repeat of a dish cooked before rather than a new recipe. `scripts/
+import_recipe_history.py` handles it in one offline batch:
+
+```
+backend/recipe_history.py  parses the spreadsheet: forward-filled dates,
+                            a source column that's a URL or a book/
+                            magazine citation ("Plenty More", p133), light
+                            name cleanup. No network, no database.
+backend/recipe_fetch.py    fetches and structures a linked recipe:
+                            schema.org JSON-LD first (free, exact), else
+                            AI-from-text over the page's stripped text.
+scripts/import_recipe_history.py
+                            ties the two together: dedupe, write, backfill.
+```
+
+What a row becomes depends on what its source column held:
+
+- **A URL** — fetched and deduped by `source_url`, same as the blog
+  import. Written as a full Recipe, `import_source=web`,
+  `needs_review=True`. Per "Recipes from other sites, and copyright"
+  above: no formatting or images are preserved, only the facts, and
+  `source_url` keeps the link back.
+- **A book or magazine citation with a page number** — nothing to fetch
+  over HTTP, so it's written as a title-only stub, deduped by
+  `(source_name, source_page)`, with `source_page` recording the page
+  within `source_name`. Real provenance, waiting on a human to open the
+  book.
+- **Everything else** — no link, or a citation too vague to be one
+  recipe (no page number) — isn't written to the database at all. It
+  lands in a look-up CSV instead, alongside genuine fetch failures (a
+  dead link, a page with nothing schema.org or AI could make sense of),
+  for a human to search out and add by hand later.
+
+Every row that *did* resolve to a Recipe also gets a `PreparedEvent` for
+its cook date — a dish cooked a dozen times across the spreadsheet gets a
+dozen events even though it was only imported once — and each date's
+resolved recipes are grouped into one `CookList` for that date, so the
+spreadsheet becomes real cooking-list history, not just a recipe box.
+
+The script is safe to run again over an updated export: a recipe already
+matched by `source_url` or its book citation is never re-applied, only
+extended with any new dates it wasn't already linked to. It has been
+through `needs_review` once, and a re-run must not silently overwrite
+whatever a human has since edited.
+
+Neither the export, the fetched-page HTML cache (`data/recipe_html/`),
+nor the look-up CSV is committed — see `.gitignore`. The export is a
+household's years of personal browsing history; the cache and look-up
+CSV are just that history reshaped.

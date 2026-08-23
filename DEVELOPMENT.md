@@ -154,6 +154,52 @@ Anything the rules get wrong is fixable in one place: `KNOWN_MISSPELLINGS`,
 `backend/pantry_import.py`. `--report` writes a per-item CSV of every
 decision, which is the fastest way to spot one.
 
+## Importing cooking history
+
+A "date | title | … | source | notes" export — one row per dish cooked,
+most rows sharing the date above them — becomes Recipe rows, a
+`PreparedEvent` per cook date, and a `CookList` per date:
+
+```bash
+python -m scripts.import_recipe_history --input data/recipe_history.csv --limit 20 --dry-run
+python -m scripts.import_recipe_history --input data/recipe_history.csv
+```
+
+**The file is not committed**, for the same reason the shopping-list
+export isn't: it's years of one household's personal browsing and cooking
+history, and this repository is public. `.gitignore` excludes
+`data/recipe_history*.csv`, `data/recipe_html/` (the fetched-page cache)
+and `data/recipes_to_look_up.csv` (the look-up output below).
+
+See SPEC.md's "Importing cooking history" for what a row becomes and why,
+and "Recipes from other sites, and copyright" for the rule the fetcher
+follows (facts only, never formatting or images). In short:
+
+| Row's source column | Becomes |
+|---|---|
+| A URL | Fetched (`backend/recipe_fetch.py`: schema.org JSON-LD, else AI-from-text) and deduped by `source_url` |
+| A book/magazine citation with a page number | A title-only stub, deduped by `(source_name, source_page)` — nothing to fetch |
+| A citation with no page, or nothing at all | Not imported — written to the look-up CSV for a human to chase down |
+
+`ANTHROPIC_API_KEY` isn't required to run the import — pages with no
+JSON-LD just fall through to the look-up CSV without it, same as any
+other fetch failure, rather than the run erroring out.
+
+The script is re-runnable: a URL or book citation already matched to a
+recipe is never re-fetched or re-applied (a re-run must not clobber a
+human's edits to something already through `needs_review`), only extended
+with `PreparedEvent`/`CookList` rows for dates it wasn't already linked
+to. `--limit N` processes only the first N rows — useful for a quick
+check before committing to a run over the whole file, which fetches one
+new page every couple of seconds and can take a while.
+
+`backend/recipe_history.py` (the parsing) and `backend/recipe_fetch.py`
+(the fetching) are unit tested with no network in `tests/
+test_recipe_history.py` and `tests/test_recipe_fetch.py`; the importer's
+own dedupe/idempotency logic is tested against the shared SQLite fixture
+with `fetch_recipe_draft` mocked out, in `tests/
+test_import_recipe_history.py`.
+
 ## Filling in nutrition and cost
 
 The pantry starts with names only. Two passes fill in the rest — a local
