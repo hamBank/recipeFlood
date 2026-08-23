@@ -440,6 +440,17 @@ What a row becomes depends on what its source column held:
   dead link, a page with nothing schema.org or AI could make sense of),
   for a human to search out and add by hand later.
 
+A book/magazine citation stub has real provenance but nothing to cook
+from — no ingredients, no method, no notes — so it stays out of normal
+browsing (`GET /recipes`) by default, the same way an unpublished draft
+does. It's still reachable two ways: the "Needs review" filter (since a
+freshly imported stub is exactly that), and the recipe picker on a
+cooking list, so a cook date can be planned around it even before the
+book has been opened and the recipe typed in. Any recipe gains
+ingredients, a method, or a note stops counting as empty and shows up
+normally. The image-generation backfill (above) applies the same
+exclusion — there's nothing to generate a placeholder photo of yet.
+
 Every row that *did* resolve to a Recipe also gets a `PreparedEvent` for
 its cook date — a dish cooked a dozen times across the spreadsheet gets a
 dozen events even though it was only imported once — and each date's

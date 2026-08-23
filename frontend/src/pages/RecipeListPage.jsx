@@ -95,6 +95,11 @@ export default function RecipeListPage() {
           offset: (page - 1) * PAGE_SIZE,
           needs_review: reviewOnly ? 'true' : '',
           include_unpublished: user ? 'true' : '',
+          // Recipes with no ingredients, no method and no notes (a book
+          // citation from the history import, typically) are hidden from
+          // normal browsing — but "Needs review" is exactly where they
+          // should surface, since an empty recipe needs the most work.
+          include_empty: reviewOnly ? 'true' : '',
         })
         if (cancelled) return
         setRecipes(result.items)
