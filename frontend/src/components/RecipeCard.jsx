@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { formatMinutes, formatRelative } from '../format'
+import QuickAddToCookList from './QuickAddToCookList'
 
 /** Placeholder for the ~99% of scraped recipes with no usable photo:
  *  the first letter over a hue derived from the title, so the grid stays
@@ -18,15 +19,24 @@ function Placeholder({ title }) {
   )
 }
 
-export default function RecipeCard({ recipe }) {
+export default function RecipeCard({ recipe, cookList, onCookListChange }) {
   const time = formatMinutes(recipe.total_minutes)
   const lastMade = formatRelative(recipe.last_prepared_on)
 
   return (
     <Link
       to={`/recipes/${recipe.slug}`}
-      className="group flex flex-col overflow-hidden rounded-xl border border-edge bg-card shadow-sm transition hover:shadow-md"
+      className="group relative flex flex-col overflow-hidden rounded-xl border border-edge bg-card shadow-sm transition hover:shadow-md"
     >
+      {cookList && (
+        <QuickAddToCookList
+          recipeId={recipe.id}
+          cookList={cookList}
+          onChange={onCookListChange}
+          compact
+        />
+      )}
+
       {recipe.image_path ? (
         <img
           src={`/media/${recipe.image_path}`}

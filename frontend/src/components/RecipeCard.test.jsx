@@ -20,10 +20,10 @@ const base = {
   is_published: true,
 }
 
-const renderCard = (overrides = {}) =>
+const renderCard = (overrides = {}, cardProps = {}) =>
   render(
     <MemoryRouter>
-      <RecipeCard recipe={{ ...base, ...overrides }} />
+      <RecipeCard recipe={{ ...base, ...overrides }} {...cardProps} />
     </MemoryRouter>,
   )
 
@@ -73,5 +73,29 @@ describe('RecipeCard', () => {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
     renderCard({ last_prepared_on: yesterday })
     expect(screen.getByText('made yesterday')).toBeDefined()
+  })
+
+  it('has no quick-add control when no cooking list is given', () => {
+    // The guest/no-list case — nothing to quick-add to, so nothing shown.
+    renderCard()
+    expect(screen.queryByText('+ Cook list')).toBeNull()
+    expect(screen.queryByText('✓ Added')).toBeNull()
+  })
+
+  it('offers to quick-add to the given cooking list', () => {
+    const cookList = { id: 5, cook_date: '2026-08-23', description: null, recipes: [] }
+    renderCard({}, { cookList })
+    expect(screen.getByText('+ Cook list')).toBeDefined()
+  })
+
+  it('shows an added state when the recipe is already on that list', () => {
+    const cookList = {
+      id: 5,
+      cook_date: '2026-08-23',
+      description: null,
+      recipes: [{ recipe_id: base.id }],
+    }
+    renderCard({}, { cookList })
+    expect(screen.getByText('✓ Added')).toBeDefined()
   })
 })

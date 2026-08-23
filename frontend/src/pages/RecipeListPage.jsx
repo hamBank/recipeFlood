@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { listRecipes, listSections, listTags } from '../api'
+import { listCookLists, listRecipes, listSections, listTags } from '../api'
 import { useSession } from '../App'
 import RecipeCard from '../components/RecipeCard'
 
@@ -25,6 +25,9 @@ export default function RecipeListPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState(params.get('q') || '')
+  // Fetched once, signed-in only — the quick-add button on each card
+  // needs to know (and update) the same list, not a copy per card.
+  const [cookList, setCookList] = useState(null)
 
   const q = params.get('q') || ''
   // Sections and free tags both filter through the same `tag` parameter —
@@ -61,6 +64,21 @@ export default function RecipeListPage() {
       }
     })()
   }, [])
+
+  useEffect(() => {
+    if (!user) {
+      setCookList(null)
+      return
+    }
+    ;(async () => {
+      try {
+        const { items } = await listCookLists({ limit: 1 })
+        setCookList(items[0] || null)
+      } catch {
+        // Quick-add is a convenience; the grid works fine without it.
+      }
+    })()
+  }, [user])
 
   useEffect(() => {
     let cancelled = false
@@ -189,7 +207,12 @@ export default function RecipeListPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {recipes.map((recipe) => (
-          <RecipeCard key={recipe.id} recipe={recipe} />
+          <RecipeCard
+            key={recipe.id}
+            recipe={recipe}
+            cookList={cookList}
+            onCookListChange={setCookList}
+          />
         ))}
       </div>
 

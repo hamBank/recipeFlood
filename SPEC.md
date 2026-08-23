@@ -207,6 +207,19 @@ ingredients into one set of lines. It is additive and re-runnable —
 "we're cooking this again" is a real thing to want, and guessing otherwise
 would silently drop a shop.
 
+### Quick-add from anywhere a recipe appears
+
+Browsing the grid or a recipe's own page is the moment "we should make
+that" actually happens, so both carry a one-click add to whichever
+cooking list is most recent — the same "newest first" the Cooking page
+itself already sorts by (soonest/latest `cook_date`, ties broken by
+whichever was made most recently). Clicking again removes it; there is no
+separate confirmation, because adding twice is harmless (the recipe
+endpoint that backs this is idempotent) and removing is one click away if
+it was a mistake. Signed-in only, same as the rest of cooking-list
+planning, and silently absent rather than a broken button when nobody has
+started a list yet.
+
 ### One permanent shopping list
 
 Not a list per week or per shop: one list, added to and ticked off
