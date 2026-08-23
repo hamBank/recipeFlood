@@ -32,5 +32,14 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
 
+    # OpenAI Images API — used only by scripts/generate_recipe_images.py.
+    # Claude has no image-generation endpoint of its own, so placeholder
+    # illustrations are a separate provider and a separate key. gpt-image-1
+    # is scheduled for deprecation 2026-10-23 (OpenAI's replacements:
+    # gpt-image-1-mini / gpt-image-1.5 / gpt-image-2) — kept as a setting
+    # rather than a hardcoded literal so swapping it is a one-line change.
+    openai_api_key: str = ""
+    openai_image_model: str = "gpt-image-1"
+
 
 settings = Settings()

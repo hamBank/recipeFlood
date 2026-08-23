@@ -51,6 +51,7 @@ navigation subset of it, in nav order) — a subset, not a disjoint list.
 | `description` | str? | |
 | `image_path` | str? | Relative to `UPLOAD_DIR`, served at `/media/...` |
 | `image_source_url` | str? | Original remote URL, kept for provenance |
+| `image_generated` | bool | True when `image_path` is an AI illustration, not a real photo — see `scripts/generate_recipe_images.py` |
 | `added_date` | datetime | Backdated to the post date on import |
 | `prep_minutes`, `cook_minutes` | int? | Null unless the source stated it |
 | `total_minutes_override` | int? | Null ⇒ total = prep + cook |

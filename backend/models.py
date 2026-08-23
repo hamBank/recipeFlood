@@ -404,6 +404,11 @@ class Recipe(SQLModel, table=True):
     # keeps the original remote URL for provenance after self-hosting.
     image_path: str | None = None
     image_source_url: str | None = None
+    # True when image_path is an AI-generated illustration rather than a
+    # real photo of the dish (scripts/generate_recipe_images.py) — the UI
+    # says so, so a generated image is never mistaken for documentation of
+    # what someone's own cooking actually looked like.
+    image_generated: bool = False
 
     # "Added Date" in the spec. Defaults to now for manual entry; the blog
     # importer backdates it to the original post date.
@@ -696,6 +701,7 @@ class RecipeSummary(SQLModel):
     title: str
     description: str | None
     image_path: str | None
+    image_generated: bool = False
     added_date: datetime
     total_minutes: int | None
     servings: int | None
@@ -716,6 +722,7 @@ class RecipeRead(SQLModel):
     description: str | None
     image_path: str | None
     image_source_url: str | None
+    image_generated: bool = False
     added_date: datetime
     prep_minutes: int | None
     cook_minutes: int | None

@@ -98,4 +98,14 @@ describe('RecipeCard', () => {
     renderCard({}, { cookList })
     expect(screen.getByText('✓ Added')).toBeDefined()
   })
+
+  it('flags an AI-generated photo so it is never mistaken for a real one', () => {
+    renderCard({ image_path: 'recipes/flax-bread.png', image_generated: true })
+    expect(screen.getByText('AI photo')).toBeDefined()
+  })
+
+  it('does not flag a real, self-hosted photo', () => {
+    renderCard({ image_path: 'recipes/flax-bread.jpg', image_generated: false })
+    expect(screen.queryByText('AI photo')).toBeNull()
+  })
 })
