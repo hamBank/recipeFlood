@@ -61,6 +61,16 @@ class TestCreate:
         assert by_name["salt"]["weight_grams"] is None
         assert by_name["salt"]["weight_source"] == "unknown"
 
+    def test_volume_amounts_are_also_converted_to_millilitres(self, client, recipe_payload):
+        # Pure unit arithmetic, independent of the weight conversion above
+        # (and of any linked ingredient) — see units.to_ml.
+        recipe_payload["ingredients"].append({"name": "milk", "quantity": 2, "unit": "cup"})
+        recipe = create(client, recipe_payload)
+        milk = next(i for i in recipe["ingredients"] if i["name"] == "milk")
+        assert milk["volume_ml"] == pytest.approx(500.0)
+        # salt ("pinch") and the count-unit lines have no volume unit
+        assert next(i for i in recipe["ingredients"] if i["name"] == "salt")["volume_ml"] is None
+
     def test_duplicate_titles_get_distinct_slugs(self, client, recipe_payload):
         first = create(client, recipe_payload)
         second = create(client, recipe_payload)

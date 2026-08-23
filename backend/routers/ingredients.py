@@ -9,7 +9,7 @@ endpoints, never this router.
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlmodel import Session, func, or_, select
 
-from ..costing import cost_per_gram, package_cost_cents
+from ..costing import cost_per_gram, cost_per_ml, package_cost_cents
 from ..database import get_session
 from ..models import (
     Ingredient,
@@ -34,6 +34,7 @@ def _read(session: Session, ingredient: Ingredient, recipe_count: int = 0) -> In
     return IngredientRead(
         **ingredient.model_dump(),
         cost_per_gram=cost_per_gram(ingredient),
+        cost_per_ml=cost_per_ml(ingredient),
         package_cost_cents=package_cost_cents(ingredient),
         has_nutrition=has_nutrition(ingredient),
         recipe_count=recipe_count,
@@ -183,9 +184,16 @@ def update_ingredient(
     # A human editing the price in the Pantry page is itself a source: it
     # means "I looked and this is what it costs," which should read
     # differently from an unset field or an AI estimate. Only stamp when
-    # cost_per_kg_cents actually changes — editing the package size alone
-    # shouldn't make an old price look freshly verified.
-    if "cost_per_kg_cents" in fields and fields["cost_per_kg_cents"] != ingredient.cost_per_kg_cents:
+    # the price actually changes — editing the package size alone shouldn't
+    # make an old price look freshly verified. Both cost bases share one
+    # provenance pair, so either one changing counts.
+    price_changed = (
+        "cost_per_kg_cents" in fields and fields["cost_per_kg_cents"] != ingredient.cost_per_kg_cents
+    ) or (
+        "cost_per_litre_cents" in fields
+        and fields["cost_per_litre_cents"] != ingredient.cost_per_litre_cents
+    )
+    if price_changed:
         ingredient.cost_updated_at = utcnow()
         if "cost_source" not in fields:
             ingredient.cost_source = "manual"
@@ -269,8 +277,9 @@ def merge_ingredient(
 
     # Inherit anything the absorbed row knew and the survivor doesn't.
     for field in (
-        "package_size_grams", "cost_per_kg_cents", "density_g_per_ml",
-        "grams_per_piece", *NUTRIENT_FIELDS,
+        "package_size_grams", "cost_per_kg_cents",
+        "package_size_ml", "cost_per_litre_cents",
+        "density_g_per_ml", "grams_per_piece", *NUTRIENT_FIELDS,
     ):
         if getattr(target, field) is None and getattr(other, field) is not None:
             setattr(target, field, getattr(other, field))

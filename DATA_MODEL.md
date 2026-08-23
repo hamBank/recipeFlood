@@ -83,8 +83,9 @@ original wording so a bad parse can be redone from source.
 | `name` | The parsed ingredient name |
 | `quantity`, `quantity_max` | `quantity_max` only for ranges ("2–3 tbsp") |
 | `unit` | enum — `g`…`lb`, `cup`/`tbsp`/`dsp`/`tsp`, `piece`/`clove`/`bunch`…, `pinch`, `to_taste` |
-| `weight_grams` | float? — what cost and nutrition are computed from |
+| `weight_grams` | float? — what a weight-priced ingredient's cost and (always) nutrition are computed from |
 | `weight_source` | `explicit` / `converted` / `estimated` / `unknown` |
+| `volume_ml` | float? — set whenever `unit` is a volume unit; what a volume-priced ingredient's cost is computed from |
 | `note` | "finely chopped", "at room temperature" |
 | `optional` | Excluded from cost and nutrition totals |
 | `group` | Sub-heading: "For the sauce" |
@@ -92,6 +93,12 @@ original wording so a bad parse can be redone from source.
 `weight_source` is the honesty field. `explicit` means the recipe gave a
 weight and it is never recomputed; `estimated` means a keyword-table
 density was used and the UI marks it with an asterisk.
+
+`volume_ml` has no equivalent source field: converting a stated volume
+unit to millilitres is fixed unit arithmetic (`units.to_ml`), needing no
+density or linked ingredient, so it is either exact or absent — never an
+estimate. It is populated independently of `weight_grams` and of whether
+the line matched a pantry row at all.
 
 ## `recipestep`
 
@@ -104,9 +111,12 @@ identity worth preserving across an edit.
 |---|---|
 | `slug` (unique), `name` | |
 | `aliases` | JSON list, lowercased; matched against recipe lines |
+| `measure_kind` | `weight` (default) or `volume` — which unit family this ingredient is bought and priced in. Plain VARCHAR, same reasoning as `source` below |
 | `package_size_grams` | float? |
 | `cost_per_kg_cents` | **int?** — see below |
-| `cost_source`, `cost_updated_at` | Where a price came from and when — "manual" once a human edits it, or an enrichment script's own label. Mirrors `nutrition_source` |
+| `package_size_ml` | float? — the volume-priced sibling of `package_size_grams` |
+| `cost_per_litre_cents` | **int?** — the volume-priced sibling of `cost_per_kg_cents` |
+| `cost_source`, `cost_updated_at` | Where a price came from and when — "manual" once a human edits it, or an enrichment script's own label. Mirrors `nutrition_source`; shared between both cost bases |
 | `source` | Where it is bought. Fourteen values — see `IngredientSource`. Stored as a plain VARCHAR with no database CHECK: the first seven were a guess and a real shopping list added seven more, so the next addition should not need a migration that behaves differently on SQLite and Postgres |
 | `is_food` | Indexed. False for batteries, shampoo, cat litter — in the pantry as a shopping lookup, out of the ingredient work queues |
 | `density_g_per_ml` | float? — converts volumes to grams |
@@ -115,7 +125,7 @@ identity worth preserving across an edit.
 | `nutrition_source`, `nutrition_updated_at` | Provenance: `"AFCD (<matched food>)"`, `"AI estimate (Claude)"`, a packet, or a human's own note |
 | `notes`, `created_at`, `updated_at` | |
 
-### Why cents per kilogram
+### Why cents per kilogram (and per litre)
 
 The spec asked for "cost per gram with enough resolution to be useful".
 Stored per gram in dollars, plain flour at $2.50/kg is `0.0025` — three
@@ -123,7 +133,14 @@ leading zeros, and any two-decimal money type rounds it to nothing.
 Cents-per-kilogram keeps it an integer (`250`), gives four significant
 figures on the per-gram price, and prices a 2g pinch of saffron and a 1kg
 bag of flour with the same arithmetic. `cost_per_gram` is derived on read,
-for display only.
+for display only. `cost_per_litre_cents` is the same idea for liquids —
+most of them are sold and shelf-priced by volume in Australia, and
+`measure_kind` says which of the two pairs of fields (`*_grams`/`*_kg` or
+`*_ml`/`*_litre`) is the one actually being priced from; the other pair
+is ignored even if it happens to hold a stale value from before the
+ingredient was reclassified. `density_g_per_ml` is still worth setting on
+a volume ingredient regardless — nutrition is always per 100g, so it is
+what lets a volume amount contribute to the nutrition panel.
 
 `aliases` is load-bearing beyond search: the shopping-list importer records
 every spelling it saw on the row it resolved to, so a re-import is a no-op
@@ -163,8 +180,8 @@ inventing one.
 
 ## `shoppingitem`
 
-`ingredient_id?`, `name`, `weight_grams?`, `quantity?`, `unit?`, `note?`,
-`is_checked` (indexed), `checked_at?`, `source` (`manual` | `cook_list`),
+`ingredient_id?`, `name`, `weight_grams?`, `volume_ml?`, `quantity?`, `unit?`,
+`note?`, `is_checked` (indexed), `checked_at?`, `source` (`manual` | `cook_list`),
 `cook_list_id?`, `contributions` (JSON), `added_at`.
 
 There is no `shoppinglist` table: there is exactly one list and it is
@@ -173,6 +190,14 @@ permanent, so these rows *are* the list.
 `ingredient_id` is nullable for the same reason `recipeingredient`'s is —
 an unmatched line still belongs on the list as plain text. It is also what
 gates merging: two lines combine only when they share a pantry row.
+
+An item normally has exactly one of `weight_grams` / `volume_ml` / `quantity`
+populated — whichever kind of amount the merge that produced it worked in.
+`volume_ml` merges are exact regardless of which volume unit either
+contributing line used ("2 cups" and "500ml" both land here), which is what
+lets a liquid with no known density still be merged and priced correctly —
+see `backend/shopping.py`'s module docstring for the full precedence
+between weight, volume, and count merging.
 
 `contributions` is a JSON list of `{recipe, recipe_slug, amount}`, recording
 what each merge folded in. It is cleared when a human edits the amount, so

@@ -86,8 +86,9 @@ alone; the rest stay reachable by search and tags until someone files them.
 ### Ingredients and weight
 
 Each ingredient line records the amount as written (`2 cups`, `4`,
-`1.5 kg`) **and** a weight in grams. The weight is what cost and nutrition
-are computed from, and it is derived automatically:
+`1.5 kg`) **and** a weight in grams. The weight is what nutrition — and a
+weight-priced ingredient's cost — is computed from, and it is derived
+automatically:
 
 1. The amount is already a mass → used as-is (`explicit`)
 2. Volume × the linked pantry item's density → `converted`
@@ -101,6 +102,13 @@ Adding a density to a pantry item re-derives every recipe line that uses
 it — except lines whose weight the recipe stated outright, which are never
 overwritten.
 
+**A volume-unit line also gets a millilitre amount**, converted the same
+way regardless of whether it also converts to a weight — "2 cups" is
+500ml by fixed unit arithmetic alone, no density or pantry match
+required. This is what lets a liquid ingredient with no known density
+still be shopped for and priced correctly: see "Volume-priced
+ingredients" below.
+
 **Measures are Australian**: 1 cup = 250ml, 1 tablespoon = **20ml**, 1
 teaspoon = 5ml. The 20ml tablespoon is the one that matters — treating it
 as 15ml would overstate every spoonful of butter, oil and syrup in the
@@ -113,14 +121,15 @@ One row per pantry item, referenced by every recipe that uses it.
 | Field | Notes |
 |---|---|
 | Name | Plus aliases used when matching recipe lines ("fetta"/"feta"). |
-| Usual package size | Grams. |
-| Cost | Stored as integer **cents per kilogram**; displayed per kg and per package. This is what gives a useful per-gram resolution. |
+| Measured by | Weight (default) or volume — see "Volume-priced ingredients" below. Decides which of the next two rows is the one actually used. |
+| Usual package size & cost, by weight | Grams, and integer **cents per kilogram** — displayed per kg and per package. This is what gives a useful per-gram resolution. |
+| Usual package size & cost, by volume | Millilitres, and integer **cents per litre** — the same idea, for the ingredients this repo now lets be priced by volume instead. |
+| `cost_source` | Where the price came from and when — "manual", an AI estimate, or blank. Shared between both cost bases. |
 | Source | Markets · Supermarket · Butcher · Nut shop · Deli · Asian grocery · Fishmonger · Bakery · Bottle shop · Cake supplies · Chemist · Hardware · Newsagent · Other |
 | Is food | False for the things that come home from the shops but never go in a recipe — batteries, shampoo, cat litter. They stay in the pantry so it remains a complete shopping lookup, but they are kept out of the "needs a price" work queues. |
-| Density (g/ml) | Turns "1 cup" into grams. |
+| Density (g/ml) | Turns "1 cup" into grams. Worth setting even for a volume-priced ingredient — nutrition is always per 100g. |
 | Grams per piece | Turns "2 onions" into grams. |
 | Nutrition per 100g | Energy (kJ), calories, protein, fat, saturated fat, carbs, sugars, fibre, sodium, plus where the figures came from (`nutrition_source`) and when. |
-| Cost | Stored as cents per kg. `cost_source` records where the price came from — "manual", an AI estimate, or blank. |
 
 The last seven sources came from importing a real shopping list: the first
 seven were a guess, and the export showed the shopping actually happens at
@@ -137,6 +146,30 @@ data the absorbed row had, and keeps the old name as an alias.
 The Pantry page's "missing a price" and "missing nutrition" filters are the
 work queues for filling this in — and `scripts/enrich_pantry.py` can fill
 most of it automatically.
+
+### Volume-priced ingredients
+
+Most groceries are weighed, but most liquids — milk, stock, oil, wine —
+are sold and shelf-priced by volume, and Australian unit pricing puts
+$/L on the ticket, not $/kg. Forcing them through a density guess just to
+get a cost was both unnecessary and a source of error the density might
+not deserve, so a pantry item can be flagged "measured by volume" and
+priced in cents per litre instead.
+
+This changes costing and the shopping list, not nutrition: nutrition
+figures are always per 100g, so a volume ingredient still wants a density
+set if it's meant to contribute to a recipe's nutrition panel. Cost and
+the shopping list, on the other hand, need no density at all for a
+volume-priced ingredient — "2 cups" and "500ml" of the same liquid both
+convert to an exact millilitre figure by fixed unit arithmetic, merge on
+that when they turn up in different recipes, and price from
+`cost_per_litre_cents` directly.
+
+A freshly-added ingredient defaults to "measured by weight" and gets no
+special treatment until someone flags it — except that a liquid with no
+known density already merges and displays correctly on the shopping list
+regardless, because the exact millilitre amount is there either way; only
+its *cost* needs the flag to come from the right pair of fields.
 
 ### Filling the pantry automatically
 
@@ -196,10 +229,16 @@ the end.
 A wrong merge is worse than no merge: coming home with 100g of onion when
 the lasagne needed 400g is a failure of the list, while two onion lines are
 a mild annoyance. So lines combine only on real arithmetic — same pantry
-ingredient, and either both in grams or both in the same unit. An
-unmatched line never merges with another, and a weightless "1 bunch" is
-never folded into a weighed 250g, because that would mean inventing a
-bunch weight nobody supplied.
+ingredient, and either both in grams, both in millilitres, or both in the
+same count unit. An unmatched line never merges with another, and a
+weightless "1 bunch" is never folded into a weighed 250g, because that
+would mean inventing a bunch weight nobody supplied.
+
+Volume merging is exact regardless of which volume unit either line used
+— "2 cups" and "500ml" of the same liquid both merge to a millilitre
+figure, no density required. That is what lets a liquid with no known
+density still merge and price correctly; see "Volume-priced ingredients"
+above.
 
 Every merged line keeps a breakdown of which recipe asked for how much, so
 "why is 400g of onion on my list" is answerable without re-running
