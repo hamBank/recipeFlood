@@ -244,10 +244,17 @@ photo of the dish — see SPEC.md "AI-generated placeholder photos" for why
 that flag exists and why the copyright caution around the blog's
 hotlinked images (SPEC.md "Images") doesn't apply here.
 
-`backend/image_generation.py`'s prompt-building is unit tested with no
-network in `tests/test_image_generation.py`, matching the pattern
-`recipe_fetch.py` set: the function that actually calls the API isn't
-covered by tests, only exercised by hand against a real key.
+A rate-limited (429) response is retried automatically with exponential
+backoff — 1s, 2s, 4s... up to `_MAX_ATTEMPTS` attempts, honouring the
+API's own `Retry-After` header when it sends one — since a run over
+hundreds of recipes hits OpenAI's rate limit routinely, not as a rare
+failure. Only after retries are exhausted does a recipe count as a real
+`failed:` in the run's summary.
+
+`backend/image_generation.py`'s prompt-building and retry-delay math are
+unit tested with no network in `tests/test_image_generation.py`, matching
+the pattern `recipe_fetch.py` set: the function that actually calls the
+API isn't covered by tests, only exercised by hand against a real key.
 
 ## Filling in nutrition and cost
 
