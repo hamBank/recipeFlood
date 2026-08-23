@@ -94,7 +94,7 @@ export default function RecipeDetailPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const { items } = await listCookLists({ limit: 1 })
+        const { items } = await listCookLists({ limit: 1, exclude_imported: true })
         if (!cancelled) setCookList(items[0] || null)
       } catch {
         // Quick-add is a convenience; the rest of the page works without it.

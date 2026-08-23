@@ -148,7 +148,7 @@ Signed-in only, every endpoint.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/cook-lists` | newest date first; `since`, `until`, `limit`, `offset`; `X-Total-Count` |
+| GET | `/cook-lists` | newest date first; `since`, `until`, `exclude_imported` (skips cooking-history import batches — see SPEC.md), `limit`, `offset`; `X-Total-Count` |
 | POST | `/cook-lists` | `{cook_date?, description?, notes?, recipes?}` — date defaults to today |
 | GET | `/cook-lists/{id}` | |
 | PATCH | `/cook-lists/{id}` | omit `recipes` to leave membership alone; pass a list to replace it |

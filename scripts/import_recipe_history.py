@@ -47,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlmodel import Session, select  # noqa: E402
 
+from backend.cook_lists import IMPORTED_COOK_LIST_DESCRIPTION  # noqa: E402
 from backend.database import engine  # noqa: E402
 from backend.models import (  # noqa: E402
     CookList,
@@ -72,8 +73,10 @@ DEFAULT_CACHE_DIR = REPO_ROOT / "data" / "recipe_html"
 DEFAULT_LOOKUP_OUTPUT = REPO_ROOT / "data" / "recipes_to_look_up.csv"
 
 #: Marks a CookList this script created, so a re-run finds and extends it
-#: instead of creating a second list for the same date.
-COOK_LIST_MARKER = "Cooking history import"
+#: instead of creating a second list for the same date. Shared with
+#: backend/cook_lists.py, which uses the same marker to filter these back
+#: out of quick-add's "most recent list" lookup.
+COOK_LIST_MARKER = IMPORTED_COOK_LIST_DESCRIPTION
 
 _UNIT_VALUES = {unit.value for unit in MeasureUnit}
 

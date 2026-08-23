@@ -151,6 +151,20 @@ class TestListing:
         assert response.headers["X-Total-Count"] == "2"
         assert len(response.json()) == 1
 
+    def test_exclude_imported_skips_cooking_history_batches(self, client):
+        # A history import backdates its lists close to "now" by definition
+        # (that was the last thing logged), so a plain newest-first lookup
+        # would otherwise readily surface one instead of a list someone is
+        # actually planning — see backend/cook_lists.py.
+        client.post(
+            "/cook-lists",
+            json={"cook_date": "2026-08-22", "description": "Cooking history import"},
+        )
+        planned = client.post("/cook-lists", json={"cook_date": "2026-08-10"}).json()
+
+        rows = client.get("/cook-lists?exclude_imported=true").json()
+        assert [r["id"] for r in rows] == [planned["id"]]
+
 
 class TestDeleting:
     def test_deleting_a_list_leaves_its_shopping_behind(self, client, soup):

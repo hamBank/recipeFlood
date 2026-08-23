@@ -220,6 +220,18 @@ it was a mistake. Signed-in only, same as the rest of cooking-list
 planning, and silently absent rather than a broken button when nobody has
 started a list yet.
 
+**A cooking-history import's lists never count as "most recent" here.**
+Importing years of cooking history (see "Importing cooking history")
+creates one `CookList` per date the export covered, backdated to match —
+and the newest of those is, by definition, whatever the household most
+recently logged, which is close to *now*. Left alone, that would mean
+quick-add routinely handed someone a list from the import rather than
+whatever they're actually planning next. `GET /cook-lists` takes an
+`exclude_imported` flag for exactly this — filtering out every list
+whose `description` is the import's own marker — and quick-add always
+passes it. Browsing cooking-list history itself still shows them; only
+this one lookup skips them.
+
 ### One permanent shopping list
 
 Not a list per week or per shop: one list, added to and ticked off
