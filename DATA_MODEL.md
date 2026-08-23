@@ -144,6 +144,45 @@ entry *is* the Last Prepared Date, and keeping the history is what makes
 "not cooked in a year" (`GET /recipes?not_prepared_days=365`) and
 per-cook notes possible.
 
+## `cooklist` / `cooklistrecipe`
+
+`cooklist`: `cook_date` (indexed), `description?`, `notes?`, `created_by?`,
+`created_at`, `updated_at`.
+
+`cooklistrecipe`: `cook_list_id`, `recipe_id`, `position`, `servings?`,
+`note?`.
+
+`cook_date` is not unique — a week of dinners and Saturday's cake are two
+plans that can start on the same Monday.
+
+`servings` is the scaling request, not a stored factor. The multiplier is
+derived at read time from `recipe.servings`, so fixing a recipe's serving
+size later corrects every list that used it; when the recipe has no
+serving size, the read model reports `scalable: false` rather than
+inventing one.
+
+## `shoppingitem`
+
+`ingredient_id?`, `name`, `weight_grams?`, `quantity?`, `unit?`, `note?`,
+`is_checked` (indexed), `checked_at?`, `source` (`manual` | `cook_list`),
+`cook_list_id?`, `contributions` (JSON), `added_at`.
+
+There is no `shoppinglist` table: there is exactly one list and it is
+permanent, so these rows *are* the list.
+
+`ingredient_id` is nullable for the same reason `recipeingredient`'s is —
+an unmatched line still belongs on the list as plain text. It is also what
+gates merging: two lines combine only when they share a pantry row.
+
+`contributions` is a JSON list of `{recipe, recipe_slug, amount}`, recording
+what each merge folded in. It is cleared when a human edits the amount, so
+a breakdown never sits next to a number it no longer explains.
+
+`unit` is a plain VARCHAR here, not the native `measureunit` enum that
+`recipeingredient` uses. That Postgres type already exists from the
+baseline migration and a second `CREATE TYPE` for it fails — the same
+dual-dialect trap `ingredient.source` documents.
+
 ## Migrations
 
 ```bash

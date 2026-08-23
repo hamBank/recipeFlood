@@ -8,6 +8,9 @@ import RecipeDetailPage from './pages/RecipeDetailPage'
 import RecipeFormPage from './pages/RecipeFormPage'
 import ImportPage from './pages/ImportPage'
 import PantryPage from './pages/PantryPage'
+import CookListsPage from './pages/CookListsPage'
+import CookListDetailPage from './pages/CookListDetailPage'
+import ShoppingListPage from './pages/ShoppingListPage'
 
 const SessionContext = createContext({ config: null, user: null })
 
@@ -105,6 +108,38 @@ export default function App() {
             element={
               <RequireAuth user={user}>
                 <PantryPage />
+              </RequireAuth>
+            }
+          />
+          {/* "cooking" / "groceries", not "cook-lists" / "shopping": those are
+              the API's own path prefixes. In production the routers are
+              mounted ahead of the SPA catch-all (see main.py), so a same-
+              named frontend route would make a direct visit or refresh hit
+              the API instead of the app shell. And in dev, Vite's proxy
+              matches by string prefix rather than exact path, so even a
+              route merely *starting with* an API prefix (e.g.
+              "/shopping-list") gets swallowed the same way. */}
+          <Route
+            path="cooking"
+            element={
+              <RequireAuth user={user}>
+                <CookListsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="cooking/:id"
+            element={
+              <RequireAuth user={user}>
+                <CookListDetailPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="groceries"
+            element={
+              <RequireAuth user={user}>
+                <ShoppingListPage />
               </RequireAuth>
             }
           />

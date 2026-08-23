@@ -8,7 +8,7 @@ output is named in the test.
 import pytest
 
 from backend.models import IngredientSource
-from backend.shopping_list import (
+from backend.pantry_import import (
     clean_item,
     correct_spelling,
     is_food,

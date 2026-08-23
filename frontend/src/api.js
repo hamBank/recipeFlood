@@ -123,3 +123,31 @@ export const importImage = (file, titleHint) => {
   if (titleHint) form.append('title_hint', titleHint)
   return apiUpload('/imports/image', form)
 }
+
+// Cooking lists
+export const listCookLists = (params) => apiFetchPaged(`/cook-lists${query(params)}`)
+export const getCookList = (id) => apiFetch(`/cook-lists/${id}`)
+export const createCookList = (data) =>
+  apiFetch('/cook-lists', { method: 'POST', body: data })
+export const updateCookList = (id, data) =>
+  apiFetch(`/cook-lists/${id}`, { method: 'PATCH', body: data })
+export const deleteCookList = (id) => apiFetch(`/cook-lists/${id}`, { method: 'DELETE' })
+export const addRecipeToCookList = (id, data) =>
+  apiFetch(`/cook-lists/${id}/recipes`, { method: 'POST', body: data })
+export const removeRecipeFromCookList = (id, recipeId) =>
+  apiFetch(`/cook-lists/${id}/recipes/${recipeId}`, { method: 'DELETE' })
+export const addCookListToShopping = (id) =>
+  apiFetch(`/cook-lists/${id}/add-to-shopping`, { method: 'POST' })
+
+// The shopping list
+export const getShoppingList = () => apiFetch('/shopping')
+export const addShoppingItem = (data) =>
+  apiFetch('/shopping', { method: 'POST', body: data })
+export const updateShoppingItem = (id, data) =>
+  apiFetch(`/shopping/${id}`, { method: 'PATCH', body: data })
+export const deleteShoppingItem = (id) =>
+  apiFetch(`/shopping/${id}`, { method: 'DELETE' })
+export const clearCheckedShopping = () =>
+  apiFetch('/shopping/clear-checked', { method: 'POST' })
+export const uncheckAllShopping = () =>
+  apiFetch('/shopping/uncheck-all', { method: 'POST' })

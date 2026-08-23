@@ -10,7 +10,16 @@ from sqlalchemy import text
 
 from .config import settings
 from .database import engine
-from .routers import auth_router, imports, ingredients, recipes, taxonomy, users
+from .routers import (
+    auth_router,
+    cook_lists,
+    imports,
+    ingredients,
+    recipes,
+    shopping,
+    taxonomy,
+    users,
+)
 from .version import backend_version, frontend_version
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -62,6 +71,8 @@ def create_app() -> FastAPI:
     app.include_router(recipes.router)
     app.include_router(ingredients.router)
     app.include_router(imports.router)
+    app.include_router(cook_lists.router)
+    app.include_router(shopping.router)
 
     # Recipe photos, self-hosted rather than hotlinked back to Blogger
     # (see SPEC.md "Images"). Mounted before the SPA catch-all.

@@ -35,6 +35,8 @@ export default function Layout({ user, onSignOut }) {
             {user && <Tab to="/new">Add</Tab>}
             {user && <Tab to="/import">Import</Tab>}
             {user && <Tab to="/pantry">Pantry</Tab>}
+            {user && <Tab to="/cooking">Cooking</Tab>}
+            {user && <Tab to="/groceries">Shopping</Tab>}
           </nav>
 
           <div className="ml-auto flex items-center gap-3">

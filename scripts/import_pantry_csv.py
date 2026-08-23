@@ -6,7 +6,7 @@
     python -m scripts.import_pantry_csv shopping_list.csv --report out.csv
 
 Expects the columns Item, Weight, Location, Price. The rationalising rules
-live in backend/shopping_list.py, where they are unit-tested; this script is
+live in backend/pantry_import.py, where they are unit-tested; this script is
 the I/O around them.
 
 **Nothing is duplicated.** Every candidate is matched against the existing
@@ -40,7 +40,7 @@ from sqlmodel import Session, select  # noqa: E402
 from backend.database import engine  # noqa: E402
 from backend.models import Ingredient, utcnow  # noqa: E402
 from backend.recipes_service import find_ingredient, normalise_ingredient_name  # noqa: E402
-from backend.shopping_list import (  # noqa: E402
+from backend.pantry_import import (  # noqa: E402
     clean_item,
     correct_spelling,
     is_food,

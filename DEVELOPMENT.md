@@ -117,8 +117,8 @@ and their medications, and this repository is public; `.gitignore` excludes
 `data/shopping_list*.csv`. Keep yours there and re-run the import when it
 changes.
 
-The rules live in [`backend/shopping_list.py`](backend/shopping_list.py)
-and are unit-tested in `tests/test_shopping_list.py`. What they do, on the
+The rules live in [`backend/pantry_import.py`](backend/pantry_import.py)
+and are unit-tested in `tests/test_pantry_import.py`. What they do, on the
 2,303-row export this was built against:
 
 | Step | Effect |
@@ -151,7 +151,7 @@ ones.
 
 Anything the rules get wrong is fixable in one place: `KNOWN_MISSPELLINGS`,
 `NEVER_MERGE`, `NON_FOOD_WORDS` and `FOOD_EXCEPTIONS` in
-`backend/shopping_list.py`. `--report` writes a per-item CSV of every
+`backend/pantry_import.py`. `--report` writes a per-item CSV of every
 decision, which is the fastest way to spot one.
 
 ## Filling in nutrition and cost
@@ -189,7 +189,7 @@ indicative) YYYY-MM"`. It exists so a recipe's cost panel isn't empty, not
 to reconcile a receipt.
 
 **Reclassification.** The same Claude pass asks whether each name is
-actually human food at all, catching what `backend/shopping_list.py`'s
+actually human food at all, catching what `backend/pantry_import.py`'s
 keyword filter missed on the way in (a shopping list's "cat mince" has no
 food keyword in it to catch). A confident no sets `is_food = False` and
 writes nothing else to that row.
@@ -204,6 +204,23 @@ for and written; `--limit N` / `--resume-from N` bound and continue a run;
 download page states plain copyright with no licence grant, so the
 dataset isn't redistributed in this repo; the fetch script is the way to
 get it.
+
+## Cooking lists and the shopping list
+
+Both live behind sign-in, at `/cooking` and `/groceries` in the frontend.
+
+Those paths deliberately don't match their API prefixes (`/cook-lists` and
+`/shopping`). The routers are mounted ahead of the SPA catch-all in
+`main.py`, so a frontend route sharing a name with an API prefix would make
+a direct visit or a refresh return JSON instead of the app. Vite's dev
+proxy is looser still — it matches on string *prefix*, so even
+`/shopping-list` would be swallowed by the `/shopping` entry. If you add a
+page, check its path against `apiPrefixes` in `frontend/vite.config.js`.
+
+The interesting logic is in `backend/shopping.py`: what merges, what
+deliberately doesn't, and the shop walking order. `tests/test_shopping.py`
+is organised around the cases that must *not* merge, since those are the
+ones that send you home with the wrong amount of food.
 
 ## Tests
 
