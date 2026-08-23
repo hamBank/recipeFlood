@@ -291,6 +291,21 @@ note. The recipe's Last Prepared Date is the newest entry. Kept as a log
 rather than a single field so "we haven't made this in a year" and "our
 most-cooked" both work, and so a note like "halved the sugar" survives.
 
+### "This time of year"
+
+`same_season` on `GET /recipes` (a checkbox in the UI, next to "Needs
+review") answers "what did we make around now, in past years?" — a
+recipe qualifies if it has a `PreparedEvent` in roughly the same
+~3-month window of the calendar as today, in any of the last 4 years.
+Dec/Jan/Feb is winter whichever of those years it fell in, so the window
+is built fresh from today's month and day for each target year — not a
+fixed day count before today — and a window that reaches across a year
+boundary (say, centered on 10 January) is handled by plain date
+arithmetic rather than any special-casing. A cook date earlier in the
+*current* year doesn't count: that's not a past season, and it's already
+visible in ordinary browsing regardless. See `same_season_recipe_ids` in
+`backend/recipes_service.py`.
+
 ## Import
 
 Four ways in:

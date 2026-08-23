@@ -290,6 +290,91 @@ class TestPreparedLog:
         assert [r["title"] for r in stale] == ["Never Made"]
 
 
+class TestSameSeason:
+    """"What did we make around now, in past years?" — SPEC.md's seasonal
+    search. All dates below are relative to today, not hardcoded, so the
+    suite passes regardless of when it runs. The year-boundary edge case
+    (a window that crosses Dec/Jan) is exercised separately in
+    TestSameSeasonRecipeIds below, against a fixed reference date."""
+
+    def test_matches_a_recipe_cooked_in_the_window_last_year(
+        self, client, recipe_payload, admin
+    ):
+        from datetime import date
+
+        recipe = create(client, recipe_payload)
+        last_year = date.today().replace(year=date.today().year - 1)
+        client.post(f"/recipes/{recipe['slug']}/prepared", json={"prepared_on": str(last_year)})
+
+        titles = [r["title"] for r in client.get("/recipes?same_season=true").json()]
+        assert titles == ["Chocolate Walnut Cake"]
+        # Unfiltered browsing shows it too — this only narrows, never hides.
+        assert len(client.get("/recipes").json()) == 1
+
+    def test_ignores_a_cook_date_outside_the_seasonal_window(
+        self, client, recipe_payload, admin
+    ):
+        from datetime import date, timedelta
+
+        recipe = create(client, recipe_payload)
+        # ~4 months from today last year — well outside the ~3-month window.
+        off_season = date.today().replace(year=date.today().year - 1) + timedelta(days=120)
+        client.post(
+            f"/recipes/{recipe['slug']}/prepared", json={"prepared_on": str(off_season)}
+        )
+        assert client.get("/recipes?same_season=true").json() == []
+
+    def test_ignores_a_match_older_than_the_lookback_window(
+        self, client, recipe_payload, admin
+    ):
+        from datetime import date
+
+        from backend.recipes_service import SAME_SEASON_YEARS_BACK
+
+        recipe = create(client, recipe_payload)
+        too_old = date.today().replace(year=date.today().year - SAME_SEASON_YEARS_BACK - 1)
+        client.post(f"/recipes/{recipe['slug']}/prepared", json={"prepared_on": str(too_old)})
+        assert client.get("/recipes?same_season=true").json() == []
+
+    def test_a_cook_date_earlier_this_year_does_not_count(
+        self, client, recipe_payload, admin
+    ):
+        # "Same season" means past years' occurrences of this window, not
+        # the current year's — a recipe cooked earlier this year already
+        # shows up in ordinary browsing without this filter.
+        recipe = create(client, recipe_payload)
+        client.post(f"/recipes/{recipe['slug']}/prepared", json={})  # defaults to today
+        assert client.get("/recipes?same_season=true").json() == []
+
+
+class TestSameSeasonRecipeIds:
+    """Direct tests of the shared predicate against a fixed reference
+    date, so the year-boundary case doesn't depend on when the suite
+    happens to run."""
+
+    def test_a_window_crossing_new_years_matches_both_sides(self, session):
+        from datetime import date
+
+        from backend.models import PreparedEvent, Recipe
+        from backend.recipes_service import same_season_recipe_ids
+
+        before = Recipe(slug="before", title="Before")
+        after = Recipe(slug="after", title="After")
+        session.add(before)
+        session.add(after)
+        session.commit()
+        session.refresh(before)
+        session.refresh(after)
+        # A window centered on 10 Jan 2026, two years back, reaches from
+        # late Nov 2023 into late Feb 2024 — spanning the year boundary.
+        session.add(PreparedEvent(recipe_id=before.id, prepared_on=date(2023, 12, 20)))
+        session.add(PreparedEvent(recipe_id=after.id, prepared_on=date(2024, 1, 25)))
+        session.commit()
+
+        matches = same_season_recipe_ids(session, date(2026, 1, 10))
+        assert matches == {before.id, after.id}
+
+
 class TestDelete:
     def test_deletes_the_recipe_and_its_children(self, client, recipe_payload, admin):
         recipe = create(client, recipe_payload)

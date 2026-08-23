@@ -39,6 +39,7 @@ export default function RecipeListPage() {
   const order = params.get('order') || (sort === 'title' ? 'asc' : 'desc')
   const page = Number(params.get('page') || 1)
   const reviewOnly = params.get('needs_review') === 'true'
+  const sameSeason = params.get('same_season') === 'true'
 
   const update = useCallback(
     (changes) => {
@@ -100,6 +101,7 @@ export default function RecipeListPage() {
           // normal browsing — but "Needs review" is exactly where they
           // should surface, since an empty recipe needs the most work.
           include_empty: reviewOnly ? 'true' : '',
+          same_season: sameSeason ? 'true' : '',
         })
         if (cancelled) return
         setRecipes(result.items)
@@ -113,7 +115,7 @@ export default function RecipeListPage() {
     return () => {
       cancelled = true
     }
-  }, [q, section, tag, sort, order, page, reviewOnly, user])
+  }, [q, section, tag, sort, order, page, reviewOnly, sameSeason, user])
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -160,6 +162,17 @@ export default function RecipeListPage() {
             </option>
           ))}
         </select>
+        <label
+          className="flex items-center gap-1.5 rounded-lg border border-edge bg-card px-3 py-2 text-sm text-ink-muted"
+          title="Recipes cooked before in roughly this time of year, going back a few years"
+        >
+          <input
+            type="checkbox"
+            checked={sameSeason}
+            onChange={(event) => update({ same_season: event.target.checked ? 'true' : '' })}
+          />
+          This time of year
+        </label>
         {user && (
           <label className="flex items-center gap-1.5 rounded-lg border border-edge bg-card px-3 py-2 text-sm text-ink-muted">
             <input

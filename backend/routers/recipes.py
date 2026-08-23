@@ -41,6 +41,7 @@ from ..models import (
 )
 from ..permissions import allow_public_read, require_admin_role, require_user_role
 from ..recipes_service import (
+    SAME_SEASON_YEARS_BACK,
     allocate_slug,
     apply_ingredients,
     apply_steps,
@@ -48,6 +49,7 @@ from ..recipes_service import (
     exclude_empty,
     recipe_read,
     recipe_summary,
+    same_season_recipe_ids,
     total_minutes,
     touch,
 )
@@ -99,6 +101,16 @@ def list_recipes(
     not_prepared_days: int | None = Query(
         None, description="Only recipes not cooked in this many days"
     ),
+    same_season: bool = Query(
+        False,
+        description=(
+            "Only recipes cooked before in roughly this ~3-month window of "
+            "the year — Dec/Jan/Feb stays winter whichever of the last "
+            f"{SAME_SEASON_YEARS_BACK} years it happened in — going back "
+            f"{SAME_SEASON_YEARS_BACK} years. \"What did we make around "
+            'now, in past years?"'
+        ),
+    ),
     sort: str = Query("added", pattern="^(added|title|last_prepared|total_time)$"),
     order: str = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(48, ge=1, le=200),
@@ -142,6 +154,10 @@ def list_recipes(
         cutoff = date.today() - timedelta(days=not_prepared_days)
         recent = select(PreparedEvent.recipe_id).where(PreparedEvent.prepared_on >= cutoff)
         statement = statement.where(Recipe.id.not_in(recent))
+
+    if same_season:
+        ids = same_season_recipe_ids(session, date.today())
+        statement = statement.where(Recipe.id.in_(ids))
 
     rows = session.exec(statement).all()
 
