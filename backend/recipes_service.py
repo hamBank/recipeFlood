@@ -9,7 +9,7 @@ cost blocks.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlmodel import Session, and_, or_, select
 
@@ -308,6 +308,60 @@ def total_minutes(recipe: Recipe) -> int | None:
         return recipe.total_minutes_override
     parts = [m for m in (recipe.prep_minutes, recipe.cook_minutes) if m is not None]
     return sum(parts) if parts else None
+
+
+#: "Same season" looks back this many distinct calendar years for a match.
+SAME_SEASON_YEARS_BACK = 4
+
+#: Half-width of the "same season" window — 45 days either side of the
+#: target date makes a 90-day, roughly 3-month window, centered on it.
+SAME_SEASON_WINDOW_DAYS = 45
+
+
+def same_season_recipe_ids(
+    session: Session,
+    on: date,
+    *,
+    years_back: int = SAME_SEASON_YEARS_BACK,
+    window_days: int = SAME_SEASON_WINDOW_DAYS,
+) -> set[int]:
+    """Recipes with a `PreparedEvent` in the same ~3-month window as `on`,
+    in any of the `years_back` calendar years before `on`'s own year.
+
+    "Same season" means the calendar window around `on` — Dec/Jan/Feb
+    stays winter regardless of which of those years it falls in — not a
+    rolling count of days before `on`, so each target year gets its own
+    window built from `on`'s month and day rather than one window checked
+    against every event. Plain `date` arithmetic handles a window that
+    crosses a year boundary itself (a window centered on Jan 10 reaches
+    back into December): shifting a real date by `window_days` lands on
+    the correct neighbouring year without any special-casing here.
+
+    Done in Python rather than SQL for the same reason `recipe_summary`'s
+    sorts are: a few hundred `PreparedEvent` rows is cheap to scan, and
+    "the same day and month, any year" has no portable SQL spelling
+    across SQLite and Postgres.
+    """
+    windows: list[tuple[date, date]] = []
+    for offset in range(1, years_back + 1):
+        year = on.year - offset
+        try:
+            center = on.replace(year=year)
+        except ValueError:
+            # `on` is a Feb 29 with no equivalent in this target year.
+            center = on.replace(year=year, day=28)
+        windows.append(
+            (center - timedelta(days=window_days), center + timedelta(days=window_days))
+        )
+
+    matches: set[int] = set()
+    events = session.exec(
+        select(PreparedEvent.recipe_id, PreparedEvent.prepared_on)
+    ).all()
+    for recipe_id, prepared_on in events:
+        if any(lo <= prepared_on <= hi for lo, hi in windows):
+            matches.add(recipe_id)
+    return matches
 
 
 def prepared_summary(session: Session, recipe_id: int) -> tuple[date | None, int]:

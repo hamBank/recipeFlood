@@ -78,6 +78,7 @@ else is a free-form label. There is no `/categories`.
 | `include_unpublished` | bool; ignored for guests |
 | `include_empty` | bool; include recipes with no ingredients, no method and no notes — hidden by default |
 | `not_prepared_days` | Only recipes not cooked in this many days |
+| `same_season` | bool; only recipes cooked before in roughly this ~3-month window of the year, going back 4 years — "what did we make around now, in past years?" |
 | `sort` | `added` (default) / `title` / `last_prepared` / `total_time` |
 | `order` | `asc` / `desc` |
 | `limit` (≤200), `offset` | Pagination |
