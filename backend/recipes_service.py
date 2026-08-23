@@ -375,6 +375,7 @@ def recipe_read(
         nutrition_note=recipe.nutrition_note,
         source_url=recipe.source_url,
         source_name=recipe.source_name,
+        source_page=recipe.source_page,
         units_system=recipe.units_system,
         import_source=recipe.import_source,
         needs_review=recipe.needs_review,

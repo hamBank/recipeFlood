@@ -81,6 +81,14 @@ class TestCreate:
         recipe_payload["title"] = "   "
         assert client.post("/recipes", json=recipe_payload).status_code == 422
 
+    def test_source_page_round_trips_for_a_book_citation(self, client, recipe_payload):
+        del recipe_payload["source_url"]
+        recipe_payload["source_name"] = "Plenty More"
+        recipe_payload["source_page"] = 133
+        recipe = create(client, recipe_payload)
+        assert recipe["source_name"] == "Plenty More"
+        assert recipe["source_page"] == 133
+
 
 class TestRead:
     def test_lists_with_a_total_count_header(self, client, recipe_payload):
@@ -115,6 +123,25 @@ class TestRead:
         create(client, {**recipe_payload, "title": "Apple Cake"})
         titles = [r["title"] for r in client.get("/recipes?sort=title&order=asc").json()]
         assert titles == ["Apple Cake", "Chocolate Walnut Cake"]
+
+    def test_a_web_imported_recipe_reads_back_with_its_import_source(self, client, session):
+        # import_source isn't settable through POST /recipes — only the
+        # history importer (scripts/import_recipe_history.py) writes 'web',
+        # straight to the database — so this seeds the row directly rather
+        # than going through `create`.
+        from backend.models import ImportSource, Recipe
+
+        session.add(
+            Recipe(
+                slug="fetched-from-elsewhere",
+                title="Fetched From Elsewhere",
+                import_source=ImportSource.web,
+                source_url="https://example.test/fetched",
+            )
+        )
+        session.commit()
+        recipe = client.get("/recipes/fetched-from-elsewhere").json()
+        assert recipe["import_source"] == "web"
 
 
 class TestVisibility:
