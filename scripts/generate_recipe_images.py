@@ -13,7 +13,10 @@ be generated and the estimated cost, and spends nothing.
 Recipes with no image at all (`image_path IS NULL` — never uploaded,
 never self-hosted from the blog, never generated before) are the
 candidates, **most-cooked first**: a recipe made a dozen times is worth a
-placeholder before one nobody's made yet. `--limit` caps how many to
+placeholder before one nobody's made yet. Recipes with no ingredients, no
+method and no notes are skipped regardless — a bare book-citation stub
+from the cooking-history import has nothing to depict, so a photo for it
+would just be spend for spend's sake. `--limit` caps how many to
 generate; `--budget` caps estimated spend instead, stopping before the
 next image would exceed it — pass either, both, or neither.
 
@@ -44,7 +47,7 @@ from backend.image_generation import (  # noqa: E402
     is_configured,
 )
 from backend.models import PreparedEvent, Recipe  # noqa: E402
-from backend.recipes_service import recipe_tags  # noqa: E402
+from backend.recipes_service import exclude_empty, recipe_tags  # noqa: E402
 
 
 def select_recipes_needing_images(session: Session, limit: int | None = None) -> list[Recipe]:
@@ -52,7 +55,9 @@ def select_recipes_needing_images(session: Session, limit: int | None = None) ->
 
     "Most-cooked" is a plain COUNT of PreparedEvent per recipe, done in
     SQL rather than in Python, so this stays one query regardless of how
-    many recipes there are.
+    many recipes there are. Empty recipes (no ingredients, no method, no
+    notes — a bare import citation) are excluded: there's nothing there
+    to generate a placeholder photo of.
     """
     times_cooked = (
         select(PreparedEvent.recipe_id, func.count().label("n"))
@@ -65,6 +70,7 @@ def select_recipes_needing_images(session: Session, limit: int | None = None) ->
         .where(Recipe.image_path.is_(None))
         .order_by(func.coalesce(times_cooked.c.n, 0).desc(), Recipe.id)
     )
+    statement = exclude_empty(statement)
     if limit is not None:
         statement = statement.limit(limit)
     return list(session.exec(statement).all())

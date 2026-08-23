@@ -57,7 +57,10 @@ export default function CookListDetailPage() {
     setSearching(true)
     const timer = setTimeout(async () => {
       try {
-        const found = await listRecipes({ q: term, limit: 8 })
+        // include_empty: a book-citation stub (no ingredients/steps yet,
+        // just a title and where it came from) is still worth planning a
+        // cook date around, even though it's hidden from normal browsing.
+        const found = await listRecipes({ q: term, limit: 8, include_empty: 'true' })
         setResults(found.items)
       } catch {
         // A failed search just leaves the list empty; typing is not worth

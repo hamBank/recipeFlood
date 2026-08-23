@@ -222,7 +222,11 @@ nothing.
 
 Candidates are recipes with `image_path IS NULL`, **most-cooked first**
 (`select_recipes_needing_images` in the script, unit tested against the
-shared SQLite fixture — no network). `--limit` caps how many images to
+shared SQLite fixture — no network) — excluding "empty" recipes (no
+ingredients, no method, no notes; `exclude_empty` in
+`backend/recipes_service.py`, shared with the same default-hiding filter
+on `GET /recipes`), since there's nothing there to generate a photo of.
+`--limit` caps how many images to
 generate; `--budget` caps estimated spend instead, working out how many
 images that actually affords and stopping there; pass either, both, or
 neither. `--quality` (`low`/`medium`/`high`) trades cost for detail — see

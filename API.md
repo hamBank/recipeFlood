@@ -76,6 +76,7 @@ else is a free-form label. There is no `/categories`.
 | `ingredient` | Master ingredient slug — "what can I make with tahini?" |
 | `needs_review` | bool |
 | `include_unpublished` | bool; ignored for guests |
+| `include_empty` | bool; include recipes with no ingredients, no method and no notes — hidden by default |
 | `not_prepared_days` | Only recipes not cooked in this many days |
 | `sort` | `added` (default) / `title` / `last_prepared` / `total_time` |
 | `order` | `asc` / `desc` |

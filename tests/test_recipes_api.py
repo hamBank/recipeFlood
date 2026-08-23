@@ -124,6 +124,31 @@ class TestRead:
         titles = [r["title"] for r in client.get("/recipes?sort=title&order=asc").json()]
         assert titles == ["Apple Cake", "Chocolate Walnut Cake"]
 
+    def test_an_empty_recipe_is_hidden_by_default_but_reachable_with_include_empty(
+        self, client, session
+    ):
+        # A bare book/magazine citation from the cooking-history import —
+        # no ingredients, no method, no notes — has real provenance but
+        # nothing to cook from yet, so it stays out of normal browsing
+        # until someone fills it in.
+        from backend.models import Recipe
+
+        session.add(Recipe(slug="just-a-citation", title="Just A Citation"))
+        session.commit()
+
+        assert client.get("/recipes").json() == []
+        titles = [r["title"] for r in client.get("/recipes?include_empty=true").json()]
+        assert titles == ["Just A Citation"]
+
+    def test_a_recipe_with_only_a_nutrition_note_counts_as_not_empty(self, client, session):
+        from backend.models import Recipe
+
+        session.add(
+            Recipe(slug="notes-only", title="Notes Only", nutrition_note="Estimated, see label")
+        )
+        session.commit()
+        assert [r["title"] for r in client.get("/recipes").json()] == ["Notes Only"]
+
     def test_a_web_imported_recipe_reads_back_with_its_import_source(self, client, session):
         # import_source isn't settable through POST /recipes — only the
         # history importer (scripts/import_recipe_history.py) writes 'web',

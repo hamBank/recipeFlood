@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlmodel import Session, select
+from sqlmodel import Session, and_, or_, select
 
 from .costing import compute_cost
 from .models import (
@@ -170,6 +170,26 @@ def recipe_tags(session: Session, recipe_id: int) -> tuple[list[str], list[str]]
         (tag for tag in rows if tag.is_section), key=lambda t: (t.sort_order, t.name)
     )
     return [tag.name for tag in rows], [tag.name for tag in sections]
+
+
+def exclude_empty(statement, *, include_empty: bool = False):
+    """Filter out recipes with no ingredients, no method and no notes.
+
+    A book/magazine citation from the cooking-history import (source_page,
+    no URL to fetch from) is the usual case: real provenance, but nothing
+    to cook from or generate a placeholder photo for, yet. Shared between
+    the recipe browsing API and the image-generation script so the two
+    can't drift apart on what counts as "empty".
+    """
+    if include_empty:
+        return statement
+    return statement.where(
+        or_(
+            Recipe.id.in_(select(RecipeIngredient.recipe_id).distinct()),
+            Recipe.id.in_(select(RecipeStep.recipe_id).distinct()),
+            and_(Recipe.nutrition_note.is_not(None), Recipe.nutrition_note != ""),
+        )
+    )
 
 
 def build_ingredient_row(

@@ -45,6 +45,7 @@ from ..recipes_service import (
     apply_ingredients,
     apply_steps,
     apply_tags,
+    exclude_empty,
     recipe_read,
     recipe_summary,
     total_minutes,
@@ -86,6 +87,15 @@ def list_recipes(
     ingredient: str | None = Query(None, description="Master ingredient slug"),
     needs_review: bool | None = None,
     include_unpublished: bool = False,
+    include_empty: bool = Query(
+        False,
+        description=(
+            "Include recipes with no ingredients, no method and no notes "
+            "— hidden by default. A book/magazine citation from the "
+            "cooking-history import (source_page, no URL to fetch from) "
+            "is the usual case: real provenance, nothing to cook from yet."
+        ),
+    ),
     not_prepared_days: int | None = Query(
         None, description="Only recipes not cooked in this many days"
     ),
@@ -100,6 +110,8 @@ def list_recipes(
     # Unpublished drafts are for signed-in editors only, whatever is asked.
     if not (include_unpublished and user is not None):
         statement = statement.where(Recipe.is_published == True)  # noqa: E712
+
+    statement = exclude_empty(statement, include_empty=include_empty)
 
     if q:
         pattern = f"%{q.strip()}%"

@@ -80,8 +80,9 @@ class TestPromotion:
         self, client, recipes, admin
     ):
         # The payoff of one table: no recipe changes, because every recipe
-        # already links to this exact tag row.
-        assert client.get("/recipes?tag=seafood").json()[0]["sections"] == []
+        # already links to this exact tag row. include_empty=true because
+        # the `recipes` fixture above has no ingredients/steps of its own.
+        assert client.get("/recipes?tag=seafood&include_empty=true").json()[0]["sections"] == []
 
         promoted = client.patch(
             "/tags/seafood", json={"is_section": True, "sort_order": 110}

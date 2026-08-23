@@ -7,15 +7,21 @@ covered here.
 
 from datetime import date
 
-from backend.models import PreparedEvent, Recipe
+from backend.models import PreparedEvent, Recipe, RecipeStep
 from scripts.generate_recipe_images import select_recipes_needing_images
 
 
-def make_recipe(session, title, *, image_path=None):
+def make_recipe(session, title, *, image_path=None, empty=False):
+    """A recipe with at least one method step, so it isn't itself excluded
+    by the "empty recipe" filter — unless the test asks for `empty=True`,
+    to exercise that filter directly."""
     recipe = Recipe(slug=title.lower().replace(" ", "-"), title=title, image_path=image_path)
     session.add(recipe)
     session.commit()
     session.refresh(recipe)
+    if not empty:
+        session.add(RecipeStep(recipe_id=recipe.id, position=0, text="Cook it."))
+        session.commit()
     return recipe
 
 
@@ -54,3 +60,9 @@ class TestSelectRecipesNeedingImages:
         for i in range(3):
             make_recipe(session, f"Recipe {i}")
         assert len(select_recipes_needing_images(session, limit=2)) == 2
+
+    def test_an_empty_recipe_is_not_a_candidate(self, session):
+        # A bare book-citation stub from the history import — nothing to
+        # depict, so no point spending on a placeholder photo for it.
+        make_recipe(session, "Just A Citation", empty=True)
+        assert select_recipes_needing_images(session) == []
