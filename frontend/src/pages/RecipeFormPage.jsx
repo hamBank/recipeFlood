@@ -372,6 +372,18 @@ export default function RecipeFormPage() {
           />
         </Field>
 
+        <div className="sm:col-span-2">
+          <Field label="Notes" hint="Anything else — yield, serving suggestion, where this came from">
+            <textarea
+              value={form.nutrition_note}
+              onChange={(event) => set('nutrition_note', event.target.value)}
+              rows={3}
+              placeholder="Doubles well. Nice with a squeeze of lemon at the end."
+              className={inputClass}
+            />
+          </Field>
+        </div>
+
         <Field label="Source name">
           <input
             value={form.source_name}
