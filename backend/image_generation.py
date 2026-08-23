@@ -17,6 +17,8 @@ there isn't one — this is original output from a text prompt.
 from __future__ import annotations
 
 import base64
+import random
+import time
 
 import requests
 
@@ -34,6 +36,12 @@ COST_PER_IMAGE_USD = {
 }
 
 _ENDPOINT = "https://api.openai.com/v1/images/generations"
+
+#: A backfill run fires this endpoint hundreds of times in a row, so
+#: hitting OpenAI's rate limit is routine, not exceptional — worth a few
+#: retries before letting a recipe count as a real failure.
+_MAX_ATTEMPTS = 5
+_BASE_DELAY_SECONDS = 1.0
 
 
 class ImageGenerationUnavailable(RuntimeError):
@@ -62,6 +70,22 @@ def build_prompt(title: str, description: str | None, section: str | None) -> st
     return " ".join(parts)
 
 
+def _retry_delay(attempt: int, retry_after_header: str | None) -> float:
+    """Seconds to wait before retrying a rate-limited (429) request.
+
+    Honours the server's own `Retry-After` header when it sends a valid
+    one; otherwise falls back to exponential backoff (1s, 2s, 4s, 8s...)
+    with a little jitter so retries piling up from the same burst don't
+    all land on the same second.
+    """
+    if retry_after_header is not None:
+        try:
+            return max(0.0, float(retry_after_header))
+        except ValueError:
+            pass
+    return _BASE_DELAY_SECONDS * (2**attempt) + random.uniform(0, 0.5)
+
+
 def generate_image(
     prompt: str, *, quality: str = "low", size: str = "1024x1024"
 ) -> bytes:
@@ -71,26 +95,33 @@ def generate_image(
     `requests`' own exceptions / a `ValueError` (an unexpected response
     shape) propagate otherwise — the caller (the backfill script) is what
     decides a failed generation just means one more recipe skipped this
-    run.
+    run. A 429 (rate limited) is retried with backoff up to
+    `_MAX_ATTEMPTS` times before it's allowed to propagate that way too.
     """
     if not is_configured():
         raise ImageGenerationUnavailable(
             "OPENAI_API_KEY is not set — image generation is unavailable"
         )
-    response = requests.post(
-        _ENDPOINT,
-        headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-        json={
-            "model": settings.openai_image_model,
-            "prompt": prompt,
-            "size": size,
-            "quality": quality,
-            "n": 1,
-            # GPT image models always return base64 and reject
-            # response_format outright — omitted, not set to "b64_json".
-        },
-        timeout=120,
-    )
+    payload = {
+        "model": settings.openai_image_model,
+        "prompt": prompt,
+        "size": size,
+        "quality": quality,
+        "n": 1,
+        # GPT image models always return base64 and reject
+        # response_format outright — omitted, not set to "b64_json".
+    }
+    for attempt in range(_MAX_ATTEMPTS):
+        response = requests.post(
+            _ENDPOINT,
+            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+            json=payload,
+            timeout=120,
+        )
+        if response.status_code == 429 and attempt < _MAX_ATTEMPTS - 1:
+            time.sleep(_retry_delay(attempt, response.headers.get("Retry-After")))
+            continue
+        break
     response.raise_for_status()
     data = response.json().get("data") or []
     if not data or not data[0].get("b64_json"):
