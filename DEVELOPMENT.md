@@ -200,6 +200,51 @@ own dedupe/idempotency logic is tested against the shared SQLite fixture
 with `fetch_recipe_draft` mocked out, in `tests/
 test_import_recipe_history.py`.
 
+## Generating placeholder images
+
+Recipes with no photo of any kind — never uploaded, never self-hosted
+from the blog, never generated before — get a lettered placeholder tile
+on the grid. `scripts/generate_recipe_images.py` can replace that with an
+actual illustration instead, generated from the recipe's own title and
+description:
+
+```bash
+python -m scripts.generate_recipe_images --dry-run            # preview, no key needed
+python -m scripts.generate_recipe_images --budget 5.00         # stop before spending more than this
+python -m scripts.generate_recipe_images --limit 20 --quality low
+```
+
+Needs `OPENAI_API_KEY` (see `.env.example`) — a separate provider and key
+from the rest of the app's AI features, since Claude has no
+image-generation endpoint of its own. `--dry-run` works without a key: it
+lists what would be generated and the estimated total cost, and spends
+nothing.
+
+Candidates are recipes with `image_path IS NULL`, **most-cooked first**
+(`select_recipes_needing_images` in the script, unit tested against the
+shared SQLite fixture — no network). `--limit` caps how many images to
+generate; `--budget` caps estimated spend instead, working out how many
+images that actually affords and stopping there; pass either, both, or
+neither. `--quality` (`low`/`medium`/`high`) trades cost for detail — see
+`backend/image_generation.py`'s `COST_PER_IMAGE_USD` for the per-image
+estimates this is based on, and verify them against
+platform.openai.com/pricing before a large run since they can drift.
+`gpt-image-1` (the default model, `OPENAI_IMAGE_MODEL`) is scheduled for
+deprecation on 2026-10-23 — swap in its replacement via that setting when
+the time comes, no code change needed.
+
+Every generated image is saved self-hosted, same as an uploaded photo,
+and the recipe is flagged `image_generated=True` so the UI shows an
+"AI photo" badge over it rather than let an illustration pass as a real
+photo of the dish — see SPEC.md "AI-generated placeholder photos" for why
+that flag exists and why the copyright caution around the blog's
+hotlinked images (SPEC.md "Images") doesn't apply here.
+
+`backend/image_generation.py`'s prompt-building is unit tested with no
+network in `tests/test_image_generation.py`, matching the pattern
+`recipe_fetch.py` set: the function that actually calls the API isn't
+covered by tests, only exercised by hand against a real key.
+
 ## Filling in nutrition and cost
 
 The pantry starts with names only. Two passes fill in the rest — a local

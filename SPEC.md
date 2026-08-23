@@ -375,6 +375,33 @@ keep `image_source_url` for provenance and show a generated placeholder
 tile. Turn it on if you want them; better still, photograph the dishes and
 upload your own, which the recipe form already supports.
 
+### AI-generated placeholder photos
+
+A third option, alongside "upload your own" and the lettered-tile
+placeholder: `scripts/generate_recipe_images.py` asks an image model for
+an illustration from the recipe's own title and description, and
+self-hosts the result the same way an uploaded photo would be. Claude has
+no image-generation endpoint, so this calls OpenAI's Images API instead —
+a separate provider, a separate key (`OPENAI_API_KEY`), a real per-image
+cost.
+
+This sidesteps the copyright question above entirely rather than
+answering it: there is no commercial photographer's work being
+republished, because nothing is *sourced* from anywhere — it's original
+output from a text prompt. What it isn't is a photo of the actual dish,
+and the UI never lets that ambiguity stand: `Recipe.image_generated`
+marks every image this script creates, and the recipe grid and detail
+page both show an "AI photo" badge over it. A generated image is a
+placeholder to look at while browsing, not documentation of what
+someone's cooking looked like.
+
+Because it costs real money per image, the script runs as an offline
+backfill rather than automatically on save, targets recipes with no
+photo of *any* kind, most-cooked first (a recipe made a dozen times earns
+a placeholder before one nobody's made yet), and takes `--limit` and
+`--budget` to cap a run before it starts rather than after. See
+DEVELOPMENT.md "Generating placeholder images".
+
 ## Importing cooking history
 
 A household's own spreadsheet — one row per dish cooked, going back years

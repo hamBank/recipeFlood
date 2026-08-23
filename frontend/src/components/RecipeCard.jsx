@@ -26,27 +26,38 @@ export default function RecipeCard({ recipe, cookList, onCookListChange }) {
   return (
     <Link
       to={`/recipes/${recipe.slug}`}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-edge bg-card shadow-sm transition hover:shadow-md"
+      className="group flex flex-col overflow-hidden rounded-xl border border-edge bg-card shadow-sm transition hover:shadow-md"
     >
-      {cookList && (
-        <QuickAddToCookList
-          recipeId={recipe.id}
-          cookList={cookList}
-          onChange={onCookListChange}
-          compact
-        />
-      )}
+      <div className="relative">
+        {cookList && (
+          <QuickAddToCookList
+            recipeId={recipe.id}
+            cookList={cookList}
+            onChange={onCookListChange}
+            compact
+          />
+        )}
 
-      {recipe.image_path ? (
-        <img
-          src={`/media/${recipe.image_path}`}
-          alt=""
-          loading="lazy"
-          className="h-40 w-full object-cover"
-        />
-      ) : (
-        <Placeholder title={recipe.title} />
-      )}
+        {recipe.image_path ? (
+          <img
+            src={`/media/${recipe.image_path}`}
+            alt=""
+            loading="lazy"
+            className="h-40 w-full object-cover"
+          />
+        ) : (
+          <Placeholder title={recipe.title} />
+        )}
+
+        {recipe.image_generated && (
+          <span
+            title="An AI-generated illustration, not a photo of this actual dish"
+            className="absolute bottom-2 left-2 rounded-full bg-card/90 px-2 py-1 text-[11px] font-medium text-ink-muted backdrop-blur"
+          >
+            AI photo
+          </span>
+        )}
+      </div>
 
       <div className="flex flex-1 flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">

@@ -170,11 +170,21 @@ export default function RecipeDetailPage() {
         {recipe.description && <p className="text-ink-muted">{recipe.description}</p>}
 
         {recipe.image_path && (
-          <img
-            src={`/media/${recipe.image_path}`}
-            alt=""
-            className="max-h-96 w-full rounded-xl object-cover"
-          />
+          <div className="relative">
+            <img
+              src={`/media/${recipe.image_path}`}
+              alt=""
+              className="max-h-96 w-full rounded-xl object-cover"
+            />
+            {recipe.image_generated && (
+              <span
+                title="An AI-generated illustration, not a photo of this actual dish"
+                className="absolute bottom-3 left-3 rounded-full bg-card/90 px-2.5 py-1 text-xs font-medium text-ink-muted backdrop-blur"
+              >
+                AI-generated photo
+              </span>
+            )}
+          </div>
         )}
 
         <dl className="grid grid-cols-2 gap-4 rounded-xl border border-edge bg-card p-4 sm:grid-cols-3 lg:grid-cols-6">
