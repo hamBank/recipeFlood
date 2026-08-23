@@ -134,6 +134,55 @@ human editing the row. `PATCH` stamps `cost_updated_at` (and defaults
 batteries, shampoo, cat litter. `source` accepts any of the fourteen
 `IngredientSource` values; anything else is a 422.
 
+## Cooking lists
+
+Signed-in only, every endpoint.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/cook-lists` | newest date first; `since`, `until`, `limit`, `offset`; `X-Total-Count` |
+| POST | `/cook-lists` | `{cook_date?, description?, notes?, recipes?}` — date defaults to today |
+| GET | `/cook-lists/{id}` | |
+| PATCH | `/cook-lists/{id}` | omit `recipes` to leave membership alone; pass a list to replace it |
+| DELETE | `/cook-lists/{id}` | shopping items it created stay, with `cook_list_id` cleared |
+| POST | `/cook-lists/{id}/recipes` | `{recipe_id, servings?, note?}`; an existing recipe is updated, not duplicated |
+| DELETE | `/cook-lists/{id}/recipes/{recipe_id}` | |
+| POST | `/cook-lists/{id}/add-to-shopping` | folds the list's ingredients into the shopping list |
+
+Each recipe row in a read carries `scalable` and `scale_factor` alongside
+`servings` and `base_servings`. `scalable: false` means the recipe has no
+serving size to scale from, so `scale_factor` is 1.0 and the amounts are
+the ones as written — say so rather than implying the scaling happened.
+
+`add-to-shopping` returns `{added, merged, skipped, items}`. It is
+deliberately additive and re-runnable: calling it twice adds the
+ingredients twice. `skipped` lists any line with no usable name.
+
+## The shopping list
+
+One permanent list. Signed-in only — it carries prices.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/shopping` | the whole list, grouped and ordered |
+| POST | `/shopping` | `{name, ingredient_id?, weight_grams?, quantity?, unit?, note?}` — an unmatched name is matched against the pantry |
+| PATCH | `/shopping/{id}` | edit an amount, or `{is_checked}` to tick off |
+| DELETE | `/shopping/{id}` | |
+| POST | `/shopping/clear-checked` | deletes only the ticked items |
+| POST | `/shopping/uncheck-all` | unticks everything — the undo for clearing |
+
+`GET` returns `{items, shops, total_count, checked_count, total_cents,
+priced_fraction}`. `shops` is in walking order and each item carries its
+own `shop`, so a client renders the grouping without deciding the order.
+`priced_fraction` is the share of *unticked* items that had a price —
+the same honesty rule as `RecipeCost.known_fraction`: a total built from
+half the list is a floor, not an answer.
+
+Each item also carries `amount_text` (rendered server-side, so "450 g" and
+"1.2 kg" are decided in one place) and `contributions`, the per-recipe
+breakdown of a merged line. Editing an amount via `PATCH` clears
+`contributions`.
+
 ## AI import
 
 | Method | Path | Access | Notes |

@@ -72,7 +72,9 @@ backend/
   slugs.py           # URL slug allocation
   recipes_service.py # persistence + read-model assembly shared by every writer
   blog_parser.py     # deterministic fallback parser for the Blogger posts
-  shopping_list.py   # rationalising a shopping-list export into pantry rows
+  pantry_import.py   # rationalising a shopping-list export into pantry rows
+  cook_lists.py      # cooking-list read model + the bridge to shopping
+  shopping.py        # shopping-list aggregation, shop grouping, pricing
   afcd.py             # local matching against the Australian Food Composition
                       # Database — real nutrition data, no AI involved
   ingredient_enrichment.py # Claude prompt + response normalisation for the
@@ -85,6 +87,8 @@ backend/
     recipes.py       # /recipes CRUD, prepared log, image upload
     ingredients.py   # /ingredients master list (signed-in only)
     imports.py       # /imports/paste, /imports/image
+    cook_lists.py    # /cook-lists CRUD + add-to-shopping
+    shopping.py      # /shopping, the one permanent list
   static/            # compiled frontend output — served at /
   uploads/           # recipe photos — served at /media, NOT in git
 alembic/             # migration scripts

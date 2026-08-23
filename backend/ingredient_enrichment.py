@@ -125,16 +125,59 @@ def _client():
     return Anthropic(api_key=settings.anthropic_api_key)
 
 
+def salvage_objects(text: str) -> list[dict]:
+    """Every complete JSON object in a possibly-truncated array.
+
+    A response cut off by `max_tokens` has no closing bracket, so it will
+    not parse as an array at all — but the twenty items before the cut are
+    perfectly good, and throwing them away means paying for them twice.
+    This walks the array one value at a time and keeps whatever decoded
+    cleanly before the text ran out.
+    """
+    start = text.find("[")
+    if start == -1:
+        return []
+
+    decoder = json.JSONDecoder()
+    objects: list[dict] = []
+    index = start + 1
+    while index < len(text):
+        while index < len(text) and text[index] in ", \t\r\n":
+            index += 1
+        if index >= len(text) or text[index] == "]":
+            break
+        try:
+            value, index = decoder.raw_decode(text, index)
+        except json.JSONDecodeError:
+            break  # truncated mid-object; everything whole is already collected
+        if isinstance(value, dict):
+            objects.append(value)
+    return objects
+
+
 def parse_json_response(text: str) -> Any:
-    """Pull the JSON array out of a model response, tolerating a fence."""
+    """Pull the JSON array out of a model response.
+
+    Tolerates a markdown fence, leading prose, and — via `salvage_objects` —
+    a response truncated partway through the array.
+    """
     cleaned = _FENCE.sub("", text.strip())
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
-        start, end = cleaned.find("["), cleaned.rfind("]")
-        if start == -1 or end <= start:
-            raise ValueError(f"no JSON array in model response: {text[:200]!r}")
-        return json.loads(cleaned[start : end + 1])
+        pass
+
+    start, end = cleaned.find("["), cleaned.rfind("]")
+    if start != -1 and end > start:
+        try:
+            return json.loads(cleaned[start : end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    salvaged = salvage_objects(cleaned)
+    if salvaged:
+        return salvaged
+    raise ValueError(f"no JSON array in model response: {text[:200]!r}")
 
 
 def derive_energy_kj(calories_kcal: float | None) -> float | None:
@@ -239,12 +282,28 @@ def match_results(names: list[str], raw_results: list[dict]) -> dict[str, dict]:
     return matched
 
 
+#: Output budget per item. Each object is ~12 short fields plus an
+#: occasional one-line `note`; 500 leaves comfortable headroom, and running
+#: out mid-array is far more expensive than over-reserving (nothing is
+#: billed for tokens that aren't generated).
+TOKENS_PER_ITEM = 500
+
+#: Ceiling for a single non-streaming request. The SDK's default HTTP
+#: timeout is what bites above this, not the model's output limit.
+MAX_OUTPUT_TOKENS = 16_000
+
+
 def enrich_batch(names: list[str]) -> dict[str, dict]:
     """Ask Claude about a batch of ingredient names. See `match_results`
-    for how the response is lined back up with `names`."""
+    for how the response is lined back up with `names`.
+
+    A response truncated by `max_tokens` still yields every complete item
+    that arrived before the cut; the names that didn't make it simply come
+    back missing, and `enrich_names` retries those.
+    """
     response = _client().messages.create(
         model=settings.anthropic_model,
-        max_tokens=400 * max(len(names), 1),
+        max_tokens=min(TOKENS_PER_ITEM * max(len(names), 1), MAX_OUTPUT_TOKENS),
         system=SYSTEM_PROMPT,
         messages=[
             {
@@ -258,6 +317,69 @@ def enrich_batch(names: list[str]) -> dict[str, dict]:
     if not isinstance(raw_results, list):
         raise ValueError(f"expected a JSON array, got {type(raw_results).__name__}")
     return match_results(names, raw_results)
+
+
+def enrich_names(
+    names: list[str], *, on_note=None, _depth: int = 0
+) -> dict[str, dict]:
+    """`enrich_batch` with the batch-level failure modes handled.
+
+    Two things go wrong at scale, and both used to cost the whole batch:
+
+    * the response is **truncated** by `max_tokens`, so the tail of the
+      array never arrives; and
+    * the call **fails outright** (a transient API error, or output that
+      cannot be parsed at all).
+
+    Either way the fix is the same — halve the batch and ask again. Smaller
+    batches produce shorter responses, so a truncation almost always
+    resolves on the retry, and a genuinely unanswerable single item is
+    isolated to itself instead of taking nineteen others down with it.
+
+    `on_note` receives a human-readable line about each retry, so a long
+    run says what it is doing rather than going quiet.
+    """
+    if not names:
+        return {}
+
+    try:
+        results = enrich_batch(names)
+    except EnrichmentUnavailable:
+        raise
+    except Exception as error:  # noqa: BLE001 — one bad batch must not kill a run
+        if len(names) == 1 or _depth >= 4:
+            if on_note:
+                on_note(f"giving up on {len(names)} item(s): {error}")
+            return {}
+        if on_note:
+            on_note(f"batch of {len(names)} failed ({error}); splitting")
+        return _split_and_retry(names, on_note=on_note, _depth=_depth)
+
+    missing = [name for name in names if name not in results]
+    if not missing:
+        return results
+
+    # Truncation: some items answered, the rest were cut off.
+    if len(missing) < len(names) and _depth < 4:
+        if on_note:
+            on_note(f"{len(missing)} of {len(names)} item(s) missing; retrying those")
+        results.update(enrich_names(missing, on_note=on_note, _depth=_depth + 1))
+        return results
+
+    # Nothing came back for any of them — same remedy as an outright failure.
+    if len(names) > 1 and _depth < 4:
+        if on_note:
+            on_note(f"no usable results for {len(names)} item(s); splitting")
+        return _split_and_retry(names, on_note=on_note, _depth=_depth)
+
+    return results
+
+
+def _split_and_retry(names: list[str], *, on_note, _depth: int) -> dict[str, dict]:
+    middle = len(names) // 2
+    first = enrich_names(names[:middle], on_note=on_note, _depth=_depth + 1)
+    second = enrich_names(names[middle:], on_note=on_note, _depth=_depth + 1)
+    return {**first, **second}
 
 
 def cost_source_label() -> str:

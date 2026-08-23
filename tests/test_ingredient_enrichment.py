@@ -7,6 +7,7 @@ caught. `enrich_batch` itself (the network call) is not covered here.
 
 import pytest
 
+from backend import ingredient_enrichment as enrichment
 from backend.ingredient_enrichment import (
     MAX_PLAUSIBLE_COST_PER_KG_CENTS,
     derive_energy_kj,
@@ -147,3 +148,106 @@ class TestMatchResults:
         raw = [{"name": "  Plain Flour  ", "is_human_food": True}]
         matched = match_results(["plain flour"], raw)
         assert "plain flour" in matched
+
+
+class TestTruncatedResponses:
+    """A response cut off by max_tokens used to lose the whole batch.
+
+    The real failure looked like this: twenty items requested, the model
+    fenced its output and ran out of room partway through item eighteen, so
+    there was no closing bracket, `json.loads` failed, `rfind("]")` found
+    nothing, and all twenty were reported as "no JSON array in model
+    response" — having already been paid for.
+    """
+
+    def test_salvages_the_complete_items_from_a_truncated_array(self):
+        text = (
+            '```json\n[\n'
+            '  {"name": "boiling water", "calories_kcal": 0},\n'
+            '  {"name": "orange rind", "calories_kcal": 47},\n'
+            '  {"name": "light cream cheese", "calories_kcal": 20'
+        )
+        results = enrichment.parse_json_response(text)
+        assert [r["name"] for r in results] == ["boiling water", "orange rind"]
+
+    def test_a_complete_fenced_response_still_parses_whole(self):
+        text = '```json\n[{"name": "salt", "sodium_mg": 38758}]\n```'
+        assert enrichment.parse_json_response(text) == [
+            {"name": "salt", "sodium_mg": 38758}
+        ]
+
+    def test_genuine_rubbish_still_raises(self):
+        with pytest.raises(ValueError, match="no JSON array"):
+            enrichment.parse_json_response("I'm sorry, I can't help with that.")
+
+    def test_salvage_ignores_a_trailing_partial_object(self):
+        assert enrichment.salvage_objects('[{"a": 1}, {"b":') == [{"a": 1}]
+
+    def test_salvage_of_an_untruncated_array_returns_everything(self):
+        assert enrichment.salvage_objects('[{"a": 1}, {"b": 2}]') == [
+            {"a": 1},
+            {"b": 2},
+        ]
+
+
+class TestBatchRetry:
+    """`enrich_names` turns the two batch-level failure modes into retries."""
+
+    def _result(self, name):
+        return {"name": name, "is_human_food": True, "calories_kcal": 1}
+
+    def test_a_truncated_batch_retries_only_the_missing_items(self, monkeypatch):
+        calls = []
+
+        def fake_enrich_batch(names):
+            calls.append(list(names))
+            # First call answers only the first two of four — a truncation.
+            if len(calls) == 1:
+                return {n: self._result(n) for n in names[:2]}
+            return {n: self._result(n) for n in names}
+
+        monkeypatch.setattr(enrichment, "enrich_batch", fake_enrich_batch)
+        results = enrichment.enrich_names(["a", "b", "c", "d"])
+
+        assert sorted(results) == ["a", "b", "c", "d"]
+        assert calls == [["a", "b", "c", "d"], ["c", "d"]]
+
+    def test_a_failing_batch_is_split_rather_than_lost(self, monkeypatch):
+        def fake_enrich_batch(names):
+            if len(names) > 1:
+                raise RuntimeError("overloaded")
+            return {names[0]: self._result(names[0])}
+
+        monkeypatch.setattr(enrichment, "enrich_batch", fake_enrich_batch)
+        results = enrichment.enrich_names(["a", "b", "c", "d"])
+        assert sorted(results) == ["a", "b", "c", "d"]
+
+    def test_one_hopeless_item_does_not_take_the_batch_with_it(self, monkeypatch):
+        def fake_enrich_batch(names):
+            if "bad" in names:
+                raise RuntimeError("nope")
+            return {n: self._result(n) for n in names}
+
+        monkeypatch.setattr(enrichment, "enrich_batch", fake_enrich_batch)
+        results = enrichment.enrich_names(["good1", "bad", "good2"])
+        assert "bad" not in results
+        assert sorted(results) == ["good1", "good2"]
+
+    def test_a_missing_key_error_is_never_swallowed(self, monkeypatch):
+        def fake_enrich_batch(names):
+            raise enrichment.EnrichmentUnavailable("no key")
+
+        monkeypatch.setattr(enrichment, "enrich_batch", fake_enrich_batch)
+        with pytest.raises(enrichment.EnrichmentUnavailable):
+            enrichment.enrich_names(["a", "b"])
+
+    def test_retries_are_reported_to_the_caller(self, monkeypatch):
+        def fake_enrich_batch(names):
+            if len(names) == 2:
+                raise RuntimeError("boom")
+            return {n: self._result(n) for n in names}
+
+        monkeypatch.setattr(enrichment, "enrich_batch", fake_enrich_batch)
+        notes = []
+        enrichment.enrich_names(["a", "b"], on_note=notes.append)
+        assert any("splitting" in note for note in notes)

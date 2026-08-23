@@ -13,6 +13,8 @@ const apiPrefixes = [
   '/tags',
   '/ingredients',
   '/imports',
+  '/cook-lists',
+  '/shopping',
   '/media',
 ]
 

@@ -31,7 +31,7 @@ that to just one, which is worth doing once you've reviewed a batch of
 prices and want to stop re-asking for items that already have one.
 
 **Reclassification.** The model is also asked, for each item, whether it's
-actually a human food at all — the same question backend/shopping_list.py
+actually a human food at all — the same question backend/pantry_import.py
 answers with a keyword list on the way in, but with more context. When it
 says no with any confidence, this script sets `is_food = False` on that
 row and writes nothing else to it, catching what the keyword list missed
@@ -50,6 +50,7 @@ import argparse
 import csv
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -59,9 +60,8 @@ from sqlmodel import Session, select  # noqa: E402
 from backend.afcd import find_match, load_afcd  # noqa: E402
 from backend.database import engine  # noqa: E402
 from backend.ingredient_enrichment import (  # noqa: E402
-    EnrichmentUnavailable,
     cost_source_label,
-    enrich_batch,
+    enrich_names,
     is_configured,
 )
 from backend.models import Ingredient, utcnow  # noqa: E402
@@ -148,8 +148,21 @@ def main() -> int:
         help="restrict what is requested and written (default: all)",
     )
     parser.add_argument(
+        "--phase", choices=["all", "local", "network"], default="all",
+        help=(
+            "which passes to run. 'local' is the AFCD nutrition match only — "
+            "no network, no API key, no cost, finishes in seconds. 'network' "
+            "is the Claude pass only (nutrition Claude has to guess, plus "
+            "price and package size). Default runs local then network."
+        ),
+    )
+    parser.add_argument(
         "--skip-afcd", action="store_true",
-        help="go straight to the AI estimate, skipping the local AFCD match",
+        help="alias for --phase network, kept for existing scripts",
+    )
+    parser.add_argument(
+        "--concurrency", type=int, default=4,
+        help="Claude batches to keep in flight at once (default: 4)",
     )
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--limit", type=int, default=None, help="stop after N ingredients")
@@ -168,12 +181,19 @@ def main() -> int:
         # --- Pass 1: AFCD, local, free. Runs before any API key check, and
         # over every candidate regardless of --limit/--resume-from — those
         # exist to bound Claude spend, and this pass has none. ---
-        if args.only in ("all", "nutrition") and not args.skip_afcd:
+        run_local = args.phase in ("all", "local") and not args.skip_afcd
+        run_network = args.phase in ("all", "network")
+
+        if run_local and args.only in ("all", "nutrition"):
             afcd_foods = load_afcd()
             if not afcd_foods:
                 print(
                     "no local AFCD data (run scripts/fetch_afcd.py first) — "
-                    "skipping straight to AI estimates for nutrition"
+                    + (
+                        "nothing for this phase to do"
+                        if args.phase == "local"
+                        else "falling through to AI estimates for nutrition"
+                    )
                 )
             else:
                 nutrition_candidates = [
@@ -205,7 +225,9 @@ def main() -> int:
                 print(f"AFCD: matched {afcd_matched}/{len(nutrition_candidates)} against local data")
 
         # --- Pass 2: Claude, for whatever pass 1 didn't cover, plus price
-        # (which AFCD never carries) and package size. ---
+        # (which AFCD never carries) and package size. This is the slow,
+        # costed half — everything above is local and free, which is why
+        # --phase local exists to run it on its own. ---
         candidates = sorted(
             (i for i in session.exec(select(Ingredient)).all() if needs_enrichment(i, args.only)),
             key=lambda i: i.id,
@@ -214,7 +236,13 @@ def main() -> int:
         if args.limit is not None:
             candidates = candidates[: args.limit]
 
-        if not candidates:
+        if not run_network:
+            if candidates:
+                print(
+                    f"\n{len(candidates)} item(s) still need Claude — "
+                    "run again with --phase network to fill those in."
+                )
+        elif not candidates:
             print("nothing left for Claude — every food item already has what --only asked for")
         elif not is_configured():
             print(
@@ -222,50 +250,66 @@ def main() -> int:
                 "set — see .env.example. Nutrition from AFCD (if any) is still saved below."
             )
         else:
-            print(f"Claude: {len(candidates)} ingredient(s), in batches of {args.batch_size}")
-            for start in range(0, len(candidates), args.batch_size):
-                batch = candidates[start : start + args.batch_size]
+            batches = [
+                candidates[start : start + args.batch_size]
+                for start in range(0, len(candidates), args.batch_size)
+            ]
+            workers = max(1, args.concurrency)
+            print(
+                f"Claude: {len(candidates)} ingredient(s) in {len(batches)} batches "
+                f"of {args.batch_size}, {workers} at a time"
+            )
+
+            def fetch(batch: list[Ingredient]) -> dict[str, dict]:
                 names = [i.name for i in batch]
-                print(f"  [{start + 1}-{start + len(batch)}/{len(candidates)}] {', '.join(names[:4])}...")
+                notes: list[str] = []
+                results = enrich_names(names, on_note=notes.append)
+                for note in notes:
+                    print(f"    - {note}", file=sys.stderr)
+                return results
 
-                try:
-                    results = enrich_batch(names)
-                except EnrichmentUnavailable:
-                    raise
-                except Exception as error:  # noqa: BLE001 — one bad batch must not kill the run
-                    print(f"    ! batch failed: {error}", file=sys.stderr)
-                    failed += len(batch)
-                    continue
+            done = 0
+            # Batches are fetched in parallel but applied on this thread:
+            # the API calls are what the run waits on, and a Session is not
+            # safe to write from several threads at once.
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                for group_start in range(0, len(batches), workers):
+                    group = batches[group_start : group_start + workers]
+                    for batch, results in zip(group, pool.map(fetch, group)):
+                        done += len(batch)
+                        names = [i.name for i in batch]
+                        print(f"  [{done}/{len(candidates)}] {', '.join(names[:4])}...")
 
-                for ingredient in batch:
-                    result = results.get(ingredient.name)
-                    if result is None:
-                        failed += 1
-                        continue
-                    changed = apply_result(ingredient, result, only=args.only)
-                    if changed:
-                        if not args.dry_run:
-                            session.add(ingredient)
-                        if "is_food" in changed:
-                            reclassified += 1
-                        else:
-                            enriched += 1
-                    report_rows.append(
-                        {
-                            "name": ingredient.name, "source": "Claude",
-                            "matched_to": "", "match_score": "",
-                            "is_human_food": result["is_human_food"],
-                            "confidence": result["confidence"], "note": result["note"] or "",
-                            "changed_fields": ";".join(changed),
-                            "cost_per_kg_cents": ingredient.cost_per_kg_cents or "",
-                            "calories_kcal": ingredient.calories_kcal or "",
-                        }
-                    )
+                        for ingredient in batch:
+                            result = results.get(ingredient.name)
+                            if result is None:
+                                failed += 1
+                                continue
+                            changed = apply_result(ingredient, result, only=args.only)
+                            if changed:
+                                if not args.dry_run:
+                                    session.add(ingredient)
+                                if "is_food" in changed:
+                                    reclassified += 1
+                                else:
+                                    enriched += 1
+                            report_rows.append(
+                                {
+                                    "name": ingredient.name, "source": "Claude",
+                                    "matched_to": "", "match_score": "",
+                                    "is_human_food": result["is_human_food"],
+                                    "confidence": result["confidence"],
+                                    "note": result["note"] or "",
+                                    "changed_fields": ";".join(changed),
+                                    "cost_per_kg_cents": ingredient.cost_per_kg_cents or "",
+                                    "calories_kcal": ingredient.calories_kcal or "",
+                                }
+                            )
 
-                if not args.dry_run:
-                    session.flush()  # a stop here loses at most this one batch
-                if args.sleep:
-                    time.sleep(args.sleep)
+                    if not args.dry_run:
+                        session.flush()  # a stop here loses at most this group
+                    if args.sleep:
+                        time.sleep(args.sleep)
 
         if args.dry_run:
             session.rollback()

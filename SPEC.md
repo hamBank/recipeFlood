@@ -161,6 +161,65 @@ mid-season, mid-tier Australian retail estimate is enough, and
 
 Neither pass ever overwrites a value already on the row.
 
+## Cooking lists and the shopping list
+
+A **cooking list** is a date, an optional name, and some recipes — a week's
+dinners, a dinner party, Christmas. The date is the identity of the list;
+the name is for the ones that earn one ("Anna's birthday"). Two lists can
+share a date, because a week of dinners and Saturday's cake are separate
+plans that happen to start on the same Monday.
+
+Sending a cooking list to the shopping list folds every recipe's
+ingredients into one set of lines. It is additive and re-runnable —
+"we're cooking this again" is a real thing to want, and guessing otherwise
+would silently drop a shop.
+
+### One permanent shopping list
+
+Not a list per week or per shop: one list, added to and ticked off
+forever. A list you clear and rebuild every week loses the "we always need
+milk" line. Items are **checked off rather than deleted**, so a
+half-finished shop survives closing the phone, and "clear ticked" is the
+one destructive action — offered explicitly, with "untick all" as the
+escape hatch.
+
+### Grouped by shop, in walking order
+
+Each line inherits its pantry ingredient's `source` — markets, butcher,
+Asian grocery — so the list doubles as a route. The order is a walking
+order, not alphabetical: fresh food first while there's room in the bags,
+cold things last. Anything not linked to a pantry row lands in "other", at
+the end.
+
+### What merges, and what deliberately doesn't
+
+A wrong merge is worse than no merge: coming home with 100g of onion when
+the lasagne needed 400g is a failure of the list, while two onion lines are
+a mild annoyance. So lines combine only on real arithmetic — same pantry
+ingredient, and either both in grams or both in the same unit. An
+unmatched line never merges with another, and a weightless "1 bunch" is
+never folded into a weighed 250g, because that would mean inventing a
+bunch weight nobody supplied.
+
+Every merged line keeps a breakdown of which recipe asked for how much, so
+"why is 400g of onion on my list" is answerable without re-running
+anything. Editing an amount by hand clears that breakdown rather than
+leaving it next to a number it no longer explains.
+
+An ingredient with **no stated amount at all still reaches the list**.
+"Olive oil" with no quantity still means buy olive oil, and leaving it off
+because the amount is unknown is the one failure a shopping list must not
+have.
+
+### Scaling to a number of serves (phase 2)
+
+A recipe on a cooking list can ask for a different number of serves. The
+factor is derived live from the recipe's own serving size rather than
+frozen when the list was made, so correcting a recipe later fixes every
+list that used it. Most scraped recipes have no serving size at all —
+those report that they can't be scaled instead of quietly using the base
+amounts as though they had been.
+
 ## Prepared log
 
 Recording a cook appends a dated entry, optionally with a 1–5 rating and a
@@ -180,6 +239,31 @@ Neither AI path writes to the database. Both return a *draft* that
 pre-fills the form, because a model misreading "¼ tsp" as "¼ cup" should
 cost a correction, not a ruined recipe. Drafts carry a confidence score and
 a list of things the model was unsure about, both shown above the form.
+
+## Recipes from other sites, and copyright
+
+Under Australian law a recipe's **substance is not copyrightable** — a list
+of ingredients and the steps to combine them are facts and a method, not a
+literary work. What *is* protected is the particular expression: the
+author's prose, their headnote, their photographs, and the layout.
+
+So importing a recipe from elsewhere is fine, provided the import takes the
+facts and leaves the expression:
+
+- **Don't preserve formatting.** Ingredients and steps are re-parsed into
+  this app's own structure. Nothing is copied across as a block of the
+  original's markup or prose.
+- **Don't preserve images.** No photograph is ever fetched, stored or
+  re-displayed from a third-party site (which is also the conclusion the
+  blog import reached for its own hotlinked photos — see *Images* below).
+- **Always keep the link.** `source_url` and `source_name` are recorded on
+  every imported recipe and shown on the page, so the original is one click
+  away and gets the visit. Attribution is the point, not a disclaimer.
+
+One consequence for this repository: the committed blog snapshot
+(`data/recipes.heuristic.json`) is *our own* blog, and that is why it can
+be committed. Recipes imported from other sites live in the database only
+— they must not be written into a snapshot that this public repo ships.
 
 ## The blog import
 

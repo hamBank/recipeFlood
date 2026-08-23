@@ -661,3 +661,241 @@ class RecipeRead(SQLModel):
     nutrition: NutritionRead | None = None
     nutrition_per_serving: NutritionRead | None = None
     cost: RecipeCost | None = None  # signed-in only
+
+
+# --------------------------------------------------------------------------
+# Cooking lists and the shopping list
+# --------------------------------------------------------------------------
+
+
+class CookList(SQLModel, table=True):
+    """A set of recipes planned for one date — a week's cooking, a dinner
+    party, a Christmas menu.
+
+    The date is the identity of the list, which is why it isn't nullable:
+    "what are we cooking" is always a question about a particular week. The
+    description is where a list earns a name ("Anna's birthday", "camping
+    food") and is usually empty.
+
+    Two lists can share a date. Nothing enforces uniqueness because a week
+    of dinners and the cake for Saturday are legitimately separate lists
+    that happen to start on the same Monday.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    cook_date: date = Field(index=True)
+    description: str | None = None
+    notes: str | None = None
+    created_by: int | None = Field(default=None, foreign_key="user.id")
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class CookListRecipe(SQLModel, table=True):
+    """A recipe's membership of a cooking list.
+
+    `servings` is the phase-2 scaling hook: null means "as written", a
+    number means scale the ingredients to that many serves. The scale
+    factor is computed live from `Recipe.servings` rather than frozen here,
+    so fixing a recipe's serving size later corrects every list that used
+    it.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    cook_list_id: int = Field(foreign_key="cooklist.id", index=True)
+    recipe_id: int = Field(foreign_key="recipe.id", index=True)
+    position: int = 0
+    servings: int | None = Field(default=None, gt=0)
+    note: str | None = None
+
+
+class ShoppingItemSource(str, Enum):
+    manual = "manual"  # typed straight onto the list
+    cook_list = "cook_list"  # aggregated from a cooking list's recipes
+
+
+class ShoppingItem(SQLModel, table=True):
+    """One line on the shopping list.
+
+    There is exactly one shopping list and it is permanent — no
+    `ShoppingList` table, just these rows. A list you clear and rebuild
+    every week is a list that loses the "we always need milk" line, and the
+    alternative (a list per shop, per week) is bookkeeping nobody does.
+
+    Items are checked off rather than deleted so a half-finished shop
+    survives closing the phone, and so "what did we buy" is answerable
+    until the list is cleared.
+
+    `ingredient_id` is nullable for the same reason `RecipeIngredient`'s is:
+    an unmatched recipe line still belongs on the list as plain text rather
+    than disappearing because the pantry has never heard of it.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    ingredient_id: int | None = Field(
+        default=None, foreign_key="ingredient.id", index=True
+    )
+    name: str  # display text; the ingredient's name when linked
+
+    # Aggregated amount. weight_grams is what merging actually works on;
+    # quantity/unit survive for the lines that have no weight ("1 bunch
+    # coriander") so the list can still say something useful.
+    weight_grams: float | None = None
+    quantity: float | None = None
+    # VARCHAR, not the native `measureunit` enum the recipe tables use.
+    # That type already exists in Postgres from the baseline migration, and
+    # a second CREATE TYPE for it fails — the same dual-dialect trap
+    # IngredientSource documents above.
+    unit: MeasureUnit | None = Field(
+        default=None,
+        sa_column=Column(
+            SAEnum(MeasureUnit, native_enum=False, create_constraint=False, length=16),
+            nullable=True,
+        ),
+    )
+    note: str | None = None
+
+    is_checked: bool = Field(default=False, index=True)
+    checked_at: datetime | None = None
+
+    source: ShoppingItemSource = Field(
+        default=ShoppingItemSource.manual,
+        sa_column=Column(
+            SAEnum(
+                ShoppingItemSource,
+                native_enum=False,
+                create_constraint=False,
+                length=16,
+            ),
+            nullable=False,
+            server_default="manual",
+        ),
+    )
+    # Which list put it here, and which recipes contributed — kept so the
+    # UI can answer "why is 400g of onion on my list" without re-running
+    # the aggregation. A list of {"recipe": str, "amount": str} dicts.
+    cook_list_id: int | None = Field(
+        default=None, foreign_key="cooklist.id", index=True
+    )
+    contributions: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
+
+    added_at: datetime = Field(default_factory=utcnow)
+
+
+# --- schemas ---------------------------------------------------------------
+
+
+class CookListRecipeIn(SQLModel):
+    recipe_id: int
+    servings: int | None = Field(default=None, gt=0)
+    note: str | None = None
+
+
+class CookListRecipeRead(SQLModel):
+    id: int
+    recipe_id: int
+    position: int
+    servings: int | None
+    note: str | None
+    # Denormalised for the detail page, which would otherwise need a
+    # request per row.
+    slug: str
+    title: str
+    image_path: str | None
+    base_servings: int | None
+    # False when `servings` was asked for but the recipe has no serving
+    # size to scale from — the UI says so rather than silently not scaling.
+    scalable: bool = True
+    scale_factor: float = 1.0
+
+
+class CookListCreate(SQLModel):
+    cook_date: date | None = None  # defaults to today
+    description: str | None = None
+    notes: str | None = None
+    recipes: list[CookListRecipeIn] = Field(default_factory=list)
+
+
+class CookListUpdate(SQLModel):
+    cook_date: date | None = None
+    description: str | None = None
+    notes: str | None = None
+    # Omit to leave membership alone; pass a list to replace it wholesale.
+    recipes: list[CookListRecipeIn] | None = None
+
+
+class CookListRead(SQLModel):
+    id: int
+    cook_date: date
+    description: str | None
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+    recipe_count: int = 0
+    recipes: list[CookListRecipeRead] = Field(default_factory=list)
+
+
+class ShoppingItemCreate(SQLModel):
+    name: str
+    ingredient_id: int | None = None
+    weight_grams: float | None = Field(default=None, ge=0)
+    quantity: float | None = Field(default=None, ge=0)
+    unit: MeasureUnit | None = None
+    note: str | None = None
+
+
+class ShoppingItemUpdate(SQLModel):
+    name: str | None = None
+    weight_grams: float | None = Field(default=None, ge=0)
+    quantity: float | None = Field(default=None, ge=0)
+    unit: MeasureUnit | None = None
+    note: str | None = None
+    is_checked: bool | None = None
+
+
+class ShoppingItemRead(SQLModel):
+    id: int
+    ingredient_id: int | None
+    name: str
+    weight_grams: float | None
+    quantity: float | None
+    unit: MeasureUnit | None
+    note: str | None
+    is_checked: bool
+    checked_at: datetime | None
+    source: ShoppingItemSource
+    cook_list_id: int | None
+    contributions: list[dict] = Field(default_factory=list)
+    added_at: datetime
+    # Where this gets bought, so the list can be walked shop by shop.
+    # "other" when the item isn't linked to a pantry row.
+    shop: str = IngredientSource.other.value
+    amount_text: str = ""  # "400 g", "1 bunch" — rendered once, server-side
+    cost_cents: int | None = None  # signed-in only, null when unpriced
+
+
+class ShoppingListRead(SQLModel):
+    """The whole list, already grouped by shop.
+
+    Grouping server-side keeps the ordering rule (shops in a fixed walking
+    order, checked items last) in one place instead of duplicated in every
+    client.
+    """
+
+    items: list[ShoppingItemRead] = Field(default_factory=list)
+    shops: list[str] = Field(default_factory=list)  # in display order
+    total_count: int = 0
+    checked_count: int = 0
+    # Signed-in only: what the unchecked items add up to, and how much of
+    # the list that covers — same honesty rule as RecipeCost.
+    total_cents: int | None = None
+    priced_fraction: float = 0.0
+
+
+class AddToShoppingResult(SQLModel):
+    added: int = 0
+    merged: int = 0
+    items: list[ShoppingItemRead] = Field(default_factory=list)
+    # Recipe lines that could not be turned into an amount ("salt to
+    # taste"). Reported rather than dropped.
+    skipped: list[str] = Field(default_factory=list)
