@@ -38,6 +38,19 @@ behind the allowlist without any code change.
 | Process | Ordered list of steps. |
 | Tags | Many, free-form. A curated few are **sections** — see below. |
 
+### Cooking mode
+
+A "Cooking mode" button on a recipe's page swaps the full detail view —
+nutrition, cost, tags, source, the cooking-list widget — for just the two
+things worth reading with flour on your hands: ingredients you can tick
+off as you go, and a numbered method. No photo, deliberately: a counter
+mid-recipe is not the moment for a hero image. Ticked ingredients are
+local-only state, gone the moment you leave cooking mode, the same way
+closing a paper recipe card doesn't remember what you'd already measured.
+The toggle lives in the URL (`?cooking=true`) rather than plain component
+state, so the view survives a reload and a link to it (propping a phone
+up open to exactly this) can be shared or bookmarked.
+
 ### Tags, and the sections among them
 
 There is one taxonomy: tags. A recipe carries a flat list of them.
