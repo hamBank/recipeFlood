@@ -336,6 +336,29 @@ proxy is looser still — it matches on string *prefix*, so even
 `/shopping-list` would be swallowed by the `/shopping` entry. If you add a
 page, check its path against `apiPrefixes` in `frontend/vite.config.js`.
 
+**One collision can't be avoided this way**: a recipe's own page and
+`GET /recipes/{slug}` both correctly live at `/recipes/<slug>` — that's
+the right frontend route *and* the right API address for the same recipe,
+so there's no name to pick around. Client-side navigation never notices
+(React Router owns that path), but a hard reload, a typed address, or a
+shared link used to hit the server directly and get raw JSON back instead
+of the app. `main.py` fixes this with content negotiation rather than a
+route rename: a middleware registered ahead of every router checks
+whether the request is a genuine browser navigation (`Accept: text/html`,
+which `fetch()` and non-browser clients never send) and, if so, serves
+the app shell before the API ever sees the request — for that path or
+any other that isn't a real static file. The shell response itself is
+`Cache-Control: no-store` with `Vary: Accept`; without both, a browser's
+HTTP cache can serve that cached HTML straight back to the frontend's own
+later `fetch()` call to the identical URL, reproducing the exact same
+"unformatted JSON" symptom one layer further down (this bit us during
+manual testing — the fix isn't optional). This only ever activates once
+`STATIC_DIR` (the built frontend) exists, so it's a production/self-hosted
+concern — `npm run dev`'s Vite proxy is unaffected and still governed by
+the prefix-matching note above. See `tests/test_spa_serving.py`, which
+builds a throwaway fake `STATIC_DIR` to cover this, since the `backend`
+CI job never runs `npm run build` and so never exercises it otherwise.
+
 The interesting logic is in `backend/shopping.py`: what merges, what
 deliberately doesn't, and the shop walking order. `tests/test_shopping.py`
 is organised around the cases that must *not* merge, since those are the
