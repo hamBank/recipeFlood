@@ -52,7 +52,7 @@ export default function RecipeCard({ recipe, cookList, onCookListChange }) {
         {recipe.image_generated && (
           <span
             title="An AI-generated illustration, not a photo of this actual dish"
-            className="absolute bottom-2 left-2 rounded-full bg-card/90 px-2 py-1 text-[11px] font-medium text-ink-muted backdrop-blur"
+            className="absolute bottom-1.5 left-1.5 rounded-full bg-black/25 px-1.5 py-0.5 text-[9px] font-normal text-white/70 backdrop-blur-sm"
           >
             AI photo
           </span>

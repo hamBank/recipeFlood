@@ -179,7 +179,7 @@ export default function RecipeDetailPage() {
             {recipe.image_generated && (
               <span
                 title="An AI-generated illustration, not a photo of this actual dish"
-                className="absolute bottom-3 left-3 rounded-full bg-card/90 px-2.5 py-1 text-xs font-medium text-ink-muted backdrop-blur"
+                className="absolute bottom-2 left-2 rounded-full bg-black/25 px-2 py-0.5 text-[10px] font-normal text-white/70 backdrop-blur-sm"
               >
                 AI-generated photo
               </span>
