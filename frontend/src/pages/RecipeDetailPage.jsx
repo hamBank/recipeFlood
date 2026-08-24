@@ -264,7 +264,7 @@ export default function RecipeDetailPage() {
             {recipe.steps.length === 0 ? (
               <p className="mt-2 text-sm text-ink-muted">No method recorded.</p>
             ) : (
-              <ol className="method-list mt-3 space-y-3">
+              <ol className="mt-3 space-y-3">
                 {recipe.steps.map((step) => (
                   <li key={step.id} className="flex gap-3 text-sm leading-relaxed text-ink">
                     <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">
