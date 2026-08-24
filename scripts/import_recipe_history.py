@@ -245,7 +245,13 @@ def _backfill_cook_lists(session: Session, resolved_by_date: dict[date, set[int]
             )
         ).first()
         if cook_list is None:
-            cook_list = CookList(cook_date=cook_date, description=COOK_LIST_MARKER)
+            # Already cooked, definitionally — stamped completed on
+            # creation so it doesn't clutter the list screen. Only set at
+            # creation, never on a later re-run touching an existing row,
+            # in case a household has since reopened it by hand.
+            cook_list = CookList(
+                cook_date=cook_date, description=COOK_LIST_MARKER, completed=True
+            )
             session.add(cook_list)
             session.flush()
             created += 1

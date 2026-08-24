@@ -164,6 +164,14 @@ export default function CookListDetailPage() {
           placeholder="Add a name…"
           className="min-w-0 flex-1 rounded-lg border border-edge bg-card px-3 py-1.5 text-ink placeholder:text-ink-muted"
         />
+        <label className="flex shrink-0 items-center gap-1.5 rounded-lg border border-edge bg-card px-3 py-1.5 text-sm text-ink-muted">
+          <input
+            type="checkbox"
+            checked={list.completed}
+            onChange={(event) => saveField('completed', event.target.checked)}
+          />
+          Completed
+        </label>
         <button
           onClick={remove}
           className="rounded-lg border border-edge px-3 py-1.5 text-sm text-ink-muted hover:bg-soft"

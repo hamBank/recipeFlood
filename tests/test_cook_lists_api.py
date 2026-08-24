@@ -165,6 +165,38 @@ class TestListing:
         rows = client.get("/cook-lists?exclude_imported=true").json()
         assert [r["id"] for r in rows] == [planned["id"]]
 
+    def test_completed_lists_are_hidden_by_default_but_reachable(self, client):
+        done = client.post("/cook-lists", json={"cook_date": "2026-08-10"}).json()
+        client.patch(f"/cook-lists/{done['id']}", json={"completed": True})
+        planned = client.post("/cook-lists", json={"cook_date": "2026-08-15"}).json()
+
+        assert [r["id"] for r in client.get("/cook-lists").json()] == [planned["id"]]
+        ids = {r["id"] for r in client.get("/cook-lists?include_completed=true").json()}
+        assert ids == {done["id"], planned["id"]}
+
+
+class TestCompleting:
+    def test_a_list_defaults_to_not_completed(self, client):
+        created = client.post("/cook-lists", json={}).json()
+        assert created["completed"] is False
+
+    def test_completed_can_be_toggled_via_patch(self, client):
+        created = client.post("/cook-lists", json={}).json()
+        marked = client.patch(f"/cook-lists/{created['id']}", json={"completed": True}).json()
+        assert marked["completed"] is True
+        reopened = client.patch(
+            f"/cook-lists/{created['id']}", json={"completed": False}
+        ).json()
+        assert reopened["completed"] is False
+
+    def test_patching_an_unrelated_field_does_not_touch_completed(self, client):
+        created = client.post("/cook-lists", json={}).json()
+        client.patch(f"/cook-lists/{created['id']}", json={"completed": True})
+        updated = client.patch(
+            f"/cook-lists/{created['id']}", json={"description": "Renamed"}
+        ).json()
+        assert updated["completed"] is True
+
 
 class TestDeleting:
     def test_deleting_a_list_leaves_its_shopping_behind(self, client, soup):

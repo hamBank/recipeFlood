@@ -206,6 +206,9 @@ class TestBackfillCookLists:
         assert touched == 0
         cook_list = session.exec(select(CookList)).one()
         assert cook_list.cook_date == date(2024, 3, 1)
+        # Already cooked, definitionally — stamped completed so it doesn't
+        # clutter the list screen alongside lists still being planned.
+        assert cook_list.completed is True
         members = session.exec(
             select(CookListRecipe).where(CookListRecipe.cook_list_id == cook_list.id)
         ).all()
@@ -227,6 +230,26 @@ class TestBackfillCookLists:
         assert len(session.exec(select(CookList)).all()) == 1
         members = session.exec(select(CookListRecipe)).all()
         assert {m.recipe_id for m in members} == {a.id, b.id}
+
+    def test_extending_an_existing_list_does_not_touch_its_completed_flag(self, session):
+        # completed is only stamped at creation — a re-run must not undo a
+        # household manually reopening an imported list by hand.
+        a = Recipe(slug="a", title="A")
+        b = Recipe(slug="b", title="B")
+        session.add_all([a, b])
+        session.commit()
+
+        _backfill_cook_lists(session, {date(2024, 3, 1): {a.id}})
+        session.commit()
+        cook_list = session.exec(select(CookList)).one()
+        cook_list.completed = False
+        session.add(cook_list)
+        session.commit()
+
+        _backfill_cook_lists(session, {date(2024, 3, 1): {a.id, b.id}})
+        session.commit()
+        session.refresh(cook_list)
+        assert cook_list.completed is False
 
     def test_a_human_made_cook_list_on_the_same_date_is_left_alone(self, session):
         # Only lists this script itself created (marked via `description`)

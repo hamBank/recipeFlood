@@ -771,12 +771,19 @@ class CookList(SQLModel, table=True):
     Two lists can share a date. Nothing enforces uniqueness because a week
     of dinners and the cake for Saturday are legitimately separate lists
     that happen to start on the same Monday.
+
+    `completed` just declutters the list screen — a cooking-history import
+    batch is stamped completed on creation (it is, definitionally, already
+    cooked), and a household can mark their own list done the same way once
+    it's over. Nothing else reads it: an already-added shopping item stays
+    on the shopping list, and the recipe picker doesn't care either.
     """
 
     id: int | None = Field(default=None, primary_key=True)
     cook_date: date = Field(index=True)
     description: str | None = None
     notes: str | None = None
+    completed: bool = False
     created_by: int | None = Field(default=None, foreign_key="user.id")
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -916,6 +923,7 @@ class CookListUpdate(SQLModel):
     cook_date: date | None = None
     description: str | None = None
     notes: str | None = None
+    completed: bool | None = None
     # Omit to leave membership alone; pass a list to replace it wholesale.
     recipes: list[CookListRecipeIn] | None = None
 
@@ -925,6 +933,7 @@ class CookListRead(SQLModel):
     cook_date: date
     description: str | None
     notes: str | None
+    completed: bool
     created_at: datetime
     updated_at: datetime
     recipe_count: int = 0
