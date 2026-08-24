@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   deletePrepared,
   deleteRecipe,
@@ -8,6 +8,7 @@ import {
   markPrepared,
 } from '../api'
 import { useSession } from '../App'
+import CookingModeView from '../components/CookingModeView'
 import CostPanel from '../components/CostPanel'
 import NutritionPanel from '../components/NutritionPanel'
 import PreparedLog from '../components/PreparedLog'
@@ -18,6 +19,7 @@ import {
   formatGrams,
   formatMinutes,
   formatQuantity,
+  groupIngredients,
   WEIGHT_SOURCE_LABEL,
 } from '../format'
 
@@ -39,17 +41,6 @@ const slugify = (text) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
 
-/** Group ingredients by their optional sub-heading ("For the sauce"). */
-function groupIngredients(ingredients) {
-  const groups = new Map()
-  ingredients.forEach((item) => {
-    const key = item.group || ''
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key).push(item)
-  })
-  return [...groups.entries()]
-}
-
 export default function RecipeDetailPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
@@ -57,7 +48,18 @@ export default function RecipeDetailPage() {
   const [recipe, setRecipe] = useState(null)
   const [error, setError] = useState(null)
   const [cookList, setCookList] = useState(null)
+  const [params, setParams] = useSearchParams()
   const symbol = config?.currency_symbol || '$'
+  // In the URL rather than plain state: a link to "cooking mode" survives
+  // a reload and can be shared/bookmarked — handy for propping a phone up
+  // at the counter open to exactly this view.
+  const cookingMode = params.get('cooking') === 'true'
+  const setCookingMode = (value) => {
+    const next = new URLSearchParams(params)
+    if (value) next.set('cooking', 'true')
+    else next.delete('cooking')
+    setParams(next)
+  }
 
   const load = async () => {
     try {
@@ -117,6 +119,10 @@ export default function RecipeDetailPage() {
     navigate('/')
   }
 
+  if (cookingMode) {
+    return <CookingModeView recipe={recipe} onExit={() => setCookingMode(false)} />
+  }
+
   return (
     <article className="space-y-6">
       <header className="space-y-3">
@@ -139,24 +145,32 @@ export default function RecipeDetailPage() {
               </div>
             )}
           </div>
-          {user && (
-            <div className="flex gap-2">
-              <Link
-                to={`/recipes/${recipe.slug}/edit`}
-                className="rounded-lg border border-edge px-3 py-1.5 text-sm text-ink-muted hover:bg-soft"
-              >
-                Edit
-              </Link>
-              {user.role === 'admin' && (
-                <button
-                  onClick={remove}
-                  className="rounded-lg border border-edge px-3 py-1.5 text-sm text-ink-muted hover:bg-soft hover:text-red-600"
+          <div className="flex gap-2">
+            <button
+              onClick={() => setCookingMode(true)}
+              className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-[color:var(--accent-ink)]"
+            >
+              Cooking mode
+            </button>
+            {user && (
+              <>
+                <Link
+                  to={`/recipes/${recipe.slug}/edit`}
+                  className="rounded-lg border border-edge px-3 py-1.5 text-sm text-ink-muted hover:bg-soft"
                 >
-                  Delete
-                </button>
-              )}
-            </div>
-          )}
+                  Edit
+                </Link>
+                {user.role === 'admin' && (
+                  <button
+                    onClick={remove}
+                    className="rounded-lg border border-edge px-3 py-1.5 text-sm text-ink-muted hover:bg-soft hover:text-red-600"
+                  >
+                    Delete
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {recipe.needs_review && user && (

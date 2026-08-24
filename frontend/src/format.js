@@ -91,6 +91,19 @@ export function formatQuantity(quantity) {
   return `${Number(quantity.toFixed(2))}`
 }
 
+/** Group ingredients by their optional sub-heading ("For the sauce") —
+ * shared between the normal recipe view and cooking mode's stripped-down
+ * one, so they can't drift apart on what "grouped" means. */
+export function groupIngredients(ingredients) {
+  const groups = new Map()
+  ingredients.forEach((item) => {
+    const key = item.group || ''
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(item)
+  })
+  return [...groups.entries()]
+}
+
 export const WEIGHT_SOURCE_LABEL = {
   explicit: 'as written in the recipe',
   converted: 'converted using this ingredient’s density',
