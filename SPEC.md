@@ -229,8 +229,20 @@ quick-add routinely handed someone a list from the import rather than
 whatever they're actually planning next. `GET /cook-lists` takes an
 `exclude_imported` flag for exactly this — filtering out every list
 whose `description` is the import's own marker — and quick-add always
-passes it. Browsing cooking-list history itself still shows them; only
-this one lookup skips them.
+passes it.
+
+### Completed lists
+
+A `CookList` has a `completed` flag, off by default. A household can
+mark their own list done once it's over (a checkbox on the list's own
+page); a cooking-history import batch is stamped completed the moment
+it's created — it is, definitionally, already cooked. Nothing else reads
+the flag: it doesn't affect the shopping list or the recipe picker,
+it just declutters the list screen. `GET /cook-lists` hides completed
+lists unless `include_completed` is passed, and the list screen has a
+"Show completed" checkbox for exactly that — otherwise, with hundreds of
+import batches, the screen would default to mostly those instead of
+what's actually being planned.
 
 ### One permanent shopping list
 

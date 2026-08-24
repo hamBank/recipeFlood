@@ -89,6 +89,15 @@ def list_cook_lists(
             "planning."
         ),
     ),
+    include_completed: bool = Query(
+        False,
+        description=(
+            "Include completed lists — hidden by default. Every "
+            "cooking-history import batch is stamped completed on "
+            "creation, so without this the list screen would default to "
+            "hundreds of them ahead of what's actually being planned."
+        ),
+    ),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
@@ -109,6 +118,8 @@ def list_cook_lists(
                 CookList.description.is_(None),
             )
         )
+    if not include_completed:
+        statement = statement.where(CookList.completed == False)  # noqa: E712
     statement = statement.order_by(CookList.cook_date.desc(), CookList.id.desc())
 
     rows = list(session.exec(statement).all())

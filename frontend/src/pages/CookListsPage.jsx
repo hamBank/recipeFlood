@@ -20,6 +20,10 @@ export default function CookListsPage() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  // Off by default: a cooking-history import batch is stamped completed
+  // on creation, and there can be hundreds of them — without this the
+  // list screen would default to mostly that instead of what's planned.
+  const [showCompleted, setShowCompleted] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -27,6 +31,7 @@ export default function CookListsPage() {
       const result = await listCookLists({
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
+        include_completed: showCompleted ? 'true' : '',
       })
       setLists(result.items)
       setTotal(result.total)
@@ -35,7 +40,7 @@ export default function CookListsPage() {
       setError(caught.message)
     }
     setLoading(false)
-  }, [page])
+  }, [page, showCompleted])
 
   useEffect(() => {
     load()
@@ -56,10 +61,21 @@ export default function CookListsPage() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold text-ink">Cooking lists</h1>
+        <label className="ml-auto flex items-center gap-1.5 text-sm text-ink-muted">
+          <input
+            type="checkbox"
+            checked={showCompleted}
+            onChange={(event) => {
+              setShowCompleted(event.target.checked)
+              setPage(1)
+            }}
+          />
+          Show completed
+        </label>
         <button
           onClick={createToday}
           disabled={creating}
-          className="ml-auto rounded-lg bg-accent px-4 py-2 text-sm font-medium text-[color:var(--accent-ink)] disabled:opacity-50"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-[color:var(--accent-ink)] disabled:opacity-50"
         >
           New list
         </button>
@@ -92,6 +108,11 @@ export default function CookListsPage() {
                     </span>
                   )}
                 </span>
+                {row.completed && (
+                  <span className="shrink-0 rounded bg-soft px-1.5 py-0.5 text-[11px] text-ink-muted">
+                    completed
+                  </span>
+                )}
                 {row.description && (
                   <span className="shrink-0 text-sm text-ink-muted">
                     {row.recipe_count} recipe{row.recipe_count === 1 ? '' : 's'}

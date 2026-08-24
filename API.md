@@ -150,10 +150,10 @@ Signed-in only, every endpoint.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/cook-lists` | newest date first; `since`, `until`, `exclude_imported` (skips cooking-history import batches — see SPEC.md), `limit`, `offset`; `X-Total-Count` |
+| GET | `/cook-lists` | newest date first; `since`, `until`, `exclude_imported` (skips cooking-history import batches — see SPEC.md), `include_completed` (bool; completed lists are hidden by default — see SPEC.md), `limit`, `offset`; `X-Total-Count` |
 | POST | `/cook-lists` | `{cook_date?, description?, notes?, recipes?}` — date defaults to today |
 | GET | `/cook-lists/{id}` | |
-| PATCH | `/cook-lists/{id}` | omit `recipes` to leave membership alone; pass a list to replace it |
+| PATCH | `/cook-lists/{id}` | `{cook_date?, description?, notes?, completed?, recipes?}`; omit `recipes` to leave membership alone, pass a list to replace it |
 | DELETE | `/cook-lists/{id}` | shopping items it created stay, with `cook_list_id` cleared |
 | POST | `/cook-lists/{id}/recipes` | `{recipe_id, servings?, note?}`; an existing recipe is updated, not duplicated |
 | DELETE | `/cook-lists/{id}/recipes/{recipe_id}` | |

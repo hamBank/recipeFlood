@@ -88,6 +88,7 @@ def cook_list_read(session: Session, cook_list: CookList) -> CookListRead:
         cook_date=cook_list.cook_date,
         description=cook_list.description,
         notes=cook_list.notes,
+        completed=cook_list.completed,
         created_at=cook_list.created_at,
         updated_at=cook_list.updated_at,
         recipe_count=len(rows),
