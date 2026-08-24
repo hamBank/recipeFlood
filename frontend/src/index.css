@@ -72,15 +72,3 @@ body {
   background-color: var(--page);
   color: var(--ink);
 }
-
-/* Long recipe methods read better with a touch more line height than
-   Tailwind's default, and the numbering is generated rather than typed. */
-.method-list {
-  counter-reset: step;
-}
-.method-list > li {
-  counter-increment: step;
-}
-.method-list > li::before {
-  content: counter(step);
-}
