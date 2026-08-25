@@ -41,15 +41,17 @@ behind the allowlist without any code change.
 ### Cooking mode
 
 A "Cooking mode" button on a recipe's page swaps the full detail view —
-nutrition, cost, tags, source, the cooking-list widget — for just the two
+nutrition, cost, tags, source, the cooking-list widget — for just the
 things worth reading with flour on your hands: ingredients you can tick
-off as you go, and a numbered method. No photo, deliberately: a counter
-mid-recipe is not the moment for a hero image. Ticked ingredients are
-local-only state, gone the moment you leave cooking mode, the same way
-closing a paper recipe card doesn't remember what you'd already measured.
-The toggle lives in the URL (`?cooking=true`) rather than plain component
-state, so the view survives a reload and a link to it (propping a phone
-up open to exactly this) can be shared or bookmarked.
+off as you go, a numbered method, and — at the bottom, out of the way
+until you get there — any notes ("halved the sugar, still plenty sweet").
+No photo, deliberately: a counter mid-recipe is not the moment for a hero
+image. Ticked ingredients are local-only state, gone the moment you leave
+cooking mode, the same way closing a paper recipe card doesn't remember
+what you'd already measured. The toggle lives in the URL (`?cooking=true`)
+rather than plain component state, so the view survives a reload and a
+link to it (propping a phone up open to exactly this) can be shared or
+bookmarked.
 
 ### Tags, and the sections among them
 
