@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // API routes live at the top level (no /api prefix — see API.md), so the dev
 // server proxies each backend prefix to uvicorn on :8000. /media serves the
@@ -19,7 +20,32 @@ const apiPrefixes = [
 ]
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // Installability (manifest + home-screen icon) and app-shell caching
+    // only — precache the built JS/CSS/HTML so a reload works with no
+    // network. Deliberately *not* used for API data: the shopping list's
+    // offline support (src/offlineQueue.js) is a hand-rolled localStorage
+    // outbox instead, so it stays visible and debuggable rather than
+    // living inside a Workbox runtime-caching rule.
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg'],
+      manifest: {
+        name: 'Recipe Flood',
+        short_name: 'Recipe Flood',
+        description: 'A self-hosted family recipe manager',
+        theme_color: '#c2410c',
+        background_color: '#faf7f2',
+        display: 'standalone',
+        start_url: '/',
+        icons: [
+          { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+        ],
+      },
+    }),
+  ],
   build: {
     outDir: '../backend/static',
     emptyOutDir: true,

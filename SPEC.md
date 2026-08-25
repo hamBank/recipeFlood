@@ -328,6 +328,19 @@ list that used it. Most scraped recipes have no serving size at all —
 those report that they can't be scaled instead of quietly using the base
 amounts as though they had been.
 
+### Offline
+
+The app is installable (a PWA — manifest, home-screen icon) and the
+shopping list keeps working with no signal, since that's precisely when
+it's needed most: standing in a shop with one bar of reception. Offline
+support is narrow on purpose, limited to the two mutations that can't
+conflict with anything: **ticking an item off** (one direction only —
+unticking, editing and deleting all wait for a connection) and **adding a
+new item** (a duplicate created by adding the same thing on two offline
+devices is an acceptable outcome, fixed the same way any other pantry
+duplicate is — a merge). Both queue locally and replay once back online;
+see `DEVELOPMENT.md`'s "Offline shopping list / PWA" for how.
+
 ## Prepared log
 
 Recording a cook appends a dated entry, optionally with a 1–5 rating and a

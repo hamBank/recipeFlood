@@ -389,6 +389,57 @@ deliberately doesn't, and the shop walking order. `tests/test_shopping.py`
 is organised around the cases that must *not* merge, since those are the
 ones that send you home with the wrong amount of food.
 
+## Offline shopping list / PWA
+
+The shopping list is the one page that has to survive losing signal
+mid-shop, so the frontend is set up as an installable PWA
+(`vite-plugin-pwa`, configured in `frontend/vite.config.js`) with a
+hand-rolled offline mutation queue for that one page.
+
+**Scope is deliberately narrow.** Editing anything offline is a conflict
+problem in general — this app sidesteps it rather than solving it, by only
+ever queuing mutations that are safe to replay blind:
+
+- **Ticking an item off** (unchecked → checked) — one direction only.
+  Unticking, editing an amount, and deleting all stay online-only, so the
+  queue never has to reconcile two different opinions about an item's
+  state.
+- **Adding a new item** — if the same ingredient also gets added from
+  another device while this one is offline, syncing both is allowed to
+  produce two rows rather than one. Merging is a "Merge" click away on the
+  Pantry page; it isn't worth queue-side logic here.
+
+All of that lives in `frontend/src/offlineQueue.js`: a `localStorage`-backed
+outbox (`rf_shopping_queue`) plus a cached copy of the last-fetched list
+(`rf_shopping_cache`), so a cold reload with no network still has something
+to show. `applyQueue` renders the queue on top of that cache; `drainQueue`
+replays it against the real API once back online, resolving a queued check
+against an item that was itself added offline (a temp negative id) via the
+id the server hands back for the add. `ShoppingListPage.jsx` wires this up:
+an `online`/`offline` listener plus a check on mount (in case the browser
+never fires the event) trigger a drain, and every button that isn't
+check/add is disabled while offline rather than silently doing nothing.
+
+**This also exposed a bug one layer up**: `App.jsx`'s own bootstrap
+(`GET /auth/config`, then `GET /auth/me` if a token is stored) had no
+offline handling at all — a cold offline load showed "Backend unreachable"
+before the router, and so the shopping list, ever mounted; and a signed-in
+user going offline got silently signed out, because the `getMe()` failure
+handler treated *any* error, including a plain network failure, as an
+expired token. Found only by actually testing offline in a real browser
+(`context.setOffline(true)` in Playwright against a production build,
+served single-origin — a dev-mode `npm run dev` session doesn't register
+the service worker), not by reading the code. Both now cache their last
+successful response and fall back to it on a network-shaped failure (no
+`.status` on the caught error — see `apiFetch` in `api.js`), while a real
+server rejection (a genuine `401` on `/auth/me`) still signs out as before.
+
+Everything else about the SPA — the service worker itself — is scoped to
+app-shell caching only (precache the built JS/CSS/HTML, `NavigationRoute`
+fallback to `index.html`). It's deliberately *not* used for API data, so
+the offline behaviour stays visible in `offlineQueue.js` rather than living
+inside an opaque Workbox runtime-caching rule.
+
 ## Tests
 
 ```bash

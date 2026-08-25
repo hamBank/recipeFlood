@@ -14,6 +14,26 @@ import ShoppingListPage from './pages/ShoppingListPage'
 
 const SessionContext = createContext({ config: null, user: null })
 
+const CONFIG_CACHE_KEY = 'rf_auth_config'
+const USER_CACHE_KEY = 'rf_auth_user'
+
+function cacheGet(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || 'null')
+  } catch {
+    return null
+  }
+}
+
+function cacheSet(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Storage full/unavailable — the app still works, it just has nothing
+    // to fall back on if the very next load happens to be offline.
+  }
+}
+
 /** Config + signed-in user, read by any component that needs to know
  *  whether to show cost figures or edit controls. */
 export function useSession() {
@@ -42,18 +62,41 @@ export default function App() {
 
   useEffect(() => {
     ;(async () => {
+      let cfg
       try {
-        const cfg = await getAuthConfig()
-        setConfig(cfg)
-        if (!cfg.auth_enabled || getToken()) {
-          try {
-            setUser(await getMe())
-          } catch {
+        cfg = await getAuthConfig()
+        cacheSet(CONFIG_CACHE_KEY, cfg)
+      } catch (caught) {
+        // No `.status`: the fetch itself failed rather than the server
+        // rejecting it — i.e. no network, not "backend unreachable" in
+        // the usual sense. Fall back to the last config seen so a cold
+        // offline load still reaches the app shell (and anything in it,
+        // like the shopping list, that caches its own data) instead of
+        // dead-ending here.
+        cfg = !caught.status && cacheGet(CONFIG_CACHE_KEY)
+        if (!cfg) {
+          setError('Backend unreachable')
+          setLoading(false)
+          return
+        }
+      }
+      setConfig(cfg)
+      if (!cfg.auth_enabled || getToken()) {
+        try {
+          const me = await getMe()
+          setUser(me)
+          cacheSet(USER_CACHE_KEY, me)
+        } catch (caught) {
+          if (caught.status) {
             setToken(null) // expired/invalid token — browse as a guest
+          } else {
+            // Offline: the token might be perfectly valid, there's just
+            // no way to ask right now. Trust it and use the last-known
+            // user rather than bouncing a signed-in user to the sign-in
+            // page just because the network dropped.
+            setUser(cacheGet(USER_CACHE_KEY))
           }
         }
-      } catch {
-        setError('Backend unreachable')
       }
       setLoading(false)
     })()
