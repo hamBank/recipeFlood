@@ -337,17 +337,26 @@ candidates by eye across a few hundred rows is tedious:
 ```bash
 python -m scripts.find_duplicate_ingredients
 python -m scripts.find_duplicate_ingredients --min-usage 1   # skip zero-usage stubs
+python -m scripts.find_duplicate_ingredients --merge-exact   # actually merge the exact tier
 ```
 
-Read-only — it only prints suggestions, never merges anything itself, in
-two tiers: **exact matches** (rows whose name or alias reduces to the
-same normalised core — about as certain as text alone gets) and
-**qualified variants** (one name's words are a subset of the other's,
-e.g. "onion" ⊂ "red onion"). See the script's own docstring for why a
-plain spelling-similarity score was tried and rejected — it scored
-unrelated pairs like "salt"/"malt" *higher* than real duplicates like
-"hand soap"/"handwash", which is exactly backwards. Act on a suggestion
-from the Pantry page's Merge button, or `POST /ingredients/<keep>/merge/<absorb>`.
+By default it's read-only — it only prints suggestions, in two tiers:
+**exact matches** (rows whose name or alias reduces to the same
+normalised core — about as certain as text alone gets) and **qualified
+variants** (one name's words are a subset of the other's, e.g. "onion" ⊂
+"red onion"). See the script's own docstring for why a plain spelling-
+similarity score was tried and rejected — it scored unrelated pairs like
+"salt"/"malt" *higher* than real duplicates like "hand soap"/"handwash",
+which is exactly backwards.
+
+`--merge-exact` merges every exact-match group there and then, keeping
+whichever member is used in the most recipes and absorbing the rest —
+same `_merge_into` (`backend/routers/ingredients.py`) the Pantry page's
+own Merge button calls, so it's the same repointing of recipe lines and
+shopping items, same alias inheritance. Qualified variants are never
+auto-merged, at any flag — that tier still needs a human, since "butter"
+and "peanut butter" also fit the pattern. Act on one of those from the
+Pantry page's Merge button, or `POST /ingredients/<keep>/merge/<absorb>`.
 
 ## Cooking lists and the shopping list
 

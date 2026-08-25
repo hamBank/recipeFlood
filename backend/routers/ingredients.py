@@ -294,25 +294,14 @@ def _relink_unmatched(session: Session, ingredient: Ingredient) -> None:
             session.add(item)
 
 
-@router.post("/{key}/merge/{other_key}", response_model=IngredientRead)
-def merge_ingredient(
-    key: str,
-    other_key: str,
-    session: Session = Depends(get_session),
-    _admin: User = Depends(require_admin_role),
-):
-    """Fold `other_key` into `key`: repoint its recipe lines and shopping
-    items, inherit its name as an alias, delete it.
+def _merge_into(session: Session, target: Ingredient, other: Ingredient) -> None:
+    """Fold `other` into `target`: repoint its recipe lines and shopping
+    items, inherit its name as an alias, delete it. Flushes but doesn't
+    commit, so a caller merging several pairs can do it as one transaction.
 
-    The blog import creates one master row per distinct ingredient phrase,
-    so "red onion", "red onions" and "small red onion" arrive as three.
-    Merging is how that settles down into a list worth pricing.
+    Shared by the `/merge` endpoint below and
+    `scripts/find_duplicate_ingredients.py --merge-exact`.
     """
-    target = _lookup(session, key)
-    other = _lookup(session, other_key)
-    if target.id == other.id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot merge an ingredient into itself")
-
     for line in session.exec(
         select(RecipeIngredient).where(RecipeIngredient.ingredient_id == other.id)
     ).all():
@@ -352,6 +341,26 @@ def merge_ingredient(
     session.delete(other)
     session.flush()
     _reconvert_lines(session, target)
+
+
+@router.post("/{key}/merge/{other_key}", response_model=IngredientRead)
+def merge_ingredient(
+    key: str,
+    other_key: str,
+    session: Session = Depends(get_session),
+    _admin: User = Depends(require_admin_role),
+):
+    """Fold `other_key` into `key`.
+
+    The blog import creates one master row per distinct ingredient phrase,
+    so "red onion", "red onions" and "small red onion" arrive as three.
+    Merging is how that settles down into a list worth pricing.
+    """
+    target = _lookup(session, key)
+    other = _lookup(session, other_key)
+    if target.id == other.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot merge an ingredient into itself")
+    _merge_into(session, target, other)
     session.commit()
     session.refresh(target)
     return _read(session, target, _usage_counts(session).get(target.id, 0))

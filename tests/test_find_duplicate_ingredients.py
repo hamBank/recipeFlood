@@ -6,10 +6,11 @@ other's": it scored unrelated pairs like "salt"/"malt" higher than real
 duplicates like "hand soap"/"handwash".
 """
 
-from backend.models import Ingredient, RecipeIngredient
+from backend.models import Ingredient, Recipe, RecipeIngredient, ShoppingItem
 from scripts.find_duplicate_ingredients import (
     find_exact_groups,
     find_qualified_variants,
+    merge_exact_groups,
     usage_counts,
 )
 
@@ -93,8 +94,6 @@ class TestQualifiedVariants:
 
 class TestUsageCounts:
     def test_counts_only_linked_recipe_ingredients(self, session):
-        from backend.models import Recipe
-
         flour = make(session, "Flour")
         recipe = Recipe(slug="bread", title="Bread")
         session.add(recipe)
@@ -114,3 +113,92 @@ class TestUsageCounts:
         session.commit()
         counts = usage_counts(session)
         assert counts == {flour.id: 1}
+
+
+class TestMergeExactGroups:
+    def test_keeps_the_most_used_member_and_absorbs_the_rest(self, session):
+        # "Egg" is linked to a recipe, "Eggs" isn't — the busier row should
+        # survive even though it wasn't first in the group.
+        eggs = make(session, "Eggs")
+        egg = make(session, "Egg")
+        recipe = Recipe(slug="omelette", title="Omelette")
+        session.add(recipe)
+        session.flush()
+        session.add(
+            RecipeIngredient(
+                recipe_id=recipe.id, position=0, name="egg", raw_text="2 eggs",
+                ingredient_id=egg.id,
+            )
+        )
+        session.commit()
+
+        usage = usage_counts(session)
+        merged = merge_exact_groups(session, [[eggs, egg]], usage)
+
+        assert merged == 1
+        assert session.get(Ingredient, eggs.id) is None
+        kept = session.get(Ingredient, egg.id)
+        assert kept is not None
+        assert "eggs" in kept.aliases
+
+    def test_repoints_recipe_lines_and_shopping_items_off_the_absorbed_row(self, session):
+        egg = make(session, "Egg")
+        eggs = make(session, "Eggs")
+        recipe = Recipe(slug="omelette", title="Omelette")
+        session.add(recipe)
+        session.flush()
+        # Two lines linked to "Egg" so it out-uses "Eggs" and is the one
+        # merge_exact_groups keeps — the line and item under test, linked
+        # to "Eggs", are the ones that should end up repointed.
+        session.add(
+            RecipeIngredient(
+                recipe_id=recipe.id, position=0, name="egg", raw_text="1 egg",
+                ingredient_id=egg.id,
+            )
+        )
+        session.add(
+            RecipeIngredient(
+                recipe_id=recipe.id, position=1, name="egg", raw_text="1 more egg",
+                ingredient_id=egg.id,
+            )
+        )
+        line = RecipeIngredient(
+            recipe_id=recipe.id, position=2, name="eggs", raw_text="3 eggs",
+            ingredient_id=eggs.id,
+        )
+        item = ShoppingItem(name="Eggs", ingredient_id=eggs.id)
+        session.add(line)
+        session.add(item)
+        session.commit()
+
+        merge_exact_groups(session, [[egg, eggs]], usage_counts(session))
+
+        session.refresh(line)
+        session.refresh(item)
+        assert line.ingredient_id == egg.id
+        assert item.ingredient_id == egg.id
+
+    def test_merges_every_group_independently_and_totals_the_count(self, session):
+        egg = make(session, "Egg")
+        eggs = make(session, "Eggs")
+        onion = make(session, "Onion")
+        onions = make(session, "Onions")
+
+        merged = merge_exact_groups(session, [[egg, eggs], [onion, onions]], usage_counts(session))
+
+        assert merged == 2
+        assert session.get(Ingredient, eggs.id) is None
+        assert session.get(Ingredient, onions.id) is None
+        assert session.get(Ingredient, egg.id) is not None
+        assert session.get(Ingredient, onion.id) is not None
+
+    def test_a_three_way_group_leaves_exactly_one_survivor(self, session):
+        a = make(session, "Egg")
+        b = make(session, "Eggs")
+        c = make(session, "Large Eggs")
+
+        merged = merge_exact_groups(session, [[a, b, c]], usage_counts(session))
+
+        assert merged == 2
+        survivors = [i for i in (a, b, c) if session.get(Ingredient, i.id) is not None]
+        assert len(survivors) == 1
