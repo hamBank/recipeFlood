@@ -11,7 +11,7 @@ from scripts.find_duplicate_ingredients import (
     find_exact_groups,
     find_prep_size_groups,
     find_qualified_variants,
-    merge_exact_groups,
+    merge_groups,
     strip_prep_and_size,
     usage_counts,
 )
@@ -180,7 +180,7 @@ class TestUsageCounts:
         assert counts == {flour.id: 1}
 
 
-class TestMergeExactGroups:
+class TestMergeGroups:
     def test_keeps_the_most_used_member_and_absorbs_the_rest(self, session):
         # "Egg" is linked to a recipe, "Eggs" isn't — the busier row should
         # survive even though it wasn't first in the group.
@@ -198,7 +198,7 @@ class TestMergeExactGroups:
         session.commit()
 
         usage = usage_counts(session)
-        merged = merge_exact_groups(session, [[eggs, egg]], usage)
+        merged = merge_groups(session, [[eggs, egg]], usage)
 
         assert merged == 1
         assert session.get(Ingredient, eggs.id) is None
@@ -213,7 +213,7 @@ class TestMergeExactGroups:
         session.add(recipe)
         session.flush()
         # Two lines linked to "Egg" so it out-uses "Eggs" and is the one
-        # merge_exact_groups keeps — the line and item under test, linked
+        # merge_groups keeps — the line and item under test, linked
         # to "Eggs", are the ones that should end up repointed.
         session.add(
             RecipeIngredient(
@@ -236,7 +236,7 @@ class TestMergeExactGroups:
         session.add(item)
         session.commit()
 
-        merge_exact_groups(session, [[egg, eggs]], usage_counts(session))
+        merge_groups(session, [[egg, eggs]], usage_counts(session))
 
         session.refresh(line)
         session.refresh(item)
@@ -249,7 +249,7 @@ class TestMergeExactGroups:
         onion = make(session, "Onion")
         onions = make(session, "Onions")
 
-        merged = merge_exact_groups(session, [[egg, eggs], [onion, onions]], usage_counts(session))
+        merged = merge_groups(session, [[egg, eggs], [onion, onions]], usage_counts(session))
 
         assert merged == 2
         assert session.get(Ingredient, eggs.id) is None
@@ -262,8 +262,21 @@ class TestMergeExactGroups:
         b = make(session, "Eggs")
         c = make(session, "Large Eggs")
 
-        merged = merge_exact_groups(session, [[a, b, c]], usage_counts(session))
+        merged = merge_groups(session, [[a, b, c]], usage_counts(session))
 
         assert merged == 2
         survivors = [i for i in (a, b, c) if session.get(Ingredient, i.id) is not None]
         assert len(survivors) == 1
+
+    def test_is_tier_agnostic_and_also_merges_a_prep_size_group(self, session):
+        # merge_groups doesn't know or care which tier found its input —
+        # this is exactly what --merge-prep-size relies on.
+        onion = make(session, "Onion")
+        diced = make(session, "1 Inch Diced Onion")
+        groups = find_prep_size_groups([onion, diced], exclude_ids=set())
+
+        merged = merge_groups(session, groups, usage_counts(session))
+
+        assert merged == 1
+        assert session.get(Ingredient, diced.id) is None
+        assert session.get(Ingredient, onion.id) is not None

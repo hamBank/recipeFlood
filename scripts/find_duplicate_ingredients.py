@@ -5,6 +5,7 @@ differently, and suggest which to merge.
     python -m scripts.find_duplicate_ingredients
     python -m scripts.find_duplicate_ingredients --min-usage 1
     python -m scripts.find_duplicate_ingredients --merge-exact
+    python -m scripts.find_duplicate_ingredients --merge-exact --merge-prep-size
 
 Importing the blog, a shopping-list CSV and years of cooking history each
 create one pantry row per distinct phrase they saw (see SPEC.md "The
@@ -40,7 +41,9 @@ It works in three tiers:
   scraped text can carry that phrasing right in its name: "Onion" next
   to "1 Inch Diced Onion". Not as certain as the exact tier — "cube
   steak" is a real cut of meat, not "steak" with "cubed" stripped off —
-  so this is report-only, `--merge-exact` included.
+  so `--merge-exact` alone leaves it alone; `--merge-prep-size` opts
+  into merging it too, once you've read the report and it looks sane
+  for your own pantry.
 
   **Qualified variants** — one ingredient's normalised words are a
   *subset* of the other's, e.g. "onion" ⊂ "red onion", "capsicum" ⊂ "red
@@ -52,22 +55,25 @@ It works in three tiers:
   similarity alone scores "salt" against "malt" *higher* than it scores
   "hand soap" against "handwash", an actual duplicate — short ingredient
   names are just too short for that to discriminate reliably, so this
-  script doesn't use it. Always report-only, `--merge-exact` included —
-  merge one by hand from the Pantry page's own "Merge" button, or:
+  script doesn't use it. Always report-only — merge one by hand from
+  the Pantry page's own "Merge" button, or:
 
     curl -X POST /ingredients/<keep-slug>/merge/<absorb-slug>
 
-`--merge-exact` performs every merge in the exact-matches tier only —
-same `_merge_into` the endpoint above calls, so it's the same repointing
-of recipe lines and shopping items, same alias inheritance, same delete
-of the absorbed row. Within a group, the ingredient used in the most
-recipes is kept (ties broken by whichever sorts first); this is
-irreversible, so read the report first if you're not sure.
+`--merge-exact` and `--merge-prep-size` each perform every merge in
+their own tier, and can be combined — same `_merge_into` the endpoint
+above calls either way, so it's the same repointing of recipe lines and
+shopping items, same alias inheritance, same delete of the absorbed
+row. Within a group, the ingredient used in the most recipes is kept
+(ties broken by whichever sorts first); this is irreversible, so read
+the report first if you're not sure. Qualified variants are never
+auto-merged by any flag — that tier still needs a human, since "butter"
+and "peanut butter" also fit the pattern.
 
 `--min-usage` drops pairs where neither side is used in any recipe yet —
 mostly shopping-list-only stubs, where a wrong merge costs nothing to
 undo but a long list of them is just noise while you're working through
-the ones that actually matter. It also scopes `--merge-exact`: only
+the ones that actually matter. It also scopes both merge flags: only
 groups that clear the threshold get merged.
 """
 
@@ -206,13 +212,15 @@ def find_prep_size_groups(
     return _group_by_shared_key(candidates, prep_size_keys)
 
 
-def merge_exact_groups(
+def merge_groups(
     session: Session, groups: list[list[Ingredient]], usage: dict[int, int]
 ) -> int:
     """Merge every group into its highest-usage member (ties broken by
     whichever sorts first) via the same `_merge_into` the `/merge`
     endpoint calls. Commits once per group. Returns how many rows were
-    absorbed."""
+    absorbed. Tier-agnostic — used for both the exact and prep/size
+    tiers, never for qualified variants (those are pairs, not groups,
+    and always report-only)."""
     merged = 0
     for group in groups:
         group = sorted(group, key=lambda m: usage.get(m.id, 0), reverse=True)
@@ -267,7 +275,12 @@ def main() -> int:
     parser.add_argument(
         "--merge-exact",
         action="store_true",
-        help="actually merge every exact-match group (never prep/size or qualified variants) instead of just reporting it",
+        help="actually merge every exact-match group instead of just reporting it",
+    )
+    parser.add_argument(
+        "--merge-prep-size",
+        action="store_true",
+        help="actually merge every prep/size-variant group too (never qualified variants) instead of just reporting it",
     )
     args = parser.parse_args()
 
@@ -297,7 +310,7 @@ def main() -> int:
         # the absorbed rows, and a label built from one afterwards would be
         # describing a row already gone from the database.
         if exact_groups and args.merge_exact:
-            merged_count = merge_exact_groups(session, exact_groups, usage)
+            merged_count = merge_groups(session, exact_groups, usage)
             print(f"Merged {merged_count} ingredient(s) into their group's keeper.\n")
 
         all_prep_groups = find_prep_size_groups(ingredients, exact_ids)
@@ -311,10 +324,15 @@ def main() -> int:
             prep_groups, usage, label,
         )
         if prep_groups:
-            print(
-                "  (not touched by --merge-exact — a prep/size-only match can "
-                "still be a genuinely different product, e.g. \"cube steak\")\n"
-            )
+            if args.merge_prep_size:
+                merged_count = merge_groups(session, prep_groups, usage)
+                print(f"Merged {merged_count} ingredient(s) into their group's keeper.\n")
+            else:
+                print(
+                    "  (not merged — pass --merge-prep-size once this looks right for "
+                    "your pantry; a prep/size-only match can still be a genuinely "
+                    'different product, e.g. "cube steak")\n'
+                )
 
         variants = [
             (a, b)
