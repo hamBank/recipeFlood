@@ -4,6 +4,7 @@ differently, and suggest which to merge.
 
     python -m scripts.find_duplicate_ingredients
     python -m scripts.find_duplicate_ingredients --min-usage 1
+    python -m scripts.find_duplicate_ingredients --merge-exact
 
 Importing the blog, a shopping-list CSV and years of cooking history each
 create one pantry row per distinct phrase they saw (see SPEC.md "The
@@ -18,16 +19,17 @@ independently, in different import runs, with phrasing that normalises
 to the same thing but was never spelled identically, slip through as two
 rows instead of one.
 
-This script never merges anything itself — a wrong auto-merge would
-silently point some recipes' cost and nutrition at the wrong ingredient,
-and that is not a call a heuristic gets to make. It only prints
-candidates, in two tiers:
+By default this script only prints candidates, never merges anything —
+a wrong auto-merge would silently point some recipes' cost and nutrition
+at the wrong ingredient, and that is not a call a heuristic gets to make.
+It works in two tiers:
 
   **Exact matches** — rows whose name (or alias) reduces to the exact
   same normalised core via the app's own `normalise_ingredient_name`
   (the noise-word/plural stripping that already backs recipe-line
   matching, e.g. "Eggs" and "Large Eggs" both reduce to "egg"). About as
-  close to certain as this gets.
+  close to certain as this gets — the one tier `--merge-exact` (below)
+  is willing to act on.
 
   **Qualified variants** — one ingredient's normalised words are a
   *subset* of the other's, e.g. "onion" ⊂ "red onion", "capsicum" ⊂ "red
@@ -39,16 +41,23 @@ candidates, in two tiers:
   similarity alone scores "salt" against "malt" *higher* than it scores
   "hand soap" against "handwash", an actual duplicate — short ingredient
   names are just too short for that to discriminate reliably, so this
-  script doesn't use it.
-
-Merge a suggested pair from the Pantry page's own "Merge" button, or:
+  script doesn't use it. Always report-only, `--merge-exact` included —
+  merge one by hand from the Pantry page's own "Merge" button, or:
 
     curl -X POST /ingredients/<keep-slug>/merge/<absorb-slug>
+
+`--merge-exact` performs every merge in the exact-matches tier — same
+`_merge_into` the endpoint above calls, so it's the same repointing of
+recipe lines and shopping items, same alias inheritance, same delete of
+the absorbed row. Within a group, the ingredient used in the most
+recipes is kept (ties broken by whichever sorts first); this is
+irreversible, so read the report first if you're not sure.
 
 `--min-usage` drops pairs where neither side is used in any recipe yet —
 mostly shopping-list-only stubs, where a wrong merge costs nothing to
 undo but a long list of them is just noise while you're working through
-the ones that actually matter.
+the ones that actually matter. It also scopes `--merge-exact`: only
+groups that clear the threshold get merged.
 """
 
 from __future__ import annotations
@@ -66,6 +75,7 @@ from sqlmodel import Session, func, select  # noqa: E402
 from backend.database import engine  # noqa: E402
 from backend.models import Ingredient, RecipeIngredient  # noqa: E402
 from backend.recipes_service import normalise_ingredient_name  # noqa: E402
+from backend.routers.ingredients import _merge_into  # noqa: E402
 
 
 def usage_counts(session: Session) -> dict[int, int]:
@@ -105,6 +115,24 @@ def find_exact_groups(ingredients: list[Ingredient]) -> list[list[Ingredient]]:
     return groups
 
 
+def merge_exact_groups(
+    session: Session, groups: list[list[Ingredient]], usage: dict[int, int]
+) -> int:
+    """Merge every group into its highest-usage member (ties broken by
+    whichever sorts first) via the same `_merge_into` the `/merge`
+    endpoint calls. Commits once per group. Returns how many rows were
+    absorbed."""
+    merged = 0
+    for group in groups:
+        group = sorted(group, key=lambda m: usage.get(m.id, 0), reverse=True)
+        keep, absorbed = group[0], group[1:]
+        for other in absorbed:
+            _merge_into(session, keep, other)
+            merged += 1
+        session.commit()
+    return merged
+
+
 def find_qualified_variants(
     ingredients: list[Ingredient], exclude_ids: set[int]
 ) -> list[tuple[Ingredient, Ingredient]]:
@@ -129,6 +157,11 @@ def main() -> int:
         type=int,
         default=0,
         help="skip a pair when neither side is used in any recipe at least this many times",
+    )
+    parser.add_argument(
+        "--merge-exact",
+        action="store_true",
+        help="actually merge every exact-match group (never qualified variants) instead of just reporting it",
     )
     args = parser.parse_args()
 
@@ -159,6 +192,14 @@ def main() -> int:
                 for other in group[1:]:
                     print(f"    ← merge {label(other)}")
                 print()
+
+            # Labels are printed above, before merging — `_merge_into`
+            # deletes the absorbed rows, and a label built from one
+            # afterwards would be describing a row already gone from the
+            # database.
+            if args.merge_exact:
+                merged_count = merge_exact_groups(session, exact_groups, usage)
+                print(f"Merged {merged_count} ingredient(s) into their group's keeper.\n")
 
         variants = [
             (a, b)
