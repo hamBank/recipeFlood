@@ -1,4 +1,4 @@
-"""scripts/find_duplicate_ingredients.py's two detection tiers. No
+"""scripts/find_duplicate_ingredients.py's three detection tiers. No
 network, pure functions over whatever's in the pantry — see the script's
 own module docstring for why a plain spelling-similarity score was
 rejected in favour of "one's normalised words are a subset of the
@@ -9,8 +9,10 @@ duplicates like "hand soap"/"handwash".
 from backend.models import Ingredient, Recipe, RecipeIngredient, ShoppingItem
 from scripts.find_duplicate_ingredients import (
     find_exact_groups,
+    find_prep_size_groups,
     find_qualified_variants,
     merge_exact_groups,
+    strip_prep_and_size,
     usage_counts,
 )
 
@@ -49,6 +51,69 @@ class TestExactGroups:
     def test_a_singleton_is_not_a_group(self, session):
         a = make(session, "Vanilla")
         assert find_exact_groups([a]) == []
+
+
+class TestStripPrepAndSize:
+    def test_strips_a_preparation_method(self):
+        assert strip_prep_and_size("Shredded Chicken") == "chicken"
+
+    def test_strips_a_multi_word_preparation_phrase(self):
+        # Word-level stripping handles this without any phrase-matching:
+        # both "cut" and "diagonally" are noise words on their own.
+        assert strip_prep_and_size("Carrots Cut Diagonally") == "carrot"
+
+    def test_strips_a_sizing_phrase_with_a_leading_number(self):
+        assert strip_prep_and_size("1 Inch Cubed Chicken Breast") == "chicken breast"
+
+    def test_strips_a_qualitative_size_word(self):
+        assert strip_prep_and_size("1 Big Onion") == "onion"
+
+    def test_strips_a_generous_pinch(self):
+        assert strip_prep_and_size("Generous Pinch Salt") == "salt"
+
+    def test_strips_a_spaced_out_weight(self):
+        assert strip_prep_and_size("2.5 oz Chocolate") == "chocolate"
+
+    def test_strips_a_weight_fused_to_its_number(self):
+        assert strip_prep_and_size("500g Flour") == "flour"
+
+    def test_strips_a_fused_kg(self):
+        assert strip_prep_and_size("1kg Sugar") == "sugar"
+
+    def test_leaves_a_plain_name_alone(self):
+        assert strip_prep_and_size("Onion") == "onion"
+
+    def test_falls_back_to_the_plain_normalised_form_if_nothing_is_left(self):
+        # No food word at all, just size/prep words ("cube" is one of
+        # them too) — stripping everything would leave nothing to group
+        # on, so this returns the plain normalised form (itself already
+        # singularised to "cube") rather than an empty string a dozen
+        # other over-stripped names could collide on.
+        assert strip_prep_and_size("1 Inch Cubes") == "1 inch cube"
+
+
+class TestPrepSizeGroups:
+    def test_a_plain_name_matches_its_diced_variant(self, session):
+        onion = make(session, "Onion")
+        diced = make(session, "1 Inch Diced Onion")
+        groups = find_prep_size_groups([onion, diced], exclude_ids=set())
+        assert len(groups) == 1
+        assert {m.id for m in groups[0]} == {onion.id, diced.id}
+
+    def test_unrelated_names_are_not_grouped(self, session):
+        salt = make(session, "Salt")
+        malt = make(session, "Malt")
+        assert find_prep_size_groups([salt, malt], exclude_ids=set()) == []
+
+    def test_exact_group_members_are_excluded_from_this_tier(self, session):
+        egg = make(session, "Egg")
+        eggs = make(session, "Eggs")
+        groups = find_prep_size_groups([egg, eggs], exclude_ids={egg.id, eggs.id})
+        assert groups == []
+
+    def test_a_singleton_is_not_a_group(self, session):
+        a = make(session, "Shredded Carrot")
+        assert find_prep_size_groups([a], exclude_ids=set()) == []
 
 
 class TestQualifiedVariants:
