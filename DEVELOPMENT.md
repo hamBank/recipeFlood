@@ -340,23 +340,31 @@ python -m scripts.find_duplicate_ingredients --min-usage 1   # skip zero-usage s
 python -m scripts.find_duplicate_ingredients --merge-exact   # actually merge the exact tier
 ```
 
-By default it's read-only — it only prints suggestions, in two tiers:
+By default it's read-only — it only prints suggestions, in three tiers:
 **exact matches** (rows whose name or alias reduces to the same
-normalised core — about as certain as text alone gets) and **qualified
-variants** (one name's words are a subset of the other's, e.g. "onion" ⊂
-"red onion"). See the script's own docstring for why a plain spelling-
-similarity score was tried and rejected — it scored unrelated pairs like
-"salt"/"malt" *higher* than real duplicates like "hand soap"/"handwash",
-which is exactly backwards.
+normalised core — about as certain as text alone gets), **prep/size
+variants** (rows that only match once preparation-method words —
+"shredded", "cut diagonally", "julienned" — and sizing/amount words —
+"1 big", "2.5 oz", "500g", "generous pinch", "1 inch cubes" — are
+stripped too, e.g. "Onion" / "1 Inch Diced Onion"; a pantry row minted
+straight from scraped recipe text can carry that phrasing right in its
+name, unlike a recipe line, which has already had its amount parsed out
+by the time it's matched), and **qualified variants** (one name's words
+are a subset of the other's, e.g. "onion" ⊂ "red onion"). See the
+script's own docstring for why a plain spelling-similarity score was
+tried and rejected — it scored unrelated pairs like "salt"/"malt"
+*higher* than real duplicates like "hand soap"/"handwash", which is
+exactly backwards.
 
 `--merge-exact` merges every exact-match group there and then, keeping
 whichever member is used in the most recipes and absorbing the rest —
 same `_merge_into` (`backend/routers/ingredients.py`) the Pantry page's
 own Merge button calls, so it's the same repointing of recipe lines and
-shopping items, same alias inheritance. Qualified variants are never
-auto-merged, at any flag — that tier still needs a human, since "butter"
-and "peanut butter" also fit the pattern. Act on one of those from the
-Pantry page's Merge button, or `POST /ingredients/<keep>/merge/<absorb>`.
+shopping items, same alias inheritance. Prep/size and qualified variants
+are never auto-merged, at any flag — those tiers still need a human,
+since "cube steak" is a real cut of meat and "peanut butter" is not just
+"butter" with a qualifier stripped. Act on one of those from the Pantry
+page's Merge button, or `POST /ingredients/<keep>/merge/<absorb>`.
 
 ## Cooking lists and the shopping list
 
