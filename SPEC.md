@@ -155,8 +155,25 @@ so the pantry arrives pre-populated and ready to be priced rather than
 empty. A shopping-list export can be imported on top of it
 (`scripts/import_pantry_csv.py`), which adds the items the recipes never
 mention and fills in where each one is bought. Near-duplicates ("onion" / "red onion" / "onions") are folded
-together with the merge action, which repoints recipe lines, inherits any
+together with the merge action, which repoints recipe lines *and shopping
+items* (missing either one leaves it — the shopping item, usually —
+silently pointed at a pantry row that no longer exists), inherits any
 data the absorbed row had, and keeps the old name as an alias.
+
+Matching a recipe line or a typed shopping item against the pantry
+(`find_ingredient`) only ever runs once, when that line is first saved —
+the normal order is cook a bunch of recipes first, *then* notice "fetta"
+and "feta" should be the same pantry row. So adding an alias after the
+fact also re-matches it against every recipe line and shopping item still
+sitting unlinked, not just what gets saved from now on — otherwise the
+alias would only ever help future entries, and the shopping list would
+keep showing "feta" and "fetta" as two lines forever. A recipe line that
+gets linked this way also has its weight recomputed from the newly-found
+ingredient's density, the same as when a density changes on an already-
+linked ingredient. This does not go back and merge shopping-list rows
+that were already sitting there as separate lines before the alias
+existed — only new lines from that point on merge with them; see
+`backend/routers/ingredients.py`'s `_relink_unmatched`.
 
 The Pantry page's "missing a price" and "missing nutrition" filters are the
 work queues for filling this in — and `scripts/enrich_pantry.py` can fill

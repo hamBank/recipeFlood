@@ -139,6 +139,25 @@ class TestMerge:
             client.post("/ingredients/plain-flour/merge/plain-flour").status_code == 400
         )
 
+    def test_repoints_shopping_items_too_not_just_recipe_lines(self, client, admin):
+        # The bug this covers: a shopping item linked to the absorbed
+        # ingredient kept pointing at its (now-deleted) id — a dangling
+        # foreign key SQLite doesn't enforce, so the item silently lost
+        # its shop and price instead of erroring. From the shopping list
+        # it looks exactly like "merging in an alias broke the match."
+        survivor = client.post("/ingredients", json={"name": "Hand Soap"}).json()
+        absorbed = client.post(
+            "/ingredients", json={"name": "Liquid Soap", "source": "chemist"}
+        ).json()
+        item = client.post("/shopping", json={"name": "Liquid Soap"}).json()
+        assert item["ingredient_id"] == absorbed["id"]
+
+        client.post(f"/ingredients/{survivor['slug']}/merge/{absorbed['slug']}")
+
+        listing = client.get("/shopping").json()
+        relinked = next(i for i in listing["items"] if i["id"] == item["id"])
+        assert relinked["ingredient_id"] == survivor["id"]
+
 
 class TestDelete:
     def test_deleting_unlinks_rather_than_damaging_recipes(self, client, cake, flour, admin):
@@ -172,6 +191,74 @@ class TestAliasMatching:
         from backend.recipes_service import find_ingredient
 
         assert find_ingredient(session, "dragonfruit") is None
+
+
+class TestRetroactiveAliasLinking:
+    """Matching only ever runs once, when a line is first saved — adding
+    an alias later has to reach back and link what's already sitting
+    there unmatched, or the alias only ever helps future entries."""
+
+    def test_adding_an_alias_links_and_reweighs_an_existing_recipe_line(
+        self, client, section, flour, admin
+    ):
+        # Ordinary recipe saving auto-creates a pantry stub for anything
+        # it can't match, so a line with no ingredient_id at all is rare —
+        # deleting the ingredient it *was* linked to (which unlinks rather
+        # than deletes the line) is the realistic way to get one.
+        recipe = client.post(
+            "/recipes",
+            json={
+                "title": "Scones",
+                "tags": ["cake"],
+                "ingredients": [{"name": "plain flour", "quantity": 2, "unit": "cup"}],
+                "steps": [{"text": "Bake."}],
+            },
+        ).json()
+        client.delete("/ingredients/plain-flour")
+        before = client.get(f"/recipes/{recipe['slug']}").json()
+        line = next(i for i in before["ingredients"] if i["name"] == "plain flour")
+        assert line["ingredient_id"] is None
+
+        replacement = client.post(
+            "/ingredients", json={"name": "White Flour", "density_g_per_ml": 0.5}
+        ).json()
+        client.patch(f"/ingredients/{replacement['slug']}", json={"aliases": ["plain flour"]})
+
+        after = client.get(f"/recipes/{recipe['slug']}").json()
+        line = next(i for i in after["ingredients"] if i["name"] == "plain flour")
+        assert line["ingredient_id"] == replacement["id"]
+        # Reweighed from the new ingredient's density (0.5, not the old
+        # 0.6) — proof this is a fresh conversion, not a stale number.
+        assert line["weight_grams"] == pytest.approx(250.0)
+        assert line["weight_source"] == "converted"
+
+    def test_adding_an_alias_links_an_existing_shopping_item(self, client, admin):
+        ingredient = client.post(
+            "/ingredients",
+            json={"name": "Hand Soap", "is_food": False, "source": "chemist"},
+        ).json()
+        # "handwash" doesn't match "Hand Soap" yet, so this item is saved
+        # unlinked — same as anything typed before the alias existed.
+        item = client.post("/shopping", json={"name": "handwash"}).json()
+        assert item["ingredient_id"] is None
+        assert item["shop"] == "other"
+
+        client.patch(f"/ingredients/{ingredient['slug']}", json={"aliases": ["handwash"]})
+
+        listing = client.get("/shopping").json()
+        relinked = next(i for i in listing["items"] if i["id"] == item["id"])
+        assert relinked["ingredient_id"] == ingredient["id"]
+        assert relinked["shop"] == "chemist"
+
+    def test_a_change_that_does_not_affect_matching_does_not_relink(self, client, admin):
+        # A control: patching a field matching doesn't depend on (here,
+        # cost) must leave unrelated unlinked items alone.
+        ingredient = client.post("/ingredients", json={"name": "Hand Soap"}).json()
+        item = client.post("/shopping", json={"name": "handwash"}).json()
+        client.patch(f"/ingredients/{ingredient['slug']}", json={"cost_per_kg_cents": 500})
+        listing = client.get("/shopping").json()
+        still_unlinked = next(i for i in listing["items"] if i["id"] == item["id"])
+        assert still_unlinked["ingredient_id"] is None
 
 
 class TestIsFood:

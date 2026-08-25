@@ -18,6 +18,7 @@ from ..models import (
     IngredientUpdate,
     Recipe,
     RecipeIngredient,
+    ShoppingItem,
     User,
     utcnow,
 )
@@ -174,6 +175,9 @@ def update_ingredient(
     Adding a density to "plain flour" has to make the 78 baking recipes that
     say "2 cups plain flour" show 300g each — otherwise the master list is
     a place data goes to sit rather than a lookup the recipes actually use.
+    Adding an alias works the same way: recipes and shopping items already
+    sitting there unlinked (saved before this alias existed to match them)
+    get matched against it too, not just ones saved from now on.
     """
     ingredient = _lookup(session, key)
     fields = body.model_dump(exclude_unset=True)
@@ -202,6 +206,10 @@ def update_ingredient(
         field in fields and fields[field] != getattr(ingredient, field)
         for field in ("density_g_per_ml", "grams_per_piece")
     )
+    matching_changed = any(
+        field in fields and fields[field] != getattr(ingredient, field)
+        for field in ("name", "aliases")
+    )
     for name, value in fields.items():
         setattr(ingredient, name, value)
     ingredient.updated_at = utcnow()
@@ -210,38 +218,80 @@ def update_ingredient(
 
     if conversion_changed:
         _reconvert_lines(session, ingredient)
+    if matching_changed:
+        _relink_unmatched(session, ingredient)
 
     session.commit()
     session.refresh(ingredient)
     return _read(session, ingredient, _usage_counts(session).get(ingredient.id, 0))
 
 
-def _reconvert_lines(session: Session, ingredient: Ingredient) -> None:
-    """Recompute weights for recipe lines linked to this ingredient.
-
-    Lines whose weight the recipe stated outright are left alone — a real
-    measured weight always outranks anything we can derive.
-    """
+def _reconvert_line(session: Session, line: RecipeIngredient, ingredient: Ingredient) -> None:
+    """Recompute one recipe line's weight from `ingredient`'s density/piece
+    weight. Skipped by both callers below when the recipe stated the
+    weight outright — a real measured weight always outranks anything we
+    can derive."""
     from ..models import WeightSource
 
+    if line.weight_source == WeightSource.explicit:
+        return
+    recipe = session.get(Recipe, line.recipe_id)
+    grams, source = to_grams(
+        line.quantity,
+        line.unit,
+        line.name,
+        density_g_per_ml=ingredient.density_g_per_ml,
+        grams_per_piece=ingredient.grams_per_piece,
+        system=recipe.units_system if recipe else "au",
+    )
+    line.weight_grams = grams
+    line.weight_source = source
+    session.add(line)
+
+
+def _reconvert_lines(session: Session, ingredient: Ingredient) -> None:
+    """Recompute weights for every recipe line already linked to this
+    ingredient — its density or piece weight just changed."""
     lines = session.exec(
         select(RecipeIngredient).where(RecipeIngredient.ingredient_id == ingredient.id)
     ).all()
     for line in lines:
-        if line.weight_source == WeightSource.explicit:
-            continue
-        recipe = session.get(Recipe, line.recipe_id)
-        grams, source = to_grams(
-            line.quantity,
-            line.unit,
-            line.name,
-            density_g_per_ml=ingredient.density_g_per_ml,
-            grams_per_piece=ingredient.grams_per_piece,
-            system=recipe.units_system if recipe else "au",
-        )
-        line.weight_grams = grams
-        line.weight_source = source
-        session.add(line)
+        _reconvert_line(session, line, ingredient)
+
+
+def _relink_unmatched(session: Session, ingredient: Ingredient) -> None:
+    """Match this ingredient's new name/aliases against recipe lines and
+    shopping items that are still unlinked.
+
+    Matching (`find_ingredient`) only ever runs once, when a line is first
+    saved — so a household adding an alias *after* the fact (the normal
+    order: cook a bunch of recipes, then notice "fetta"/"feta" should be
+    one pantry row) would otherwise only benefit whatever gets saved from
+    now on. Everything already sitting there unlinked stays unlinked, and
+    on the shopping list that means lines that plainly are the same thing
+    never merge. Re-running the exact same trusted matcher against just
+    the unlinked rows is what makes adding an alias actually retroactive.
+
+    A newly-linked recipe line also gets its weight recomputed the same
+    way `_reconvert_lines` does — it was saved with no ingredient to
+    derive a weight from, so it's sitting on `weight_source=unknown` (or
+    a guessed one) even though a real conversion is possible now.
+    """
+    for line in session.exec(
+        select(RecipeIngredient).where(RecipeIngredient.ingredient_id.is_(None))
+    ).all():
+        match = find_ingredient(session, line.name)
+        if match and match.id == ingredient.id:
+            line.ingredient_id = ingredient.id
+            _reconvert_line(session, line, ingredient)
+
+    for item in session.exec(
+        select(ShoppingItem).where(ShoppingItem.ingredient_id.is_(None))
+    ).all():
+        match = find_ingredient(session, item.name)
+        if match and match.id == ingredient.id:
+            item.ingredient_id = ingredient.id
+            session.add(item)
 
 
 @router.post("/{key}/merge/{other_key}", response_model=IngredientRead)
@@ -251,8 +301,8 @@ def merge_ingredient(
     session: Session = Depends(get_session),
     _admin: User = Depends(require_admin_role),
 ):
-    """Fold `other_key` into `key`: repoint its recipe lines, inherit its
-    name as an alias, delete it.
+    """Fold `other_key` into `key`: repoint its recipe lines and shopping
+    items, inherit its name as an alias, delete it.
 
     The blog import creates one master row per distinct ingredient phrase,
     so "red onion", "red onions" and "small red onion" arrive as three.
@@ -268,6 +318,19 @@ def merge_ingredient(
     ).all():
         line.ingredient_id = target.id
         session.add(line)
+
+    # Shopping items reference the pantry too, and `other` is about to be
+    # deleted — miss this and a shopping item that had matched the
+    # absorbed row is left pointing at a row that no longer exists: a
+    # dangling foreign key. SQLite doesn't enforce it by default, so this
+    # silently drops the item's shop and price instead of erroring, which
+    # is exactly what "the shopping list stops matching after I merge an
+    # alias in" looks like from the outside.
+    for item in session.exec(
+        select(ShoppingItem).where(ShoppingItem.ingredient_id == other.id)
+    ).all():
+        item.ingredient_id = target.id
+        session.add(item)
 
     aliases = {a.lower() for a in (target.aliases or [])}
     aliases.add(other.name.lower())
