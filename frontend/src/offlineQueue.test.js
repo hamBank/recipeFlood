@@ -67,6 +67,16 @@ describe('applyQueue', () => {
     expect(result.checked_count).toBe(1)
   })
 
+  it('a checked item sinks below the still-unchecked ones, like the server sorts it', () => {
+    const base = list([
+      item({ id: 1, name: 'Apples' }),
+      item({ id: 2, name: 'Bread' }),
+      item({ id: 3, name: 'Carrots' }),
+    ])
+    const result = applyQueue(base, [{ type: 'check', itemId: 1 }])
+    expect(result.items.map((i) => i.name)).toEqual(['Bread', 'Carrots', 'Apples'])
+  })
+
   it('an "add" entry appends a pending row under "other"', () => {
     const base = list([item()])
     const result = applyQueue(base, [{ type: 'add', name: 'Tofu', tempId: -1 }])

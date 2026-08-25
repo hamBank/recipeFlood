@@ -81,6 +81,14 @@ export function applyQueue(list, queue) {
       if (!shops.includes('other')) shops = [...shops, 'other']
     }
   }
+  // Match backend/shopping.py's read_list ordering (unchecked first, then
+  // alphabetical) — otherwise a queued check leaves the item sitting where
+  // it was instead of sinking to the bottom of its shop group the way it
+  // does once the server's own sorted response comes back.
+  items = [...items].sort((a, b) => {
+    if (a.is_checked !== b.is_checked) return a.is_checked ? 1 : -1
+    return a.name.localeCompare(b.name)
+  })
   const checked_count = items.filter((item) => item.is_checked).length
   return { ...list, items, shops, total_count: items.length, checked_count }
 }
