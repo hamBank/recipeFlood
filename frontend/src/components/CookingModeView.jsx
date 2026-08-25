@@ -105,6 +105,13 @@ export default function CookingModeView({ recipe, onExit }) {
           </ol>
         )}
       </section>
+
+      {recipe.nutrition_note && (
+        <section>
+          <h2 className="text-lg font-semibold text-ink">Notes</h2>
+          <p className="mt-2 whitespace-pre-line text-ink-muted">{recipe.nutrition_note}</p>
+        </section>
+      )}
     </div>
   )
 }

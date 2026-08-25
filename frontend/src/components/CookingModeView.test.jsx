@@ -59,4 +59,20 @@ describe('CookingModeView', () => {
     fireEvent.click(screen.getByText('Exit'))
     expect(onExit).toHaveBeenCalledOnce()
   })
+
+  it('shows notes at the bottom when the recipe has any', () => {
+    render(
+      <CookingModeView
+        recipe={{ ...recipe, nutrition_note: 'Halved the sugar, still plenty sweet.' }}
+        onExit={() => {}}
+      />,
+    )
+    expect(screen.getByText('Notes')).toBeDefined()
+    expect(screen.getByText('Halved the sugar, still plenty sweet.')).toBeDefined()
+  })
+
+  it('omits the notes section when the recipe has none', () => {
+    render(<CookingModeView recipe={recipe} onExit={() => {}} />)
+    expect(screen.queryByText('Notes')).toBeNull()
+  })
 })
