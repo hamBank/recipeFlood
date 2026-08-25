@@ -324,6 +324,31 @@ download page states plain copyright with no licence grant, so the
 dataset isn't redistributed in this repo; the fetch script is the way to
 get it.
 
+## Finding duplicate pantry rows
+
+Importing the blog, a shopping-list CSV and years of cooking history each
+mint one pantry row per distinct phrase they saw, so the same real
+ingredient routinely ends up split across several rows — "egg" / "eggs" /
+"large eggs" — each with its own separate, incomplete price and
+nutrition. The Pantry page's own Merge button is how that gets folded
+back down (see "The master ingredient list" in SPEC.md), but finding the
+candidates by eye across a few hundred rows is tedious:
+
+```bash
+python -m scripts.find_duplicate_ingredients
+python -m scripts.find_duplicate_ingredients --min-usage 1   # skip zero-usage stubs
+```
+
+Read-only — it only prints suggestions, never merges anything itself, in
+two tiers: **exact matches** (rows whose name or alias reduces to the
+same normalised core — about as certain as text alone gets) and
+**qualified variants** (one name's words are a subset of the other's,
+e.g. "onion" ⊂ "red onion"). See the script's own docstring for why a
+plain spelling-similarity score was tried and rejected — it scored
+unrelated pairs like "salt"/"malt" *higher* than real duplicates like
+"hand soap"/"handwash", which is exactly backwards. Act on a suggestion
+from the Pantry page's Merge button, or `POST /ingredients/<keep>/merge/<absorb>`.
+
 ## Cooking lists and the shopping list
 
 Both live behind sign-in, at `/cooking` and `/groceries` in the frontend.
