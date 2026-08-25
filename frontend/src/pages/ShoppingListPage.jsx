@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   addShoppingItem,
   clearCheckedShopping,
@@ -7,6 +7,15 @@ import {
   uncheckAllShopping,
   updateShoppingItem,
 } from '../api'
+import {
+  applyQueue,
+  drainQueue,
+  loadCachedList,
+  loadQueue,
+  nextTempId,
+  saveCachedList,
+  saveQueue,
+} from '../offlineQueue'
 import { useSession } from '../App'
 import { formatCents, formatPercent, SOURCE_LABEL } from '../format'
 
@@ -22,31 +31,92 @@ import { formatCents, formatPercent, SOURCE_LABEL } from '../format'
  * list doubles as a route. The order is a walking order, not alphabetical
  * — the backend decides it (see backend/shopping.py) and this page just
  * renders `shops` in the order it is given.
+ *
+ * It also works with no connection at all — see offlineQueue.js. `list`
+ * here is the last-known truth from the server (or, offline, from a
+ * localStorage cache of it); `queue` is what's pending; `displayList` is
+ * the two combined, and is what actually renders.
  */
 export default function ShoppingListPage() {
   const { config } = useSession()
   const symbol = config?.currency_symbol || '$'
 
   const [list, setList] = useState(null)
+  const [queue, setQueue] = useState(() => loadQueue())
+  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine)
   const [newName, setNewName] = useState('')
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const [showChecked, setShowChecked] = useState(true)
 
+  useEffect(() => {
+    saveQueue(queue)
+  }, [queue])
+
+  const displayList = useMemo(() => applyQueue(list, queue), [list, queue])
+
   const load = useCallback(async () => {
     try {
-      setList(await getShoppingList())
+      const fresh = await getShoppingList()
+      setList(fresh)
+      saveCachedList(fresh)
+      setOffline(false)
       setError(null)
     } catch (caught) {
-      setError(caught.message)
+      if (caught.status) {
+        // A real server response (e.g. signed out) — not a connectivity
+        // problem, so it shouldn't fall back to a stale offline view.
+        setError(caught.message)
+        return
+      }
+      setOffline(true)
+      const cached = loadCachedList()
+      if (cached) {
+        setList(cached)
+        setError(null)
+      } else {
+        setError("Offline, and nothing cached yet — reconnect once to load the list.")
+      }
     }
   }, [])
+
+  const drain = useCallback(async () => {
+    if (!queue.length) return
+    const remaining = await drainQueue(queue)
+    if (remaining.length === queue.length) return // no progress — still actually offline
+    setQueue(remaining)
+    await load()
+  }, [queue, load])
 
   useEffect(() => {
     load()
   }, [load])
 
+  useEffect(() => {
+    const goOnline = () => {
+      setOffline(false)
+      drain()
+    }
+    const goOffline = () => setOffline(true)
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+    // Covers a reconnect the app never saw fire, and a queue left over
+    // from being closed while offline last time.
+    if (typeof navigator === 'undefined' || navigator.onLine) drain()
+    return () => {
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [drain])
+
   const toggle = async (item) => {
+    if (offline || item.pendingSync) {
+      // Only unchecked -> checked is safe to queue blind — see
+      // offlineQueue.js — so unticking simply isn't offered here.
+      if (item.is_checked) return
+      setQueue((current) => [...current, { type: 'check', itemId: item.id }])
+      return
+    }
     // Optimistic: ticking things off should feel instant with a trolley in
     // one hand. A failure re-reads the server's version.
     setList((current) => ({
@@ -68,6 +138,12 @@ export default function ShoppingListPage() {
     event.preventDefault()
     const name = newName.trim()
     if (!name) return
+    if (offline) {
+      const tempId = nextTempId(displayList)
+      setQueue((current) => [...current, { type: 'add', name, tempId }])
+      setNewName('')
+      return
+    }
     setBusy(true)
     try {
       await addShoppingItem({ name })
@@ -80,12 +156,14 @@ export default function ShoppingListPage() {
   }
 
   const remove = async (item) => {
+    if (offline) return
     await deleteShoppingItem(item.id)
     await load()
   }
 
   const clear = async () => {
-    if (!window.confirm(`Remove ${list.checked_count} ticked item(s) from the list?`)) return
+    if (offline) return
+    if (!window.confirm(`Remove ${displayList.checked_count} ticked item(s) from the list?`)) return
     setBusy(true)
     try {
       setList(await clearCheckedShopping())
@@ -96,6 +174,7 @@ export default function ShoppingListPage() {
   }
 
   const uncheck = async () => {
+    if (offline) return
     setBusy(true)
     try {
       setList(await uncheckAllShopping())
@@ -105,11 +184,11 @@ export default function ShoppingListPage() {
     setBusy(false)
   }
 
-  if (error && !list) return <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>
-  if (!list) return <p className="text-ink-muted">Loading…</p>
+  if (error && !displayList) return <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>
+  if (!displayList) return <p className="text-ink-muted">Loading…</p>
 
-  const visible = showChecked ? list.items : list.items.filter((i) => !i.is_checked)
-  const remaining = list.total_count - list.checked_count
+  const visible = showChecked ? displayList.items : displayList.items.filter((i) => !i.is_checked)
+  const remaining = displayList.total_count - displayList.checked_count
 
   return (
     <div className="space-y-5">
@@ -117,22 +196,29 @@ export default function ShoppingListPage() {
         <h1 className="text-2xl font-bold text-ink">Shopping</h1>
         <p className="text-sm text-ink-muted">
           {remaining} to buy
-          {list.checked_count > 0 && ` · ${list.checked_count} ticked off`}
+          {displayList.checked_count > 0 && ` · ${displayList.checked_count} ticked off`}
         </p>
-        {list.total_cents !== null && remaining > 0 && (
+        {displayList.total_cents !== null && remaining > 0 && (
           <p className="ml-auto text-sm text-ink-muted">
             <span className="font-medium text-ink">
-              {formatCents(list.total_cents, symbol)}
+              {formatCents(displayList.total_cents, symbol)}
             </span>{' '}
             {/* Same honesty rule as the recipe cost panel: say how much of
                 the list the total actually covers rather than presenting a
                 confident-looking undercount. */}
             <span title="Share of the unticked items that have a price in the pantry">
-              ({formatPercent(list.priced_fraction)} priced)
+              ({formatPercent(displayList.priced_fraction)} priced)
             </span>
           </p>
         )}
       </header>
+
+      {offline && (
+        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+          Offline — ticking things off and adding new items still works and will sync once
+          you&apos;re back online. Unticking, editing and removing are paused until then.
+        </p>
+      )}
 
       <form onSubmit={add} className="flex gap-2">
         <input
@@ -152,7 +238,7 @@ export default function ShoppingListPage() {
 
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
-      {list.total_count === 0 ? (
+      {displayList.total_count === 0 ? (
         <p className="rounded-xl border border-edge bg-card p-6 text-center text-ink-muted">
           Nothing on the list. Add something above, or send a cooking list here.
         </p>
@@ -167,18 +253,18 @@ export default function ShoppingListPage() {
               />
               Show ticked
             </label>
-            {list.checked_count > 0 && (
+            {displayList.checked_count > 0 && (
               <>
                 <button
                   onClick={clear}
-                  disabled={busy}
+                  disabled={busy || offline}
                   className="rounded-lg border border-edge px-3 py-1 text-ink-muted hover:bg-soft disabled:opacity-50"
                 >
-                  Clear {list.checked_count} ticked
+                  Clear {displayList.checked_count} ticked
                 </button>
                 <button
                   onClick={uncheck}
-                  disabled={busy}
+                  disabled={busy || offline}
                   className="rounded-lg border border-edge px-3 py-1 text-ink-muted hover:bg-soft disabled:opacity-50"
                 >
                   Untick all
@@ -187,7 +273,7 @@ export default function ShoppingListPage() {
             )}
           </div>
 
-          {list.shops.map((shop) => {
+          {displayList.shops.map((shop) => {
             const rows = visible.filter((item) => item.shop === shop)
             if (!rows.length) return null
             return (
@@ -201,6 +287,7 @@ export default function ShoppingListPage() {
                       key={item.id}
                       item={item}
                       symbol={symbol}
+                      offline={offline}
                       onToggle={() => toggle(item)}
                       onRemove={() => remove(item)}
                     />
@@ -215,7 +302,7 @@ export default function ShoppingListPage() {
   )
 }
 
-function Row({ item, symbol, onToggle, onRemove }) {
+function Row({ item, symbol, offline, onToggle, onRemove }) {
   // "why is 400g of onion on my list" — answerable without re-running the
   // aggregation, because each merge recorded what it came from.
   const why = (item.contributions || [])
@@ -228,6 +315,7 @@ function Row({ item, symbol, onToggle, onRemove }) {
         type="checkbox"
         checked={item.is_checked}
         onChange={onToggle}
+        disabled={offline && item.is_checked}
         className="h-5 w-5 shrink-0"
         aria-label={`Tick off ${item.name}`}
       />
@@ -237,6 +325,9 @@ function Row({ item, symbol, onToggle, onRemove }) {
         </span>
         {item.amount_text && (
           <span className="ml-2 text-sm text-ink-muted">{item.amount_text}</span>
+        )}
+        {item.pendingSync && (
+          <span className="ml-2 text-xs italic text-ink-muted">not yet synced</span>
         )}
         {why && (
           <span className="block truncate text-xs text-ink-muted" title={why}>
@@ -251,7 +342,8 @@ function Row({ item, symbol, onToggle, onRemove }) {
       )}
       <button
         onClick={onRemove}
-        className="shrink-0 rounded px-2 py-1 text-sm text-ink-muted hover:bg-soft"
+        disabled={offline}
+        className="shrink-0 rounded px-2 py-1 text-sm text-ink-muted hover:bg-soft disabled:opacity-30"
         aria-label={`Remove ${item.name}`}
       >
         ✕
