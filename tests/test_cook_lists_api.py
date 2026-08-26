@@ -25,6 +25,16 @@ def stew(client):
     return response.json()
 
 
+@pytest.fixture
+def cake(client):
+    response = client.post(
+        "/recipes",
+        json={"title": "Cake", "ingredients": [{"name": "flour"}], "steps": []},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
 class TestCreating:
     def test_a_list_defaults_to_today(self, client):
         created = client.post("/cook-lists", json={}).json()
@@ -196,6 +206,90 @@ class TestCompleting:
             f"/cook-lists/{created['id']}", json={"description": "Renamed"}
         ).json()
         assert updated["completed"] is True
+
+
+class TestCompletingARecipe:
+    def test_a_recipe_defaults_to_not_completed(self, client, soup):
+        created = client.post(
+            "/cook-lists", json={"recipes": [{"recipe_id": soup["id"]}]}
+        ).json()
+        assert created["recipes"][0]["completed"] is False
+
+    def test_completed_can_be_toggled_via_patch(self, client, soup):
+        created = client.post(
+            "/cook-lists", json={"recipes": [{"recipe_id": soup["id"]}]}
+        ).json()
+        marked = client.patch(
+            f"/cook-lists/{created['id']}/recipes/{soup['id']}", json={"completed": True}
+        ).json()
+        assert marked["recipes"][0]["completed"] is True
+
+        reopened = client.patch(
+            f"/cook-lists/{created['id']}/recipes/{soup['id']}", json={"completed": False}
+        ).json()
+        assert reopened["recipes"][0]["completed"] is False
+
+    def test_completing_a_recipe_not_on_the_list_is_a_404(self, client, soup):
+        created = client.post("/cook-lists", json={}).json()
+        response = client.patch(
+            f"/cook-lists/{created['id']}/recipes/{soup['id']}", json={"completed": True}
+        )
+        assert response.status_code == 404
+
+    def test_completing_on_an_unknown_list_is_a_404(self, client, soup):
+        response = client.patch(
+            f"/cook-lists/9999/recipes/{soup['id']}", json={"completed": True}
+        )
+        assert response.status_code == 404
+
+    def test_completed_recipes_sink_to_the_bottom(self, client, soup, stew, cake):
+        created = client.post(
+            "/cook-lists",
+            json={
+                "recipes": [
+                    {"recipe_id": soup["id"]},
+                    {"recipe_id": stew["id"]},
+                    {"recipe_id": cake["id"]},
+                ]
+            },
+        ).json()
+        client.patch(f"/cook-lists/{created['id']}/recipes/{soup['id']}", json={"completed": True})
+
+        body = client.get(f"/cook-lists/{created['id']}").json()
+        assert [r["title"] for r in body["recipes"]] == ["Stew", "Cake", "Soup"]
+
+    def test_relative_order_within_each_group_is_preserved(self, client, soup, stew, cake):
+        # Two completed, one not — the completed pair should keep their own
+        # planned order relative to each other, not just land at the bottom
+        # in whatever order the sort happens to produce.
+        created = client.post(
+            "/cook-lists",
+            json={
+                "recipes": [
+                    {"recipe_id": soup["id"]},
+                    {"recipe_id": stew["id"]},
+                    {"recipe_id": cake["id"]},
+                ]
+            },
+        ).json()
+        client.patch(f"/cook-lists/{created['id']}/recipes/{soup['id']}", json={"completed": True})
+        client.patch(f"/cook-lists/{created['id']}/recipes/{cake['id']}", json={"completed": True})
+
+        body = client.get(f"/cook-lists/{created['id']}").json()
+        assert [r["title"] for r in body["recipes"]] == ["Stew", "Soup", "Cake"]
+
+    def test_uncompleting_moves_it_back_out_of_the_completed_group(
+        self, client, soup, stew
+    ):
+        created = client.post(
+            "/cook-lists",
+            json={"recipes": [{"recipe_id": soup["id"]}, {"recipe_id": stew["id"]}]},
+        ).json()
+        client.patch(f"/cook-lists/{created['id']}/recipes/{soup['id']}", json={"completed": True})
+        client.patch(f"/cook-lists/{created['id']}/recipes/{soup['id']}", json={"completed": False})
+
+        body = client.get(f"/cook-lists/{created['id']}").json()
+        assert [r["title"] for r in body["recipes"]] == ["Soup", "Stew"]
 
 
 class TestDeleting:

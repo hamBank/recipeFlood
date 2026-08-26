@@ -136,6 +136,8 @@ export const addRecipeToCookList = (id, data) =>
   apiFetch(`/cook-lists/${id}/recipes`, { method: 'POST', body: data })
 export const removeRecipeFromCookList = (id, recipeId) =>
   apiFetch(`/cook-lists/${id}/recipes/${recipeId}`, { method: 'DELETE' })
+export const updateCookListRecipe = (id, recipeId, data) =>
+  apiFetch(`/cook-lists/${id}/recipes/${recipeId}`, { method: 'PATCH', body: data })
 export const addCookListToShopping = (id) =>
   apiFetch(`/cook-lists/${id}/add-to-shopping`, { method: 'POST' })
 

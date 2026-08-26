@@ -59,6 +59,13 @@ def cook_list_read(session: Session, cook_list: CookList) -> CookListRead:
     entries = entries_of(session, cook_list.id)
     recipes = _recipe_map(session, entries)
 
+    # entries_of keeps its own (position, id) order, since that's also
+    # what shopping_lines uses and insertion order doesn't matter there.
+    # Here, for display, completed recipes sink below the still-to-cook
+    # ones — same idea as the shopping list ticking checked items down —
+    # while a stable sort keeps everything else in its planned order.
+    entries = sorted(entries, key=lambda e: e.completed)
+
     rows: list[CookListRecipeRead] = []
     for entry in entries:
         recipe = recipes.get(entry.recipe_id)
@@ -74,6 +81,7 @@ def cook_list_read(session: Session, cook_list: CookList) -> CookListRead:
                 position=entry.position,
                 servings=entry.servings,
                 note=entry.note,
+                completed=entry.completed,
                 slug=recipe.slug,
                 title=recipe.title,
                 image_path=recipe.image_path,
