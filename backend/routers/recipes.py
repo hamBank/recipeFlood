@@ -24,6 +24,11 @@ from sqlmodel import Session, func, or_, select
 
 from ..config import settings
 from ..database import get_session
+from ..image_generation import (
+    ImageGenerationUnavailable,
+    build_prompt,
+    generate_image,
+)
 from ..models import (
     PreparedEvent,
     PreparedEventCreate,
@@ -49,6 +54,7 @@ from ..recipes_service import (
     exclude_empty,
     recipe_read,
     recipe_summary,
+    recipe_tags,
     same_season_recipe_ids,
     total_minutes,
     touch,
@@ -399,6 +405,49 @@ async def upload_image(
     destination.write_bytes(payload)
 
     recipe.image_path = str(relative)
+    touch(recipe)
+    session.add(recipe)
+    session.commit()
+    session.refresh(recipe)
+    return recipe_read(session, recipe, user)
+
+
+@router.post("/{key}/generate-image", response_model=RecipeRead)
+def generate_recipe_image(
+    key: str,
+    session: Session = Depends(get_session),
+    user: User = Depends(require_user_role),
+):
+    """Generate and save an AI illustration for a recipe with no photo —
+    the on-demand, one-recipe counterpart to
+    scripts/generate_recipe_images.py's backfill, sharing its prompt-
+    building and the same OpenAI call. See backend/image_generation.py
+    for why this is a separate provider from the rest of the app's AI
+    features, and why the result is flagged `image_generated` rather than
+    passed off as a real photo.
+    """
+    recipe = _get_recipe(session, key)
+    if recipe.image_path:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "This recipe already has an image"
+        )
+
+    _, sections = recipe_tags(session, recipe.id)
+    prompt = build_prompt(recipe.title, recipe.description, sections[0] if sections else None)
+    try:
+        image_bytes = generate_image(prompt)
+    except ImageGenerationUnavailable as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error))
+    except Exception as error:  # noqa: BLE001 - surfaced to the caller, not a stack trace
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Image generation failed: {error}")
+
+    relative = Path("recipes") / f"{recipe.slug}.png"
+    destination = Path(settings.upload_dir) / relative
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(image_bytes)
+
+    recipe.image_path = str(relative)
+    recipe.image_generated = True
     touch(recipe)
     session.add(recipe)
     session.commit()

@@ -380,3 +380,91 @@ class TestDelete:
         recipe = create(client, recipe_payload)
         assert client.delete(f"/recipes/{recipe['slug']}").status_code == 204
         assert client.get(f"/recipes/{recipe['slug']}").status_code == 404
+
+
+class TestGenerateImage:
+    def test_generates_and_saves_an_image(self, client, recipe_payload, monkeypatch, tmp_path):
+        from backend.config import settings
+
+        monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+        monkeypatch.setattr(
+            "backend.routers.recipes.generate_image",
+            lambda prompt, **kwargs: b"fake-png-bytes",
+        )
+        recipe = create(client, recipe_payload)
+        assert recipe["image_path"] is None
+        assert recipe["image_generated"] is False
+
+        response = client.post(f"/recipes/{recipe['slug']}/generate-image")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["image_path"] == f"recipes/{recipe['slug']}.png"
+        assert body["image_generated"] is True
+        saved = tmp_path / "recipes" / f"{recipe['slug']}.png"
+        assert saved.read_bytes() == b"fake-png-bytes"
+
+    def test_the_prompt_uses_the_recipe_title_and_description(
+        self, client, recipe_payload, monkeypatch, tmp_path
+    ):
+        from backend.config import settings
+
+        monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+        captured = {}
+
+        def fake_generate(prompt, **kwargs):
+            captured["prompt"] = prompt
+            return b"fake-png-bytes"
+
+        monkeypatch.setattr("backend.routers.recipes.generate_image", fake_generate)
+        recipe = create(client, recipe_payload)
+        client.post(f"/recipes/{recipe['slug']}/generate-image")
+
+        assert "Chocolate Walnut Cake" in captured["prompt"]
+        assert "dense flourless cake" in captured["prompt"]
+
+    def test_refuses_a_recipe_that_already_has_an_image(
+        self, client, recipe_payload, monkeypatch, tmp_path
+    ):
+        from backend.config import settings
+
+        monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+        recipe = create(client, recipe_payload)
+        client.patch(f"/recipes/{recipe['slug']}", json={"image_path": "recipes/existing.jpg"})
+
+        response = client.post(f"/recipes/{recipe['slug']}/generate-image")
+        assert response.status_code == 409
+
+    def test_reports_503_when_the_api_key_is_not_configured(
+        self, client, recipe_payload, monkeypatch
+    ):
+        from backend.image_generation import ImageGenerationUnavailable
+
+        def boom(prompt, **kwargs):
+            raise ImageGenerationUnavailable("OPENAI_API_KEY is not set")
+
+        monkeypatch.setattr("backend.routers.recipes.generate_image", boom)
+        recipe = create(client, recipe_payload)
+
+        response = client.post(f"/recipes/{recipe['slug']}/generate-image")
+        assert response.status_code == 503
+
+    def test_reports_502_when_generation_otherwise_fails(
+        self, client, recipe_payload, monkeypatch
+    ):
+        def boom(prompt, **kwargs):
+            raise ValueError("no image returned")
+
+        monkeypatch.setattr("backend.routers.recipes.generate_image", boom)
+        recipe = create(client, recipe_payload)
+
+        response = client.post(f"/recipes/{recipe['slug']}/generate-image")
+        assert response.status_code == 502
+
+    def test_a_guest_cannot_generate_an_image(self, client, guest_client, recipe_payload):
+        recipe = create(client, recipe_payload)
+        assert (
+            guest_client.post(f"/recipes/{recipe['slug']}/generate-image").status_code == 401
+        )
+
+    def test_an_unknown_recipe_is_a_404(self, client):
+        assert client.post("/recipes/no-such-slug/generate-image").status_code == 404

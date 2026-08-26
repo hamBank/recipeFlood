@@ -256,6 +256,17 @@ unit tested with no network in `tests/test_image_generation.py`, matching
 the pattern `recipe_fetch.py` set: the function that actually calls the
 API isn't covered by tests, only exercised by hand against a real key.
 
+**One at a time, from the recipe page**: `POST /recipes/<key>/generate-image`
+is the on-demand counterpart to the batch script above, sharing its
+prompt-building and the same OpenAI call — a signed-in user sees a
+"Generate image" button on any recipe with no photo (hidden once it has
+one, same `image_path IS NULL` test the script uses), always at the
+script's cheapest `low` quality tier rather than exposing quality/size as
+a per-click choice. Refuses with `409` if the recipe already has an
+image, `503` with no `OPENAI_API_KEY` configured, `502` on any other
+generation failure — the button stays up so trying again costs one more
+click, not a reload.
+
 ## Filling in nutrition and cost
 
 The pantry starts with names only. Two passes fill in the rest — a local
