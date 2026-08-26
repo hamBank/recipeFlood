@@ -90,6 +90,8 @@ export const uploadRecipeImage = (key, file) => {
   form.append('file', file)
   return apiUpload(`/recipes/${key}/image`, form)
 }
+export const generateRecipeImage = (key) =>
+  apiFetch(`/recipes/${key}/generate-image`, { method: 'POST' })
 
 // Tags. Sections are tags flagged for the navigation, so they come from
 // the same endpoint — there is no separate category concept.

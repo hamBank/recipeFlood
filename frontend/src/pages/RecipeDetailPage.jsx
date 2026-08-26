@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   deletePrepared,
   deleteRecipe,
+  generateRecipeImage,
   getRecipe,
   listCookLists,
   markPrepared,
@@ -48,6 +49,8 @@ export default function RecipeDetailPage() {
   const [recipe, setRecipe] = useState(null)
   const [error, setError] = useState(null)
   const [cookList, setCookList] = useState(null)
+  const [generatingImage, setGeneratingImage] = useState(false)
+  const [imageError, setImageError] = useState(null)
   const [params, setParams] = useSearchParams()
   const symbol = config?.currency_symbol || '$'
   // In the URL rather than plain state: a link to "cooking mode" survives
@@ -119,6 +122,17 @@ export default function RecipeDetailPage() {
     navigate('/')
   }
 
+  const generateImage = async () => {
+    setGeneratingImage(true)
+    setImageError(null)
+    try {
+      setRecipe(await generateRecipeImage(recipe.slug))
+    } catch (caught) {
+      setImageError(caught.message)
+    }
+    setGeneratingImage(false)
+  }
+
   if (cookingMode) {
     return <CookingModeView recipe={recipe} onExit={() => setCookingMode(false)} />
   }
@@ -183,7 +197,7 @@ export default function RecipeDetailPage() {
 
         {recipe.description && <p className="text-ink-muted">{recipe.description}</p>}
 
-        {recipe.image_path && (
+        {recipe.image_path ? (
           <div className="relative">
             <img
               src={`/media/${recipe.image_path}`}
@@ -199,6 +213,19 @@ export default function RecipeDetailPage() {
               </span>
             )}
           </div>
+        ) : (
+          user && (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={generateImage}
+                disabled={generatingImage}
+                className="rounded-lg border border-edge px-3 py-1.5 text-sm text-ink-muted hover:bg-soft disabled:opacity-50"
+              >
+                {generatingImage ? 'Generating…' : 'Generate image'}
+              </button>
+              {imageError && <p className="text-sm text-red-700">{imageError}</p>}
+            </div>
+          )
         )}
 
         <dl className="grid grid-cols-2 gap-4 rounded-xl border border-edge bg-card p-4 sm:grid-cols-3 lg:grid-cols-6">
