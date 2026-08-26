@@ -53,6 +53,7 @@ admin — never set in production.
 | `ALLOWED_EMAILS` | — | comma-separated bootstrap allowlist (first admin) |
 | `DEPLOY_SECRET` | — | HMAC key for the `/deploy` webhook |
 | `CURRENCY_SYMBOL` | `$` | display only |
+| `PANTRY_MULTI_MERGE` | `false` | `true` = temporary multi-select merge on the Pantry page — see "Finding duplicate pantry rows" |
 | `UNITS_SYSTEM` | `au` | `au` = 250ml cup / 20ml tbsp; `us` = 240ml / 15ml |
 | `UPLOAD_DIR` | `backend/uploads` | where recipe photos are written |
 | `ANTHROPIC_API_KEY` | — | AI import; unset = those features report "not configured" |
@@ -381,6 +382,18 @@ same. Qualified variants are never auto-merged, at any flag — that tier
 still needs a human, since "peanut butter" is not just "butter" with a
 qualifier stripped. Act on one of those from the Pantry page's Merge
 button, or `POST /ingredients/<keep>/merge/<absorb>`.
+
+**Acting on a long list of candidates one pair at a time is still
+tedious even with the script narrowing it down** — `PANTRY_MULTI_MERGE`
+(env var, off by default — see `.env.example`) is a temporary escape
+hatch for exactly that: it adds checkboxes to the Pantry page so several
+rows (across pages and searches, not just the one currently loaded) can
+be selected and merged into one in a single "Keep this" click, instead
+of the normal pick-a-pair flow above. Still calls the same
+`/ingredients/<keep>/merge/<absorb>` once per absorbed row — no new
+merge logic, just a faster way to drive the existing one during a
+deliberate tidy-up pass. Meant to come back off (`PANTRY_MULTI_MERGE=false`)
+once the backlog's cleared, rather than staying in the UI permanently.
 
 ## Cooking lists and the shopping list
 
