@@ -18,6 +18,14 @@ class Settings(BaseSettings):
 
     currency_symbol: str = "$"
 
+    # Temporary cleanup switch: lets the Pantry page select several rows
+    # at once and merge them all into one in a single action, instead of
+    # the normal one-pair-at-a-time flow. Off by default — flip it on for
+    # a tidy-up pass (e.g. after scripts/find_duplicate_ingredients.py
+    # turns up a backlog) and back off once the pantry's settled, rather
+    # than leaving a bulk-delete-adjacent tool permanently in the UI.
+    pantry_multi_merge: bool = False
+
     # Volume->weight conversion convention. "au" = 250ml cup, 20ml tbsp
     # (correct for the scraped blog); "us" = 240ml cup, 15ml tbsp.
     # See backend/units.py.

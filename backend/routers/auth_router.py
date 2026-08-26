@@ -33,6 +33,7 @@ def auth_config():
         "public_read": settings.public_read,
         "currency_symbol": settings.currency_symbol,
         "units_system": settings.units_system,
+        "pantry_multi_merge": settings.pantry_multi_merge,
     }
 
 

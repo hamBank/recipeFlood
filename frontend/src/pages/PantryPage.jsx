@@ -20,10 +20,21 @@ const PAGE_SIZE = 50
  * work queues that turn that into a useful lookup table, and the merge
  * control is how near-duplicates ("onion" / "red onion" / "onions") get
  * folded together.
+ *
+ * `config.pantry_multi_merge` (env var `PANTRY_MULTI_MERGE`, off by
+ * default) adds a second, temporary merge path alongside the normal
+ * one-pair-at-a-time flow above: checkboxes to select several rows —
+ * across pages and searches — then "Keep this" on one of them merges
+ * every other selected row into it, one API call per row, reusing the
+ * same `/ingredients/<keep>/merge/<absorb>` the single-pair flow already
+ * calls. Meant for a deliberate tidy-up pass (e.g. clearing a backlog
+ * scripts/find_duplicate_ingredients.py turned up), not permanent UI —
+ * flip the env var back off once the pantry's settled.
  */
 export default function PantryPage() {
   const { config } = useSession()
   const symbol = config?.currency_symbol || '$'
+  const multiMergeEnabled = Boolean(config?.pantry_multi_merge)
 
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
@@ -38,6 +49,11 @@ export default function PantryPage() {
   const [newName, setNewName] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Keyed by id rather than just tracked as a set of ids, so a row checked
+  // on one page (pagination) or search still merges correctly once the
+  // list has moved on and no longer holds that row itself.
+  const [selected, setSelected] = useState(new Map())
+  const [merging, setMerging] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -107,6 +123,44 @@ export default function PantryPage() {
       await load()
     } catch (caught) {
       setError(caught.message)
+    }
+  }
+
+  const toggleSelected = (item) => {
+    setSelected((current) => {
+      const next = new Map(current)
+      if (next.has(item.id)) next.delete(item.id)
+      else next.set(item.id, item)
+      return next
+    })
+  }
+
+  const multiMerge = async (keep) => {
+    const others = [...selected.values()].filter((item) => item.id !== keep.id)
+    if (others.length === 0) return
+    if (
+      !window.confirm(
+        `Merge ${others.length} item(s) into “${keep.name}”? ` +
+          `${others.map((item) => item.name).join(', ')} will be deleted and their ` +
+          `recipes repointed to “${keep.name}”. This cannot be undone.`,
+      )
+    ) {
+      return
+    }
+    setMerging(true)
+    const failures = []
+    for (const other of others) {
+      try {
+        await mergeIngredients(keep.slug, other.slug)
+      } catch (caught) {
+        failures.push(`${other.name}: ${caught.message}`)
+      }
+    }
+    setMerging(false)
+    setSelected(new Map())
+    await load()
+    if (failures.length > 0) {
+      setError(`Some merges failed — ${failures.join('; ')}`)
     }
   }
 
@@ -197,6 +251,16 @@ export default function PantryPage() {
         </p>
       )}
 
+      {multiMergeEnabled && selected.size > 0 && (
+        <p className="rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent">
+          {selected.size} selected
+          {selected.size >= 2 && ' — click "Keep this" on the row to merge the rest into'}.{' '}
+          <button onClick={() => setSelected(new Map())} className="underline" disabled={merging}>
+            Clear
+          </button>
+        </p>
+      )}
+
       <p className="text-sm text-ink-muted">
         {loading ? 'Loading…' : `${total} ingredient${total === 1 ? '' : 's'}`}
       </p>
@@ -205,6 +269,7 @@ export default function PantryPage() {
         <table className="w-full min-w-3xl text-sm">
           <thead className="border-b border-edge text-left text-xs uppercase tracking-wide text-ink-faint">
             <tr>
+              {multiMergeEnabled && <th className="px-3 py-2" />}
               <th className="px-3 py-2">Ingredient</th>
               <th className="px-3 py-2">Used in</th>
               <th className="px-3 py-2">Package</th>
@@ -218,6 +283,17 @@ export default function PantryPage() {
           <tbody>
             {items.map((item) => (
               <tr key={item.id} className="border-b border-edge/60 last:border-0">
+                {multiMergeEnabled && (
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(item.id)}
+                      onChange={() => toggleSelected(item)}
+                      disabled={merging}
+                      aria-label={`Select ${item.name} for merging`}
+                    />
+                  </td>
+                )}
                 <td className="px-3 py-2 font-medium text-ink">
                   {item.name}
                   {!item.is_food && (
@@ -290,6 +366,14 @@ export default function PantryPage() {
                       className="rounded border border-accent px-2 py-1 text-xs text-accent"
                     >
                       Keep this
+                    </button>
+                  ) : multiMergeEnabled && selected.size >= 2 && selected.has(item.id) ? (
+                    <button
+                      onClick={() => multiMerge(item)}
+                      disabled={merging}
+                      className="rounded border border-accent px-2 py-1 text-xs text-accent disabled:opacity-50"
+                    >
+                      {merging ? 'Merging…' : `Keep this (merge ${selected.size - 1})`}
                     </button>
                   ) : (
                     <>
