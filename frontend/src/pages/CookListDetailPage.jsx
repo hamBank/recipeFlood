@@ -8,6 +8,7 @@ import {
   listRecipes,
   removeRecipeFromCookList,
   updateCookList,
+  updateCookListRecipe,
 } from '../api'
 import { formatDate } from '../format'
 
@@ -22,6 +23,13 @@ import { formatDate } from '../format'
  * the recipe, it just tells "add to shopping" how much of it to buy.
  * `scalable: false` on a row means the recipe itself has no serving size to
  * scale from, and the UI says so rather than silently using 1x.
+ *
+ * Ticking a recipe off (once it's been made) strikes it through and sinks
+ * it below the rest — display-only, same idea as a shopping list item, and
+ * the sort itself happens server-side (backend/cook_lists.py) so this page
+ * doesn't need its own ordering logic. It doesn't log a prepared event or
+ * touch "last cooked"; that's a separate, deliberate action from the
+ * recipe page.
  */
 export default function CookListDetailPage() {
   const { id } = useParams()
@@ -78,6 +86,26 @@ export default function CookListDetailPage() {
       setList(await addRecipeToCookList(id, { recipe_id: recipe.id }))
     } catch (caught) {
       setError(caught.message)
+    }
+  }
+
+  const toggleCompleted = async (row) => {
+    // Optimistic, same pattern as the shopping list's toggle: flip in place
+    // first for an instant response, then reload — which is also what
+    // actually sinks it to the bottom, since the server does that sort
+    // (backend/cook_lists.py), not this page.
+    setList((current) => ({
+      ...current,
+      recipes: current.recipes.map((r) =>
+        r.recipe_id === row.recipe_id ? { ...r, completed: !r.completed } : r,
+      ),
+    }))
+    try {
+      await updateCookListRecipe(id, row.recipe_id, { completed: !row.completed })
+      await load()
+    } catch (caught) {
+      setError(caught.message)
+      await load()
     }
   }
 
@@ -216,10 +244,20 @@ export default function CookListDetailPage() {
         ) : (
           <ul className="divide-y divide-edge overflow-hidden rounded-xl border border-edge bg-card">
             {list.recipes.map((row) => (
-              <li key={row.id} className="flex items-center gap-3 px-3 py-2.5">
+              <li
+                key={row.id}
+                className={`flex items-center gap-3 px-3 py-2.5 ${row.completed ? 'opacity-50' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={row.completed}
+                  onChange={() => toggleCompleted(row)}
+                  className="h-5 w-5 shrink-0"
+                  aria-label={`Mark ${row.title} cooked`}
+                />
                 <Link
                   to={`/recipes/${row.slug}`}
-                  className="min-w-0 flex-1 truncate text-ink hover:underline"
+                  className={`min-w-0 flex-1 truncate text-ink hover:underline ${row.completed ? 'line-through' : ''}`}
                 >
                   {row.title}
                 </Link>

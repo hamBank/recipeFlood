@@ -797,6 +797,13 @@ class CookListRecipe(SQLModel, table=True):
     factor is computed live from `Recipe.servings` rather than frozen here,
     so fixing a recipe's serving size later corrects every list that used
     it.
+
+    `completed` is display-only, the same idea as `CookList.completed` one
+    level up: tick a recipe off once it's been made and the read model
+    sinks it to the bottom of the list rather than deleting the plan.
+    Nothing else reads it — it doesn't create a `PreparedEvent` or touch
+    "last cooked"; that's a deliberate, separate action (SPEC.md "Prepared
+    log"), not an automatic side effect of decluttering a list.
     """
 
     id: int | None = Field(default=None, primary_key=True)
@@ -805,6 +812,7 @@ class CookListRecipe(SQLModel, table=True):
     position: int = 0
     servings: int | None = Field(default=None, gt=0)
     note: str | None = None
+    completed: bool = False
 
 
 class ShoppingItemSource(str, Enum):
@@ -900,6 +908,7 @@ class CookListRecipeRead(SQLModel):
     position: int
     servings: int | None
     note: str | None
+    completed: bool
     # Denormalised for the detail page, which would otherwise need a
     # request per row.
     slug: str
@@ -910,6 +919,10 @@ class CookListRecipeRead(SQLModel):
     # size to scale from — the UI says so rather than silently not scaling.
     scalable: bool = True
     scale_factor: float = 1.0
+
+
+class CookListRecipeUpdate(SQLModel):
+    completed: bool
 
 
 class CookListCreate(SQLModel):

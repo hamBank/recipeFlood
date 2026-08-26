@@ -276,6 +276,19 @@ lists unless `include_completed` is passed, and the list screen has a
 import batches, the screen would default to mostly those instead of
 what's actually being planned.
 
+### Completed recipes, within a list
+
+A `CookListRecipe` has its own `completed` flag, the same idea one level
+down: tick a recipe off a list once it's been made and it strikes through
+and sinks to the bottom of the list, below the ones still to cook, rather
+than being deleted — the plan stays visible even once it's done. Same
+display-only contract as the list-level flag: it doesn't create a
+`PreparedEvent` or touch "last cooked" (that's a separate, deliberate
+action from the recipe page — see "Prepared log"), and it doesn't affect
+the shopping list. The sort itself happens server-side, so a recipe's
+position among the still-to-cook ones is preserved if it's later
+unticked, rather than losing its place in the plan.
+
 ### One permanent shopping list
 
 Not a list per week or per shop: one list, added to and ticked off

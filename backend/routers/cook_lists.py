@@ -19,6 +19,7 @@ from ..models import (
     CookListRead,
     CookListRecipe,
     CookListRecipeIn,
+    CookListRecipeUpdate,
     CookListUpdate,
     Recipe,
     User,
@@ -222,6 +223,34 @@ def add_recipe(
                 note=body.note,
             )
         )
+    cook_list.updated_at = utcnow()
+    session.add(cook_list)
+    session.commit()
+    session.refresh(cook_list)
+    return cook_list_read(session, cook_list)
+
+
+@router.patch("/{cook_list_id}/recipes/{recipe_id}", response_model=CookListRead)
+def update_recipe(
+    cook_list_id: int,
+    recipe_id: int,
+    body: CookListRecipeUpdate,
+    session: Session = Depends(get_session),
+    _user: User = Depends(require_user_role),
+):
+    """Tick a recipe off the list once it's been made — see
+    `CookListRecipe.completed`. Doesn't touch the prepared log; that's a
+    separate, deliberate action from the recipe page."""
+    cook_list = _lookup(session, cook_list_id)
+    entry = session.exec(
+        select(CookListRecipe)
+        .where(CookListRecipe.cook_list_id == cook_list.id)
+        .where(CookListRecipe.recipe_id == recipe_id)
+    ).first()
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That recipe is not on this list")
+    entry.completed = body.completed
+    session.add(entry)
     cook_list.updated_at = utcnow()
     session.add(cook_list)
     session.commit()
