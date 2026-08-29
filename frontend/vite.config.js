@@ -59,5 +59,11 @@ export default defineConfig({
     // a global afterEach exists. Without this, each render stacks on top of
     // the last and single-element queries start finding several.
     globals: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/**'],
+      exclude: ['src/main.jsx', 'src/**/*.test.{js,jsx}'],
+    },
   },
 })

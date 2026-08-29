@@ -14,6 +14,9 @@ node_modules/
 backend/static/
 frontend/public/version.json
 
+# Coverage report — produced by `npm run test:coverage`, never committed
+frontend/coverage/
+
 # Recipe images written at runtime (manual uploads / AI imports). The
 # blog-scrape images live in data/images/ and ARE committed — see
 # scripts/load_snapshot.py, which copies them in here on load.
