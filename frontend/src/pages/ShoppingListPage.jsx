@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   addShoppingItem,
   clearCheckedShopping,
   deleteShoppingItem,
   getShoppingList,
+  listIngredients,
   uncheckAllShopping,
   updateShoppingItem,
 } from '../api'
@@ -49,9 +50,52 @@ export default function ShoppingListPage() {
   const [busy, setBusy] = useState(false)
   const [showChecked, setShowChecked] = useState(true)
 
+  // Pantry search-as-you-type, so a name already in the pantry (with a
+  // shop and a price) can be added in one tap instead of typed out and
+  // left for the backend's own fuzzy match to reconcile later.
+  const [suggestions, setSuggestions] = useState([])
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
+  const [highlighted, setHighlighted] = useState(-1)
+  const formRef = useRef(null)
+
   useEffect(() => {
     saveQueue(queue)
   }, [queue])
+
+  useEffect(() => {
+    const trimmed = newName.trim()
+    if (offline || !trimmed) {
+      setSuggestions([])
+      setSuggestionsOpen(false)
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const { items } = await listIngredients({ q: trimmed, sort: 'usage', limit: 8 })
+        if (cancelled) return
+        setSuggestions(items)
+        setSuggestionsOpen(items.length > 0)
+        setHighlighted(-1)
+      } catch {
+        // Suggestions are a convenience; typing a free-text name and
+        // hitting Add still works without them.
+      }
+    }, 250)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [newName, offline])
+
+  useEffect(() => {
+    if (!suggestionsOpen) return
+    const closeIfOutside = (event) => {
+      if (formRef.current && !formRef.current.contains(event.target)) setSuggestionsOpen(false)
+    }
+    document.addEventListener('mousedown', closeIfOutside)
+    return () => document.removeEventListener('mousedown', closeIfOutside)
+  }, [suggestionsOpen])
 
   const displayList = useMemo(() => applyQueue(list, queue), [list, queue])
 
@@ -134,10 +178,12 @@ export default function ShoppingListPage() {
     }
   }
 
-  const add = async (event) => {
-    event.preventDefault()
-    const name = newName.trim()
-    if (!name) return
+  /** `ingredient` is set when the line comes from a picked suggestion, so
+   * it lands on the list already matched to a shop and a price instead of
+   * going through the backend's own (fuzzier) name lookup. */
+  const add = async (name, ingredient) => {
+    setSuggestionsOpen(false)
+    setSuggestions([])
     if (offline) {
       const tempId = nextTempId(displayList)
       setQueue((current) => [...current, { type: 'add', name, tempId }])
@@ -146,13 +192,37 @@ export default function ShoppingListPage() {
     }
     setBusy(true)
     try {
-      await addShoppingItem({ name })
+      await addShoppingItem({ name, ingredient_id: ingredient?.id })
       setNewName('')
       await load()
     } catch (caught) {
       setError(caught.message)
     }
     setBusy(false)
+  }
+
+  const onSubmit = (event) => {
+    event.preventDefault()
+    if (highlighted >= 0 && suggestions[highlighted]) {
+      const picked = suggestions[highlighted]
+      add(picked.name, picked)
+      return
+    }
+    const name = newName.trim()
+    if (name) add(name)
+  }
+
+  const onInputKeyDown = (event) => {
+    if (!suggestionsOpen || suggestions.length === 0) return
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setHighlighted((current) => (current + 1) % suggestions.length)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setHighlighted((current) => (current - 1 + suggestions.length) % suggestions.length)
+    } else if (event.key === 'Escape') {
+      setSuggestionsOpen(false)
+    }
   }
 
   const remove = async (item) => {
@@ -220,11 +290,17 @@ export default function ShoppingListPage() {
         </p>
       )}
 
-      <form onSubmit={add} className="flex gap-2">
+      <form ref={formRef} onSubmit={onSubmit} className="relative flex gap-2">
         <input
           value={newName}
           onChange={(event) => setNewName(event.target.value)}
+          onKeyDown={onInputKeyDown}
+          onFocus={() => setSuggestionsOpen(suggestions.length > 0)}
           placeholder="Add something…"
+          role="combobox"
+          aria-expanded={suggestionsOpen}
+          aria-autocomplete="list"
+          autoComplete="off"
           className="flex-1 rounded-lg border border-edge bg-card px-3 py-2 text-ink placeholder:text-ink-muted"
         />
         <button
@@ -234,6 +310,34 @@ export default function ShoppingListPage() {
         >
           Add
         </button>
+
+        {suggestionsOpen && (
+          <ul
+            role="listbox"
+            className="absolute left-0 right-14 top-full z-10 mt-1 max-h-64 overflow-y-auto rounded-lg border border-edge bg-card shadow-lg"
+          >
+            {suggestions.map((ingredient, index) => (
+              <li key={ingredient.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={index === highlighted}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => add(ingredient.name, ingredient)}
+                  onMouseEnter={() => setHighlighted(index)}
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm ${
+                    index === highlighted ? 'bg-soft' : ''
+                  }`}
+                >
+                  <span className="min-w-0 truncate text-ink">{ingredient.name}</span>
+                  <span className="shrink-0 text-xs text-ink-muted">
+                    {SOURCE_LABEL[ingredient.source] || ingredient.source}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </form>
 
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
