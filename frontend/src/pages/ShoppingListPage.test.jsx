@@ -11,6 +11,7 @@ vi.mock('../api', () => ({
   deleteShoppingItem: vi.fn(),
   clearCheckedShopping: vi.fn(),
   uncheckAllShopping: vi.fn(),
+  listIngredients: vi.fn(),
 }))
 
 const baseList = (items) => ({
@@ -41,10 +42,18 @@ function setOnline(value) {
   Object.defineProperty(navigator, 'onLine', { value, configurable: true, writable: true })
 }
 
+const ingredient = (overrides = {}) => ({
+  id: 10,
+  name: 'Milk',
+  source: 'supermarket',
+  ...overrides,
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
   setOnline(true)
+  api.listIngredients.mockResolvedValue({ items: [], total: 0 })
 })
 
 describe('ShoppingListPage online', () => {
@@ -130,6 +139,82 @@ describe('ShoppingListPage offline', () => {
     render(<ShoppingListPage />)
     expect((await screen.findByText(/Clear 1 ticked/)).disabled).toBe(true)
     expect(screen.getByText('Untick all').disabled).toBe(true)
+  })
+})
+
+describe('ShoppingListPage pantry search', () => {
+  it('searches the pantry as the user types and shows matches in a dropdown', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([]))
+    api.listIngredients.mockResolvedValue({ items: [ingredient()], total: 1 })
+    render(<ShoppingListPage />)
+    await screen.findByPlaceholderText('Add something…')
+
+    fireEvent.change(screen.getByPlaceholderText('Add something…'), { target: { value: 'mil' } })
+
+    await waitFor(() => expect(api.listIngredients).toHaveBeenCalledWith({ q: 'mil', sort: 'usage', limit: 8 }))
+    expect(await screen.findByRole('option', { name: /Milk/ })).toBeDefined()
+  })
+
+  it('clicking a suggestion adds it immediately, matched to its pantry ingredient', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([]))
+    api.listIngredients.mockResolvedValue({ items: [ingredient()], total: 1 })
+    api.addShoppingItem.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    await screen.findByPlaceholderText('Add something…')
+
+    fireEvent.change(screen.getByPlaceholderText('Add something…'), { target: { value: 'mil' } })
+    fireEvent.click(await screen.findByRole('option', { name: /Milk/ }))
+
+    await waitFor(() =>
+      expect(api.addShoppingItem).toHaveBeenCalledWith({ name: 'Milk', ingredient_id: 10 }),
+    )
+    expect(screen.getByPlaceholderText('Add something…').value).toBe('')
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('picks the arrow-key-highlighted suggestion on Enter', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([]))
+    api.listIngredients.mockResolvedValue({ items: [ingredient(), ingredient({ id: 11, name: 'Oat milk' })], total: 2 })
+    api.addShoppingItem.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    const input = await screen.findByPlaceholderText('Add something…')
+
+    fireEvent.change(input, { target: { value: 'mil' } })
+    await screen.findByRole('option', { name: /Oat milk/ })
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.submit(input.closest('form'))
+
+    await waitFor(() =>
+      expect(api.addShoppingItem).toHaveBeenCalledWith({ name: 'Oat milk', ingredient_id: 11 }),
+    )
+  })
+
+  it('closes the dropdown on Escape without adding anything', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([]))
+    api.listIngredients.mockResolvedValue({ items: [ingredient()], total: 1 })
+    render(<ShoppingListPage />)
+    const input = await screen.findByPlaceholderText('Add something…')
+
+    fireEvent.change(input, { target: { value: 'mil' } })
+    await screen.findByRole('option', { name: /Milk/ })
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('does not search the pantry while offline', async () => {
+    setOnline(false)
+    saveCachedList(baseList([]))
+    api.getShoppingList.mockRejectedValue(offlineError())
+    render(<ShoppingListPage />)
+    await screen.findByPlaceholderText('Add something…')
+
+    fireEvent.change(screen.getByPlaceholderText('Add something…'), { target: { value: 'mil' } })
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    expect(api.listIngredients).not.toHaveBeenCalled()
   })
 })
 
