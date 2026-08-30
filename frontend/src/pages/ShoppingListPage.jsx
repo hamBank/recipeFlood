@@ -153,6 +153,22 @@ export default function ShoppingListPage() {
     }
   }, [drain])
 
+  // `offline` can go stuck true from a transient failure that isn't a real
+  // connectivity drop — a deploy restarting the backend mid-request, say —
+  // and the browser never fires its own 'online' event to clear it, since
+  // the network interface was fine the whole time. Left alone, a tick made
+  // in that state sits in the local-only queue for the rest of the tab's
+  // life, invisible to every other device until this one happens to
+  // reload. Retrying periodically closes that gap without waiting on it.
+  useEffect(() => {
+    if (!offline) return
+    const id = setInterval(() => {
+      if (queue.length) drain()
+      else load()
+    }, 20000)
+    return () => clearInterval(id)
+  }, [offline, queue.length, drain, load])
+
   const toggle = async (item) => {
     if (offline || item.pendingSync) {
       // Only unchecked -> checked is safe to queue blind — see

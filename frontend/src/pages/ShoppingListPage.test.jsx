@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '../api'
 import { loadQueue, saveCachedList, saveQueue } from '../offlineQueue'
@@ -219,6 +219,55 @@ describe('ShoppingListPage pantry search', () => {
 })
 
 describe('ShoppingListPage reconnecting', () => {
+  it('retries a stuck offline queue on its own, without a real online event', async () => {
+    // Genuinely online throughout (navigator.onLine never flips) — this
+    // covers a transient failure, like a deploy restarting the backend
+    // mid-request, that latches `offline` without a real connectivity
+    // drop, so the browser's own 'online' event never fires to clear it.
+    vi.useFakeTimers()
+    try {
+      api.getShoppingList.mockResolvedValueOnce(baseList([item()]))
+      render(<ShoppingListPage />)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(screen.getByText('Milk')).toBeDefined()
+
+      // The backend stays unreachable (network-level failures) through the
+      // tick, the reload it triggers, and the immediate re-attempt the
+      // queue update itself provokes.
+      api.updateShoppingItem.mockRejectedValue(offlineError())
+      api.getShoppingList.mockRejectedValue(offlineError())
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Tick off Milk'))
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(screen.getByText(/Offline/)).toBeDefined()
+
+      // The UI reverted to the (unticked) cached copy, so tapping it again
+      // now goes through the offline path and queues the tick locally.
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Tick off Milk'))
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(loadQueue()).toEqual([{ type: 'check', itemId: 1 }])
+
+      // The backend is reachable again by the time the automatic retry
+      // fires — no page reload, and no real online event, involved.
+      api.updateShoppingItem.mockResolvedValue({})
+      api.getShoppingList.mockResolvedValue(baseList([item({ is_checked: true })]))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20000)
+      })
+
+      expect(api.updateShoppingItem).toHaveBeenLastCalledWith(1, { is_checked: true })
+      expect(loadQueue()).toEqual([])
+      expect(screen.queryByText(/Offline/)).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('drains the queue and reloads once back online', async () => {
     setOnline(false)
     saveCachedList(baseList([item()]))
