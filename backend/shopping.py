@@ -113,8 +113,16 @@ SHOP_ORDER: list[str] = [
 UNQUANTIFIABLE = {MeasureUnit.to_taste, MeasureUnit.pinch}
 
 
-def shop_of(ingredient: Ingredient | None) -> str:
-    """Which shop an item belongs under. Unlinked items go to "other"."""
+def shop_of(ingredient: Ingredient | None, override: IngredientSource | None = None) -> str:
+    """Which shop an item belongs under.
+
+    `override` — a per-item `shop_override` — wins outright when set; it's
+    the one-off "not from the usual place this time" case, and re-deriving
+    it from the ingredient would defeat the point. Otherwise this follows
+    the linked ingredient's own `source`, or "other" when unlinked.
+    """
+    if override is not None:
+        return override.value if isinstance(override, IngredientSource) else str(override)
     if ingredient is None:
         return IngredientSource.other.value
     source = ingredient.source
@@ -198,7 +206,7 @@ def item_read(
 ) -> ShoppingItemRead:
     return ShoppingItemRead(
         **item.model_dump(),
-        shop=shop_of(ingredient),
+        shop=shop_of(ingredient, item.shop_override),
         amount_text=amount_text(item),
         cost_cents=item_cost_cents(item, ingredient) if with_cost else None,
     )

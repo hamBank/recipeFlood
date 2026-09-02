@@ -288,6 +288,94 @@ describe('ShoppingListPage printing', () => {
   })
 })
 
+describe('ShoppingListPage editing', () => {
+  it('edits a bare item into a quantity, and can be cancelled without saving', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Milk' }))
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(api.updateShoppingItem).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Edit Milk' })).toBeDefined()
+  })
+
+  it('overrides a weight amount', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item({ weight_grams: 500, amount_text: '500 g' })]))
+    api.updateShoppingItem.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Milk' }))
+    const weightInput = screen.getByLabelText('Weight')
+    expect(weightInput.value).toBe('500')
+
+    fireEvent.change(weightInput, { target: { value: '750' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(api.updateShoppingItem).toHaveBeenCalledWith(1, { shop_override: null, weight_grams: 750 }),
+    )
+  })
+
+  it('sets a quantity and unit on a bare item', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    api.updateShoppingItem.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Milk' }))
+    fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'piece' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(api.updateShoppingItem).toHaveBeenCalledWith(1, {
+        shop_override: null,
+        quantity: 3,
+        unit: 'piece',
+      }),
+    )
+  })
+
+  it('moves an item to a different shop, and shows it was moved by hand', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    api.updateShoppingItem.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Milk' }))
+    fireEvent.change(screen.getByLabelText('Shop'), { target: { value: 'butcher' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(api.updateShoppingItem).toHaveBeenCalledWith(1, {
+        shop_override: 'butcher',
+        quantity: null,
+        unit: null,
+      }),
+    )
+  })
+
+  it('shows a "(moved)" marker for an item with an active override', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item({ shop_override: 'butcher' })]))
+    render(<ShoppingListPage />)
+    expect(await screen.findByText('(moved)')).toBeDefined()
+  })
+
+  it('does not offer editing while offline', async () => {
+    setOnline(false)
+    saveCachedList(baseList([item()]))
+    api.getShoppingList.mockRejectedValue(offlineError())
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    expect(screen.getByRole('button', { name: 'Edit Milk' }).disabled).toBe(true)
+  })
+})
+
 describe('ShoppingListPage reconnecting', () => {
   it('retries a stuck offline queue on its own, without a real online event', async () => {
     // Genuinely online throughout (navigator.onLine never flips) — this
