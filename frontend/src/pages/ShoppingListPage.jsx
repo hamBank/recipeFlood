@@ -495,8 +495,12 @@ export default function ShoppingListPage() {
 function PrintableList({ displayList, symbol }) {
   return (
     <div>
-      <h1 className="text-xl font-bold text-black">Shopping list</h1>
-      <p className="mt-1 text-sm text-black">
+      {/* One line, not a heading plus a separate line below it — on a
+          long list every bit of vertical space the header itself takes
+          is space the two-column list below doesn't get on page 1. */}
+      <p className="whitespace-nowrap text-sm text-black">
+        <span className="text-base font-bold">Shopping list</span>
+        {' · '}
         Printed {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
         {' · '}
         {displayList.total_count} item{displayList.total_count === 1 ? '' : 's'}
