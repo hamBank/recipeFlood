@@ -21,8 +21,8 @@ function Tab({ to, children, end = false }) {
 
 export default function Layout({ user, onSignOut }) {
   return (
-    <div className="min-h-screen bg-page">
-      <header className="border-b border-edge bg-card">
+    <div className="min-h-screen bg-page print:bg-white">
+      <header className="border-b border-edge bg-card print:hidden">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
           <Link to="/" className="text-lg font-bold tracking-tight text-ink">
             Recipe<span className="text-accent">Flood</span>
@@ -68,7 +68,7 @@ export default function Layout({ user, onSignOut }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 print:max-w-none print:p-0">
         <Outlet />
       </main>
     </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import {
   addShoppingItem,
   clearCheckedShopping,
@@ -57,6 +58,32 @@ export default function ShoppingListPage() {
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
   const formRef = useRef(null)
+
+  // The printable layout (see PrintableList below) only exists in the DOM
+  // while actually printing — not just CSS-hidden the rest of the time —
+  // so it can show every item, untruncated, without a second copy of the
+  // same names/amounts sitting in the page for no reason the rest of the
+  // time. `beforeprint`/`afterprint` cover every way to print (the button
+  // below, Ctrl/Cmd+P, a browser menu); the button also flushes the state
+  // update synchronously first, since printing can start before a normal
+  // (batched) re-render would otherwise have committed it.
+  const [printing, setPrinting] = useState(false)
+
+  useEffect(() => {
+    const before = () => setPrinting(true)
+    const after = () => setPrinting(false)
+    window.addEventListener('beforeprint', before)
+    window.addEventListener('afterprint', after)
+    return () => {
+      window.removeEventListener('beforeprint', before)
+      window.removeEventListener('afterprint', after)
+    }
+  }, [])
+
+  const print = () => {
+    flushSync(() => setPrinting(true))
+    window.print()
+  }
 
   useEffect(() => {
     saveQueue(queue)
@@ -278,12 +305,21 @@ export default function ShoppingListPage() {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+      <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1 print:hidden">
         <h1 className="text-2xl font-bold text-ink">Shopping</h1>
         <p className="text-sm text-ink-muted">
           {remaining} to buy
           {displayList.checked_count > 0 && ` · ${displayList.checked_count} ticked off`}
         </p>
+        {displayList.total_count > 0 && (
+          <button
+            type="button"
+            onClick={print}
+            className="rounded-lg border border-edge px-3 py-1 text-sm text-ink-muted hover:bg-soft"
+          >
+            Print
+          </button>
+        )}
         {displayList.total_cents !== null && remaining > 0 && (
           <p className="ml-auto text-sm text-ink-muted">
             <span className="font-medium text-ink">
@@ -300,13 +336,13 @@ export default function ShoppingListPage() {
       </header>
 
       {offline && (
-        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 print:hidden">
           Offline — ticking things off and adding new items still works and will sync once
           you&apos;re back online. Unticking, editing and removing are paused until then.
         </p>
       )}
 
-      <form ref={formRef} onSubmit={onSubmit} className="relative flex gap-2">
+      <form ref={formRef} onSubmit={onSubmit} className="relative flex gap-2 print:hidden">
         <input
           value={newName}
           onChange={(event) => setNewName(event.target.value)}
@@ -356,15 +392,15 @@ export default function ShoppingListPage() {
         )}
       </form>
 
-      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 print:hidden">{error}</p>}
 
       {displayList.total_count === 0 ? (
-        <p className="rounded-xl border border-edge bg-card p-6 text-center text-ink-muted">
+        <p className="rounded-xl border border-edge bg-card p-6 text-center text-ink-muted print:hidden">
           Nothing on the list. Add something above, or send a cooking list here.
         </p>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-3 text-sm">
+          <div className="flex flex-wrap items-center gap-3 text-sm print:hidden">
             <label className="flex items-center gap-2 text-ink-muted">
               <input
                 type="checkbox"
@@ -393,31 +429,93 @@ export default function ShoppingListPage() {
             )}
           </div>
 
-          {displayList.shops.map((shop) => {
-            const rows = visible.filter((item) => item.shop === shop)
-            if (!rows.length) return null
-            return (
-              <section key={shop} className="space-y-1">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                  {SOURCE_LABEL[shop] || shop}
-                </h2>
-                <ul className="divide-y divide-edge overflow-hidden rounded-xl border border-edge bg-card">
-                  {rows.map((item) => (
-                    <Row
-                      key={item.id}
-                      item={item}
-                      symbol={symbol}
-                      offline={offline}
-                      onToggle={() => toggle(item)}
-                      onRemove={() => remove(item)}
-                    />
-                  ))}
-                </ul>
-              </section>
-            )
-          })}
+          <div className="print:hidden">
+            {displayList.shops.map((shop) => {
+              const rows = visible.filter((item) => item.shop === shop)
+              if (!rows.length) return null
+              return (
+                <section key={shop} className="space-y-1">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                    {SOURCE_LABEL[shop] || shop}
+                  </h2>
+                  <ul className="divide-y divide-edge overflow-hidden rounded-xl border border-edge bg-card">
+                    {rows.map((item) => (
+                      <Row
+                        key={item.id}
+                        item={item}
+                        symbol={symbol}
+                        offline={offline}
+                        onToggle={() => toggle(item)}
+                        onRemove={() => remove(item)}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              )
+            })}
+          </div>
+
+          {printing && <PrintableList displayList={displayList} symbol={symbol} />}
         </>
       )}
+    </div>
+  )
+}
+
+/** The on-screen list above is filtered (Show ticked), truncated (the
+ * "why" line) and full of tap targets — none of which belongs on paper.
+ * This renders separately (only while `printing`, see above) with
+ * everything: every item regardless of the Show ticked toggle, grouped by
+ * shop in the same walking order, with amount, price and the full
+ * "why is this here" line spelled out. */
+function PrintableList({ displayList, symbol }) {
+  return (
+    <div>
+      <h1 className="text-xl font-bold text-black">Shopping list</h1>
+      <p className="mt-1 text-sm text-black">
+        Printed {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+        {' · '}
+        {displayList.total_count} item{displayList.total_count === 1 ? '' : 's'}
+        {displayList.total_cents !== null && (
+          <> · {formatCents(displayList.total_cents, symbol)} ({formatPercent(displayList.priced_fraction)} priced)</>
+        )}
+      </p>
+
+      {displayList.shops.map((shop) => {
+        const rows = displayList.items.filter((item) => item.shop === shop)
+        if (!rows.length) return null
+        return (
+          <section key={shop} className="mt-4 break-inside-avoid">
+            <h2 className="border-b border-black text-sm font-bold uppercase tracking-wide text-black">
+              {SOURCE_LABEL[shop] || shop}
+            </h2>
+            <ul>
+              {rows.map((item) => {
+                const why = (item.contributions || [])
+                  .map((c) => `${c.recipe}${c.amount ? ` (${c.amount})` : ''}`)
+                  .join(' · ')
+                return (
+                  <li key={item.id} className="flex items-start gap-2 border-b border-black/20 py-1.5 text-sm">
+                    <span aria-hidden="true">{item.is_checked ? '☑' : '☐'}</span>
+                    <span className="flex-1">
+                      <span className={item.is_checked ? 'text-black/60 line-through' : 'text-black'}>
+                        {item.name}
+                      </span>
+                      {item.amount_text && <span className="ml-2 text-black/70">{item.amount_text}</span>}
+                      {why && <span className="block text-xs text-black/60">{why}</span>}
+                    </span>
+                    {item.cost_cents !== null && item.cost_cents !== undefined && (
+                      <span className="shrink-0 tabular-nums text-black/70">
+                        {formatCents(item.cost_cents, symbol)}
+                      </span>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )
+      })}
     </div>
   )
 }
