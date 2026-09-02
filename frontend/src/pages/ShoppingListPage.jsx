@@ -506,15 +506,27 @@ function PrintableList({ displayList, symbol }) {
       </p>
 
       {/* Two columns so the page isn't mostly empty margin either side of
-          one narrow list — a shop group never splits across the break
-          (break-inside-avoid), it just starts wherever it fits. */}
-      <div className="mt-4 columns-2 gap-8">
+          one narrow list. column-fill:auto (Tailwind's columns-2 leaves
+          the default, "balance") — balance sizes each column from the
+          *whole* list's height rather than what's left of the current
+          page, so on a long list Chrome would rather leave a page almost
+          empty than start a column it can't finish there. Auto just fills
+          each page in turn. */}
+      <div className="mt-4 columns-2 gap-8 [column-fill:auto]">
         {displayList.shops.map((shop) => {
           const rows = displayList.items.filter((item) => item.shop === shop)
           if (!rows.length) return null
           return (
-            <section key={shop} className="mb-4 break-inside-avoid">
-              <h2 className="border-b border-black text-sm font-bold uppercase tracking-wide text-black">
+            // Not break-inside-avoid on the whole section: a shop with
+            // more lines than fit in what's left of a column is *supposed*
+            // to spill onto the next one — the same list this heading
+            // introduces just continues under a repeated cue rather than
+            // stranding an entire page blank because the group as a whole
+            // didn't fit. break-after-avoid on the heading below is the
+            // part that actually matters: it stops the heading itself
+            // from being orphaned with its first item pushed over.
+            <section key={shop} className="mb-4">
+              <h2 className="break-after-avoid border-b border-black text-sm font-bold uppercase tracking-wide text-black">
                 {SOURCE_LABEL[shop] || shop}
               </h2>
               <ul>
