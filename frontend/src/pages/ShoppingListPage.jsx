@@ -505,41 +505,46 @@ function PrintableList({ displayList, symbol }) {
         )}
       </p>
 
-      {displayList.shops.map((shop) => {
-        const rows = displayList.items.filter((item) => item.shop === shop)
-        if (!rows.length) return null
-        return (
-          <section key={shop} className="mt-4 break-inside-avoid">
-            <h2 className="border-b border-black text-sm font-bold uppercase tracking-wide text-black">
-              {SOURCE_LABEL[shop] || shop}
-            </h2>
-            <ul>
-              {rows.map((item) => {
-                const why = (item.contributions || [])
-                  .map((c) => `${c.recipe}${c.amount ? ` (${c.amount})` : ''}`)
-                  .join(' · ')
-                return (
-                  <li key={item.id} className="flex items-start gap-2 border-b border-black/20 py-1.5 text-sm">
-                    <span aria-hidden="true">{item.is_checked ? '☑' : '☐'}</span>
-                    <span className="flex-1">
-                      <span className={item.is_checked ? 'text-black/60 line-through' : 'text-black'}>
-                        {item.name}
+      {/* Two columns so the page isn't mostly empty margin either side of
+          one narrow list — a shop group never splits across the break
+          (break-inside-avoid), it just starts wherever it fits. */}
+      <div className="mt-4 columns-2 gap-8">
+        {displayList.shops.map((shop) => {
+          const rows = displayList.items.filter((item) => item.shop === shop)
+          if (!rows.length) return null
+          return (
+            <section key={shop} className="mb-4 break-inside-avoid">
+              <h2 className="border-b border-black text-sm font-bold uppercase tracking-wide text-black">
+                {SOURCE_LABEL[shop] || shop}
+              </h2>
+              <ul>
+                {rows.map((item) => {
+                  const why = (item.contributions || [])
+                    .map((c) => `${c.recipe}${c.amount ? ` (${c.amount})` : ''}`)
+                    .join(' · ')
+                  return (
+                    <li key={item.id} className="flex items-start gap-2 border-b border-black/20 py-1.5 text-sm">
+                      <span aria-hidden="true">{item.is_checked ? '☑' : '☐'}</span>
+                      <span className="flex-1">
+                        <span className={item.is_checked ? 'text-black/60 line-through' : 'text-black'}>
+                          {item.name}
+                        </span>
+                        {item.amount_text && <span className="ml-2 text-black/70">{item.amount_text}</span>}
+                        {why && <span className="block text-xs text-black/60">{why}</span>}
                       </span>
-                      {item.amount_text && <span className="ml-2 text-black/70">{item.amount_text}</span>}
-                      {why && <span className="block text-xs text-black/60">{why}</span>}
-                    </span>
-                    {item.cost_cents !== null && item.cost_cents !== undefined && (
-                      <span className="shrink-0 tabular-nums text-black/70">
-                        {formatCents(item.cost_cents, symbol)}
-                      </span>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        )
-      })}
+                      {item.cost_cents !== null && item.cost_cents !== undefined && (
+                        <span className="shrink-0 tabular-nums text-black/70">
+                          {formatCents(item.cost_cents, symbol)}
+                        </span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -627,15 +632,21 @@ function Row({ item, symbol, offline, onToggle, onRemove, onSave }) {
   )
 }
 
-/** Quantity (whichever of weight/volume/plain-quantity this line already
- * uses — see `kind` below) and shop both edit here. Kind itself isn't
- * switchable: an item that's "400 g" doesn't turn into "3 piece" by
- * picking a different field, since that's a different kind of line as
- * far as merging (backend/shopping.py) is concerned — only its number
- * changes here. */
+const KIND_LABEL = { weight: 'Weight', volume: 'Volume', quantity: 'Count', bare: 'No amount' }
+
+/** Quantity and shop both edit here. Kind (weight/volume/count/no amount)
+ * is itself switchable — a line typed in with no amount at all ("garlic",
+ * just a name) is the main reason to edit a line in the first place, and
+ * it starts with nothing to pick a kind *from*, so kind can't be fixed to
+ * whatever the item already happens to be. Switching kind sends the other
+ * kind-fields as explicit nulls (see `submit`) so the item only ever ends
+ * up with the one kind of amount that `backend/shopping.py` expects. */
 function EditRow({ item, onCancel, onSave }) {
-  const kind = item.weight_grams != null ? 'weight' : item.volume_ml != null ? 'volume' : 'quantity'
+  const initialKind =
+    item.weight_grams != null ? 'weight' : item.volume_ml != null ? 'volume' : item.quantity != null ? 'quantity' : 'bare'
+  const [kind, setKind] = useState(initialKind)
   const [weight, setWeight] = useState(item.weight_grams ?? '')
+  const [weightUnit, setWeightUnit] = useState('g')
   const [volume, setVolume] = useState(item.volume_ml ?? '')
   const [quantity, setQuantity] = useState(item.quantity ?? '')
   const [unit, setUnit] = useState(item.unit || '')
@@ -645,12 +656,17 @@ function EditRow({ item, onCancel, onSave }) {
   const submit = async (event) => {
     event.preventDefault()
     setSaving(true)
-    const patch = { shop_override: shopOverride || null }
-    if (kind === 'weight') patch.weight_grams = weight === '' ? null : Number(weight)
-    else if (kind === 'volume') patch.volume_ml = volume === '' ? null : Number(volume)
-    else {
-      patch.quantity = quantity === '' ? null : Number(quantity)
-      patch.unit = unit || null
+    const patch = {
+      shop_override: shopOverride || null,
+      // Every kind-field goes in every save, even when it's null: a
+      // partial PATCH only touches fields it's actually given, so
+      // switching kind has to say "and clear the others" explicitly or
+      // the item would end up with two kinds of amount set at once.
+      weight_grams:
+        kind === 'weight' && weight !== '' ? Number(weight) * (weightUnit === 'kg' ? 1000 : 1) : null,
+      volume_ml: kind === 'volume' && volume !== '' ? Number(volume) : null,
+      quantity: kind === 'quantity' && quantity !== '' ? Number(quantity) : null,
+      unit: kind === 'quantity' ? unit || null : null,
     }
     await onSave(patch)
     setSaving(false)
@@ -659,6 +675,23 @@ function EditRow({ item, onCancel, onSave }) {
   return (
     <form onSubmit={submit} className="space-y-2 text-sm">
       <div className="font-medium text-ink">{item.name}</div>
+
+      <label className="flex items-center gap-1.5 text-ink-muted">
+        Amount
+        <select
+          aria-label="Amount kind"
+          value={kind}
+          onChange={(event) => setKind(event.target.value)}
+          className="rounded-lg border border-edge bg-card px-2 py-1 text-ink"
+        >
+          {Object.entries(KIND_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+
       <div className="flex flex-wrap items-center gap-2">
         {kind === 'weight' && (
           <label className="flex items-center gap-1.5 text-ink-muted">
@@ -672,7 +705,15 @@ function EditRow({ item, onCancel, onSave }) {
               onChange={(event) => setWeight(event.target.value)}
               className="w-24 rounded-lg border border-edge bg-card px-2 py-1 text-ink"
             />
-            g
+            <select
+              aria-label="Weight unit"
+              value={weightUnit}
+              onChange={(event) => setWeightUnit(event.target.value)}
+              className="rounded-lg border border-edge bg-card px-2 py-1 text-ink"
+            >
+              <option value="g">g</option>
+              <option value="kg">kg</option>
+            </select>
           </label>
         )}
         {kind === 'volume' && (

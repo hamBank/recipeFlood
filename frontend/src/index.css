@@ -86,5 +86,5 @@ body {
    PrintableList in ShoppingListPage.jsx) get generous margins so a
    hole-punched or clipboard copy has somewhere to hold it. */
 @page {
-  margin: 35mm;
+  margin: 25mm;
 }

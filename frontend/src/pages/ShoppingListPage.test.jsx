@@ -309,6 +309,7 @@ describe('ShoppingListPage editing', () => {
     await screen.findByText('Milk')
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Milk' }))
+    expect(screen.getByLabelText('Amount kind').value).toBe('weight')
     const weightInput = screen.getByLabelText('Weight')
     expect(weightInput.value).toBe('500')
 
@@ -316,7 +317,36 @@ describe('ShoppingListPage editing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() =>
-      expect(api.updateShoppingItem).toHaveBeenCalledWith(1, { shop_override: null, weight_grams: 750 }),
+      expect(api.updateShoppingItem).toHaveBeenCalledWith(1, {
+        shop_override: null,
+        weight_grams: 750,
+        volume_ml: null,
+        quantity: null,
+        unit: null,
+      }),
+    )
+  })
+
+  it('accepts a weight in kilograms and converts it to grams', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    api.updateShoppingItem.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Milk' }))
+    fireEvent.change(screen.getByLabelText('Amount kind'), { target: { value: 'weight' } })
+    fireEvent.change(screen.getByLabelText('Weight'), { target: { value: '1.5' } })
+    fireEvent.change(screen.getByLabelText('Weight unit'), { target: { value: 'kg' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(api.updateShoppingItem).toHaveBeenCalledWith(1, {
+        shop_override: null,
+        weight_grams: 1500,
+        volume_ml: null,
+        quantity: null,
+        unit: null,
+      }),
     )
   })
 
@@ -327,6 +357,8 @@ describe('ShoppingListPage editing', () => {
     await screen.findByText('Milk')
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Milk' }))
+    expect(screen.getByLabelText('Amount kind').value).toBe('bare')
+    fireEvent.change(screen.getByLabelText('Amount kind'), { target: { value: 'quantity' } })
     fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '3' } })
     fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'piece' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -334,8 +366,33 @@ describe('ShoppingListPage editing', () => {
     await waitFor(() =>
       expect(api.updateShoppingItem).toHaveBeenCalledWith(1, {
         shop_override: null,
+        weight_grams: null,
+        volume_ml: null,
         quantity: 3,
         unit: 'piece',
+      }),
+    )
+  })
+
+  it('switching amount kind drops whatever the other kind had set', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item({ quantity: 2, unit: 'piece' })]))
+    api.updateShoppingItem.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Milk' }))
+    expect(screen.getByLabelText('Amount kind').value).toBe('quantity')
+    fireEvent.change(screen.getByLabelText('Amount kind'), { target: { value: 'weight' } })
+    fireEvent.change(screen.getByLabelText('Weight'), { target: { value: '200' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(api.updateShoppingItem).toHaveBeenCalledWith(1, {
+        shop_override: null,
+        weight_grams: 200,
+        volume_ml: null,
+        quantity: null,
+        unit: null,
       }),
     )
   })
@@ -353,6 +410,8 @@ describe('ShoppingListPage editing', () => {
     await waitFor(() =>
       expect(api.updateShoppingItem).toHaveBeenCalledWith(1, {
         shop_override: 'butcher',
+        weight_grams: null,
+        volume_ml: null,
         quantity: null,
         unit: null,
       }),
