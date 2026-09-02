@@ -145,7 +145,11 @@ def create_ingredient(
     name = body.name.strip()
     if not name:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Name is required")
-    if find_ingredient(session, name):
+    # Strict only: fuzzy (whole-word containment) matching is for linking
+    # free text to an *existing* row, not for deciding whether a name a
+    # human is deliberately adding as its own row already exists — "onion"
+    # is a real, distinct pantry item even once "brown onion" exists.
+    if find_ingredient(session, name, fuzzy=False):
         raise HTTPException(
             status.HTTP_409_CONFLICT, f"{name!r} already matches an existing ingredient"
         )

@@ -435,6 +435,18 @@ class TestManualItems:
         assert item["ingredient_id"] is None
         assert item["cost_cents"] is None
 
+    def test_a_shorter_typed_name_matches_a_pantry_row_that_contains_it(self, client):
+        # No alias needed: "garlic" is a plain substring (whole-word) of
+        # the pantry's "jar garlic", so it should still get that row's
+        # shop and price rather than landing as unmatched plain text.
+        jar_garlic = client.post(
+            "/ingredients",
+            json={"name": "jar garlic", "source": "supermarket", "cost_per_kg_cents": 1500},
+        ).json()
+        item = client.post("/shopping", json={"name": "garlic"}).json()
+        assert item["ingredient_id"] == jar_garlic["id"]
+        assert item["shop"] == "supermarket"
+
     def test_editing_an_amount_by_hand_drops_the_now_stale_breakdown(
         self, client, onion
     ):
