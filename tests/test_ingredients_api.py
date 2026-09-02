@@ -67,6 +67,14 @@ class TestCreate:
         # split the recipes that use it.
         assert client.post("/ingredients", json={"name": "flour"}).status_code == 409
 
+    def test_allows_a_name_that_only_fuzzy_matches_an_existing_row(self, client):
+        # "onion" containing the word "brown onion" does — reaching the
+        # broader row when *linking* a free-text line — but that's not
+        # the same claim as "these are the same ingredient", so creating
+        # "onion" as its own row must still be allowed.
+        client.post("/ingredients", json={"name": "brown onion"})
+        assert client.post("/ingredients", json={"name": "onion"}).status_code == 201
+
 
 class TestUpdateRederivesWeights:
     def test_adding_a_density_updates_every_recipe_that_uses_it(self, client, cake, flour):
@@ -191,6 +199,55 @@ class TestAliasMatching:
         from backend.recipes_service import find_ingredient
 
         assert find_ingredient(session, "dragonfruit") is None
+
+
+class TestWholeWordMatching:
+    """A query that's a strict subset of one pantry row's words — "garlic"
+    reaching "jar garlic" — should find it without an alias having to spell
+    that out in advance."""
+
+    def test_a_query_matches_a_longer_pantry_name_containing_it(self, client, session, flour):
+        from backend.models import Ingredient
+        from backend.recipes_service import find_ingredient
+
+        session.add(Ingredient(slug="jar-garlic", name="jar garlic"))
+        session.commit()
+
+        assert find_ingredient(session, "garlic").name == "jar garlic"
+        assert find_ingredient(session, "GARLIC").name == "jar garlic"
+
+    def test_it_will_not_match_a_shared_substring_across_a_word_boundary(self, client, session, flour):
+        # "egg" is a character-substring of "eggplant" but not the same
+        # word — matching it would silently pretend one ingredient is the
+        # other for cost and nutrition purposes.
+        from backend.models import Ingredient
+        from backend.recipes_service import find_ingredient
+
+        session.add(Ingredient(slug="eggplant", name="eggplant"))
+        session.commit()
+
+        assert find_ingredient(session, "egg") is None
+
+    def test_it_declines_to_guess_between_several_equally_good_matches(self, client, session, flour):
+        # Two pantry rows both contain the word "onion" — picking either
+        # one would be a coin flip, not a match.
+        from backend.models import Ingredient
+        from backend.recipes_service import find_ingredient
+
+        session.add(Ingredient(slug="spring-onion", name="spring onion"))
+        session.add(Ingredient(slug="red-onion", name="red onion"))
+        session.commit()
+
+        assert find_ingredient(session, "onion") is None
+
+    def test_an_alias_also_counts_as_a_containing_name(self, client, session, flour):
+        from backend.models import Ingredient
+        from backend.recipes_service import find_ingredient
+
+        session.add(Ingredient(slug="minced-garlic", name="minced garlic", aliases=["bottled garlic"]))
+        session.commit()
+
+        assert find_ingredient(session, "bottled").name == "minced garlic"
 
 
 class TestRetroactiveAliasLinking:

@@ -70,10 +70,20 @@ def normalise_ingredient_name(name: str) -> str:
     return " ".join(kept)
 
 
-def find_ingredient(session: Session, name: str) -> Ingredient | None:
+def find_ingredient(session: Session, name: str, *, fuzzy: bool = True) -> Ingredient | None:
     """Match a recipe line's name to a master ingredient, or None.
 
-    Tries, in order: exact slug, the normalised slug, and an alias hit.
+    Tries, in order: exact slug, the normalised slug, an alias hit, and —
+    only when `fuzzy` (the default) and it can't be mistaken for something
+    else — a name whose words are a superset of the query's ("garlic"
+    reaching "jar garlic").
+
+    `fuzzy=False` is for the one caller checking whether a name a human is
+    about to save as a *new*, deliberately distinct pantry row already
+    exists: there, "onion" matching the unrelated "brown onion" would
+    block someone from adding "onion" as its own row at all, which this
+    same containment rule is right to allow everywhere the name is only
+    ever being looked up, not created.
     """
     candidates = [slugify(name), slugify(normalise_ingredient_name(name))]
     for slug in candidates:
@@ -85,7 +95,8 @@ def find_ingredient(session: Session, name: str) -> Ingredient | None:
     normalised = normalise_ingredient_name(name)
     if not normalised:
         return None
-    for ingredient in session.exec(select(Ingredient)).all():
+    ingredients = session.exec(select(Ingredient)).all()
+    for ingredient in ingredients:
         # Normalise both sides. Comparing the normalised name against raw
         # aliases only matched when normalisation happened to be a no-op:
         # the alias "pinenuts" never matched a line reading "pinenut",
@@ -94,6 +105,26 @@ def find_ingredient(session: Session, name: str) -> Ingredient | None:
         for alias in ingredient.aliases or []:
             if normalise_ingredient_name(alias) == normalised:
                 return ingredient
+
+    if not fuzzy:
+        return None
+
+    # Whole-word containment, e.g. "garlic" -> "jar garlic": a plain
+    # substring would also catch "egg" inside "eggplant", which is wrong,
+    # so this compares word sets instead. Only returned when exactly one
+    # ingredient qualifies — "onion" reaching for one of three pantry rows
+    # that all happen to contain the word is a guess, not a match, and a
+    # wrong guess here silently mislinks that line's cost and nutrition.
+    query_words = set(normalised.split())
+    word_matches = []
+    for ingredient in ingredients:
+        for candidate in (ingredient.name, *(ingredient.aliases or [])):
+            candidate_words = set(normalise_ingredient_name(candidate).split())
+            if query_words <= candidate_words:
+                word_matches.append(ingredient)
+                break
+    if len(word_matches) == 1:
+        return word_matches[0]
     return None
 
 
