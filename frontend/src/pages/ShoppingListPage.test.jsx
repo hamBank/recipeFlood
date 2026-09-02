@@ -218,6 +218,76 @@ describe('ShoppingListPage pantry search', () => {
   })
 })
 
+describe('ShoppingListPage printing', () => {
+  beforeEach(() => {
+    window.print = vi.fn()
+  })
+
+  it('has no Print button when the list is empty', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([]))
+    render(<ShoppingListPage />)
+    await screen.findByText('Nothing on the list. Add something above, or send a cooking list here.')
+    expect(screen.queryByRole('button', { name: 'Print' })).toBeNull()
+  })
+
+  it('is not in the DOM until printing starts', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    render(<ShoppingListPage />)
+    await screen.findByRole('button', { name: 'Print' })
+    // "Milk" only appears once — the on-screen row — not a second,
+    // always-present copy in a print-only wrapper.
+    expect(screen.getAllByText('Milk')).toHaveLength(1)
+  })
+
+  it('shows every item grouped by shop, including ones Show ticked is hiding, with full details, and calls window.print', async () => {
+    api.getShoppingList.mockResolvedValue(
+      baseList([
+        item({
+          id: 1,
+          name: 'Milk',
+          shop: 'supermarket',
+          amount_text: '2 L',
+          cost_cents: 350,
+          contributions: [{ recipe: 'Pancakes', amount: '500 ml' }],
+        }),
+        item({ id: 2, name: 'Salmon', shop: 'butcher', is_checked: true, amount_text: '400 g' }),
+      ]),
+    )
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    // Hide ticked items on screen — the print view should ignore this.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show ticked' }))
+    expect(screen.queryByText('Salmon')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Print' }))
+
+    expect(window.print).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Shopping list')).toBeDefined()
+    // "Supermarket" and "2 L" etc. now legitimately appear twice — the
+    // normal on-screen row plus the printable copy, both really in the
+    // DOM at once (only CSS decides which one paper sees).
+    expect(screen.getAllByText('Supermarket').length).toBeGreaterThan(0)
+    expect(screen.getByText('Butcher')).toBeDefined() // Butcher only on the print side — Salmon was hidden on screen
+    expect(screen.getAllByText('Salmon')).toHaveLength(1) // back, for print
+    expect(screen.getAllByText('2 L').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('$3.50').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Pancakes (500 ml)').length).toBeGreaterThan(0)
+  })
+
+  it('drops the printable list again once the print dialog closes', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Print' }))
+    expect(screen.getByText('Shopping list')).toBeDefined()
+
+    fireEvent(window, new Event('afterprint'))
+    expect(screen.queryByText('Shopping list')).toBeNull()
+  })
+})
+
 describe('ShoppingListPage reconnecting', () => {
   it('retries a stuck offline queue on its own, without a real online event', async () => {
     // Genuinely online throughout (navigator.onLine never flips) — this

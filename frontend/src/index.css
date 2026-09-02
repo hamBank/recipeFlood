@@ -72,3 +72,12 @@ body {
   background-color: var(--page);
   color: var(--ink);
 }
+
+/* Printing (or saving as PDF) should always come out on plain white paper,
+   regardless of theme or whether the browser's own "background graphics"
+   print setting is on. */
+@media print {
+  body {
+    background-color: #fff;
+  }
+}
