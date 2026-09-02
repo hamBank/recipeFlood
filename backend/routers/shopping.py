@@ -103,7 +103,7 @@ def update_item(
     if checked is not None and checked != item.is_checked:
         set_checked(item, checked)
 
-    if any(f in fields for f in ("weight_grams", "quantity", "unit")):
+    if any(f in fields for f in ("weight_grams", "volume_ml", "quantity", "unit")):
         item.contributions = []
     for name, value in fields.items():
         setattr(item, name, value)

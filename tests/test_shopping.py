@@ -522,6 +522,20 @@ class TestManualItems:
         ).json()
         assert updated["contributions"] == []
 
+    def test_editing_a_volume_by_hand_also_drops_the_breakdown(self, client, onion):
+        recipe = make_recipe(
+            client, "Soup", [{"name": "onion", "quantity": 2, "unit": "piece"}]
+        )
+        cook_list = make_list(client, [recipe])
+        client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping")
+        item = client.get("/shopping").json()["items"][0]
+        assert item["contributions"]
+
+        updated = client.patch(
+            f"/shopping/{item['id']}", json={"volume_ml": 500}
+        ).json()
+        assert updated["contributions"] == []
+
 
 class TestCheckingOff:
     def test_clearing_removes_only_the_checked_items(self, client):
