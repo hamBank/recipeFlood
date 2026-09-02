@@ -21,6 +21,11 @@ import {
 import { useSession } from '../App'
 import { formatCents, formatPercent, SOURCE_LABEL } from '../format'
 
+//: Units for the plain "quantity" line ("3 lemons", "1 bunch") — weight
+//: and volume have their own dedicated fields (weight_grams/volume_ml),
+//: so those units aren't offered here; see Row's editor below.
+const QUANTITY_UNITS = ['', 'piece', 'slice', 'clove', 'bunch', 'sprig', 'can', 'pinch', 'to_taste']
+
 /**
  * The shopping list — one permanent list, grouped by shop.
  *
@@ -29,10 +34,12 @@ import { formatCents, formatPercent, SOURCE_LABEL } from '../format'
  * shop as the heading, checked items greyed and pushed to the bottom of
  * their group rather than vanishing.
  *
- * Grouping comes from the pantry's `source` for each ingredient, so the
- * list doubles as a route. The order is a walking order, not alphabetical
- * — the backend decides it (see backend/shopping.py) and this page just
- * renders `shops` in the order it is given.
+ * Grouping normally follows the pantry's `source` for each ingredient, so
+ * the list doubles as a route — and a line's own `shop_override` (Row's
+ * editor) wins over that when someone sets one, for the one-off "not from
+ * the usual place this time" case. The order is a walking order, not
+ * alphabetical — the backend decides it (see backend/shopping.py) and
+ * this page just renders `shops` in the order it is given.
  *
  * It also works with no connection at all — see offlineQueue.js. `list`
  * here is the last-known truth from the server (or, offline, from a
@@ -274,6 +281,22 @@ export default function ShoppingListPage() {
     await load()
   }
 
+  /** Quantity edits and a manual shop move both go through here — see
+   * Row's editor below. Both need the network (the offline queue only
+   * ever replays a tick or a brand-new line, see offlineQueue.js), same
+   * as remove/clear/untick above. */
+  const update = async (item, patch) => {
+    if (offline) return
+    setBusy(true)
+    try {
+      await updateShoppingItem(item.id, patch)
+      await load()
+    } catch (caught) {
+      setError(caught.message)
+    }
+    setBusy(false)
+  }
+
   const clear = async () => {
     if (offline) return
     if (!window.confirm(`Remove ${displayList.checked_count} ticked item(s) from the list?`)) return
@@ -447,6 +470,7 @@ export default function ShoppingListPage() {
                         offline={offline}
                         onToggle={() => toggle(item)}
                         onRemove={() => remove(item)}
+                        onSave={(patch) => update(item, patch)}
                       />
                     ))}
                   </ul>
@@ -520,12 +544,29 @@ function PrintableList({ displayList, symbol }) {
   )
 }
 
-function Row({ item, symbol, offline, onToggle, onRemove }) {
+function Row({ item, symbol, offline, onToggle, onRemove, onSave }) {
+  const [editing, setEditing] = useState(false)
+
   // "why is 400g of onion on my list" — answerable without re-running the
   // aggregation, because each merge recorded what it came from.
   const why = (item.contributions || [])
     .map((c) => `${c.recipe}${c.amount ? ` (${c.amount})` : ''}`)
     .join(' · ')
+
+  if (editing) {
+    return (
+      <li className="px-3 py-3">
+        <EditRow
+          item={item}
+          onCancel={() => setEditing(false)}
+          onSave={async (patch) => {
+            await onSave(patch)
+            setEditing(false)
+          }}
+        />
+      </li>
+    )
+  }
 
   return (
     <li className={`flex items-center gap-3 px-3 py-3 ${item.is_checked ? 'opacity-50' : ''}`}>
@@ -544,6 +585,14 @@ function Row({ item, symbol, offline, onToggle, onRemove }) {
         {item.amount_text && (
           <span className="ml-2 text-sm text-ink-muted">{item.amount_text}</span>
         )}
+        {item.shop_override && (
+          <span
+            className="ml-2 text-xs text-ink-faint"
+            title={`Moved to ${SOURCE_LABEL[item.shop_override] || item.shop_override} by hand`}
+          >
+            (moved)
+          </span>
+        )}
         {item.pendingSync && (
           <span className="ml-2 text-xs italic text-ink-muted">not yet synced</span>
         )}
@@ -559,6 +608,14 @@ function Row({ item, symbol, offline, onToggle, onRemove }) {
         </span>
       )}
       <button
+        onClick={() => setEditing(true)}
+        disabled={offline}
+        className="shrink-0 rounded px-2 py-1 text-sm text-ink-muted hover:bg-soft disabled:opacity-30"
+        aria-label={`Edit ${item.name}`}
+      >
+        ✎
+      </button>
+      <button
         onClick={onRemove}
         disabled={offline}
         className="shrink-0 rounded px-2 py-1 text-sm text-ink-muted hover:bg-soft disabled:opacity-30"
@@ -567,5 +624,136 @@ function Row({ item, symbol, offline, onToggle, onRemove }) {
         ✕
       </button>
     </li>
+  )
+}
+
+/** Quantity (whichever of weight/volume/plain-quantity this line already
+ * uses — see `kind` below) and shop both edit here. Kind itself isn't
+ * switchable: an item that's "400 g" doesn't turn into "3 piece" by
+ * picking a different field, since that's a different kind of line as
+ * far as merging (backend/shopping.py) is concerned — only its number
+ * changes here. */
+function EditRow({ item, onCancel, onSave }) {
+  const kind = item.weight_grams != null ? 'weight' : item.volume_ml != null ? 'volume' : 'quantity'
+  const [weight, setWeight] = useState(item.weight_grams ?? '')
+  const [volume, setVolume] = useState(item.volume_ml ?? '')
+  const [quantity, setQuantity] = useState(item.quantity ?? '')
+  const [unit, setUnit] = useState(item.unit || '')
+  const [shopOverride, setShopOverride] = useState(item.shop_override || '')
+  const [saving, setSaving] = useState(false)
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    const patch = { shop_override: shopOverride || null }
+    if (kind === 'weight') patch.weight_grams = weight === '' ? null : Number(weight)
+    else if (kind === 'volume') patch.volume_ml = volume === '' ? null : Number(volume)
+    else {
+      patch.quantity = quantity === '' ? null : Number(quantity)
+      patch.unit = unit || null
+    }
+    await onSave(patch)
+    setSaving(false)
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-2 text-sm">
+      <div className="font-medium text-ink">{item.name}</div>
+      <div className="flex flex-wrap items-center gap-2">
+        {kind === 'weight' && (
+          <label className="flex items-center gap-1.5 text-ink-muted">
+            Weight
+            <input
+              aria-label="Weight"
+              type="number"
+              step="any"
+              min="0"
+              value={weight}
+              onChange={(event) => setWeight(event.target.value)}
+              className="w-24 rounded-lg border border-edge bg-card px-2 py-1 text-ink"
+            />
+            g
+          </label>
+        )}
+        {kind === 'volume' && (
+          <label className="flex items-center gap-1.5 text-ink-muted">
+            Volume
+            <input
+              aria-label="Volume"
+              type="number"
+              step="any"
+              min="0"
+              value={volume}
+              onChange={(event) => setVolume(event.target.value)}
+              className="w-24 rounded-lg border border-edge bg-card px-2 py-1 text-ink"
+            />
+            mL
+          </label>
+        )}
+        {kind === 'quantity' && (
+          <>
+            <label className="flex items-center gap-1.5 text-ink-muted">
+              Quantity
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+                className="w-20 rounded-lg border border-edge bg-card px-2 py-1 text-ink"
+              />
+            </label>
+            <select
+              aria-label="Unit"
+              value={unit}
+              onChange={(event) => setUnit(event.target.value)}
+              className="rounded-lg border border-edge bg-card px-2 py-1 text-ink"
+            >
+              {QUANTITY_UNITS.map((value) => (
+                <option key={value} value={value}>
+                  {value ? value.replace('_', ' ') : '—'}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+      </div>
+
+      <label className="flex items-center gap-1.5 text-ink-muted">
+        Shop
+        <select
+          value={shopOverride}
+          onChange={(event) => setShopOverride(event.target.value)}
+          className="rounded-lg border border-edge bg-card px-2 py-1 text-ink"
+        >
+          {/* Not "…(currently: X)" — once an override is set, item.shop
+              *is* the override, not the pantry's own default, so there's
+              no value here that's safe to show without a second request. */}
+          <option value="">Use pantry default</option>
+          {Object.entries(SOURCE_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="flex justify-end gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-edge px-3 py-1 text-ink-muted hover:bg-soft"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-lg bg-accent px-3 py-1 font-medium text-[color:var(--accent-ink)] disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </form>
   )
 }

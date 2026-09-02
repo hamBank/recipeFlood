@@ -866,6 +866,21 @@ class ShoppingItem(SQLModel, table=True):
     )
     note: str | None = None
 
+    # Which shop this line is grouped under normally follows the linked
+    # ingredient's own `source` (see shopping.shop_of) — so re-pricing an
+    # ingredient's usual shop in the pantry moves every line for it here
+    # too, with no shopping-list change needed. This is the one-off
+    # exception: "usually the supermarket, but the big pack this time is
+    # from the wholesaler" without touching the pantry's default at all.
+    # Null (the common case) means "follow the pantry".
+    shop_override: IngredientSource | None = Field(
+        default=None,
+        sa_column=Column(
+            SAEnum(IngredientSource, native_enum=False, create_constraint=False, length=32),
+            nullable=True,
+        ),
+    )
+
     is_checked: bool = Field(default=False, index=True)
     checked_at: datetime | None = None
 
@@ -971,6 +986,11 @@ class ShoppingItemUpdate(SQLModel):
     unit: MeasureUnit | None = None
     note: str | None = None
     is_checked: bool | None = None
+    # Explicit null clears it (back to following the pantry); omitting the
+    # field entirely leaves whatever override is already set untouched —
+    # same "send it to change it, omit it to leave it" rule every other
+    # field on this model follows.
+    shop_override: IngredientSource | None = None
 
 
 class ShoppingItemRead(SQLModel):
@@ -988,8 +1008,11 @@ class ShoppingItemRead(SQLModel):
     cook_list_id: int | None
     contributions: list[dict] = Field(default_factory=list)
     added_at: datetime
-    # Where this gets bought, so the list can be walked shop by shop.
-    # "other" when the item isn't linked to a pantry row.
+    shop_override: IngredientSource | None = None
+    # Where this gets bought, so the list can be walked shop by shop —
+    # `shop_override` if one is set, else the linked ingredient's own
+    # `source`, else "other" when the item isn't linked to a pantry row at
+    # all. See shopping.shop_of.
     shop: str = IngredientSource.other.value
     amount_text: str = ""  # "400 g", "1 bunch" — rendered once, server-side
     cost_cents: int | None = None  # signed-in only, null when unpriced

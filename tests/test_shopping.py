@@ -366,6 +366,16 @@ class TestShops:
             "plain flour": "supermarket",
         }
 
+    def test_changing_an_ingredients_shop_moves_every_line_for_it(self, client, onion):
+        # No denormalised shop stored on the line — shop_of reads the
+        # pantry live — so re-pricing where an ingredient's usually bought
+        # takes effect on the list with no shopping-list edit at all.
+        client.post("/shopping", json={"name": "onion"})
+        assert client.get("/shopping").json()["items"][0]["shop"] == "markets"
+
+        client.patch(f"/ingredients/{onion.slug}", json={"source": "supermarket"})
+        assert client.get("/shopping").json()["items"][0]["shop"] == "supermarket"
+
     def test_an_unlinked_item_lands_in_other(self, client):
         client.post("/shopping", json={"name": "birthday candles"})
         body = client.get("/shopping").json()
@@ -388,6 +398,55 @@ class TestShops:
 
     def test_every_ingredient_source_has_a_place_in_the_walking_order(self):
         assert {s.value for s in IngredientSource} == set(SHOP_ORDER)
+
+
+class TestShopOverride:
+    """A one-off "not from the usual place" per line, independent of the
+    pantry's own default — see ShoppingItem.shop_override."""
+
+    def test_overriding_moves_just_that_line(self, client, onion, flour):
+        onion_item = client.post("/shopping", json={"name": "onion"}).json()
+        client.post("/shopping", json={"name": "plain flour"})
+        assert onion_item["shop"] == "markets"
+
+        moved = client.patch(
+            f"/shopping/{onion_item['id']}", json={"shop_override": "supermarket"}
+        ).json()
+        assert moved["shop"] == "supermarket"
+        assert moved["shop_override"] == "supermarket"
+
+        # The other line, and the pantry's own record of where onion is
+        # usually bought, are both untouched.
+        items = {i["name"]: i["shop"] for i in client.get("/shopping").json()["items"]}
+        assert items["plain flour"] == "supermarket"  # its own, unrelated, pantry source
+        assert client.get(f"/ingredients/{onion.slug}").json()["source"] == "markets"
+
+    def test_clearing_the_override_reverts_to_the_pantry_default(self, client, onion):
+        item = client.post("/shopping", json={"name": "onion"}).json()
+        client.patch(f"/shopping/{item['id']}", json={"shop_override": "supermarket"})
+
+        reverted = client.patch(
+            f"/shopping/{item['id']}", json={"shop_override": None}
+        ).json()
+        assert reverted["shop_override"] is None
+        assert reverted["shop"] == "markets"
+
+    def test_an_unset_override_is_left_alone_by_an_unrelated_edit(self, client, onion):
+        item = client.post("/shopping", json={"name": "onion"}).json()
+        client.patch(f"/shopping/{item['id']}", json={"shop_override": "supermarket"})
+
+        still_moved = client.patch(
+            f"/shopping/{item['id']}", json={"note": "the big bag"}
+        ).json()
+        assert still_moved["shop_override"] == "supermarket"
+        assert still_moved["shop"] == "supermarket"
+
+    def test_an_unlinked_items_override_still_applies(self, client):
+        item = client.post("/shopping", json={"name": "birthday candles"}).json()
+        moved = client.patch(
+            f"/shopping/{item['id']}", json={"shop_override": "newsagent"}
+        ).json()
+        assert moved["shop"] == "newsagent"
 
 
 class TestPricing:
