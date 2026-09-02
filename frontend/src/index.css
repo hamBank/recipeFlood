@@ -81,3 +81,10 @@ body {
     background-color: #fff;
   }
 }
+
+/* Printable pages (currently just the shopping list — see
+   PrintableList in ShoppingListPage.jsx) get generous margins so a
+   hole-punched or clipboard copy has somewhere to hold it. */
+@page {
+  margin: 35mm;
+}
