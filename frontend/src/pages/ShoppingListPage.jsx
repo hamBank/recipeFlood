@@ -539,7 +539,7 @@ function PrintableList({ displayList, symbol }) {
                     .map((c) => `${c.recipe}${c.amount ? ` (${c.amount})` : ''}`)
                     .join(' · ')
                   return (
-                    <li key={item.id} className="flex items-start gap-2 border-b border-black/20 py-1.5 text-sm">
+                    <li key={item.id} className="flex items-start gap-2 py-1.5 text-sm">
                       <span aria-hidden="true">{item.is_checked ? '☑' : '☐'}</span>
                       <span className="flex-1">
                         <span className={item.is_checked ? 'text-black/60 line-through' : 'text-black'}>

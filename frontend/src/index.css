@@ -84,7 +84,8 @@ body {
 
 /* Printable pages (currently just the shopping list — see
    PrintableList in ShoppingListPage.jsx) get generous margins so a
-   hole-punched or clipboard copy has somewhere to hold it. */
+   hole-punched or clipboard copy has somewhere to hold it. Left is wider
+   than the rest for the hole punch/binder margin itself. */
 @page {
-  margin: 25mm;
+  margin: 25mm 25mm 25mm 35mm;
 }
