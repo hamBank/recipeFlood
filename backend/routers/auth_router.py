@@ -10,7 +10,7 @@ from ..auth import (
 )
 from ..config import settings
 from ..database import get_session
-from ..models import User, UserRead, UserRole
+from ..models import User, UserRead, UserRole, UserSelfUpdate
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -77,4 +77,20 @@ def google_login(body: GoogleLoginRequest, session: Session = Depends(get_sessio
 
 @router.get("/me", response_model=UserRead)
 def me(user: User = Depends(get_current_user)):
+    return user
+
+
+@router.patch("/me", response_model=UserRead)
+def update_me(
+    body: UserSelfUpdate,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Self-service edits — UI preferences only, unlike PATCH /users/{id}
+    which is admin-only and covers role/name/is_active."""
+    for key, value in body.model_dump(exclude_unset=True).items():
+        setattr(user, key, value)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
     return user

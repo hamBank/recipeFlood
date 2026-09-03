@@ -7,6 +7,7 @@ import {
   getShoppingList,
   listIngredients,
   uncheckAllShopping,
+  updateMe,
   updateShoppingItem,
 } from '../api'
 import {
@@ -47,7 +48,7 @@ const QUANTITY_UNITS = ['', 'piece', 'slice', 'clove', 'bunch', 'sprig', 'can', 
  * the two combined, and is what actually renders.
  */
 export default function ShoppingListPage() {
-  const { config } = useSession()
+  const { config, user, setUser } = useSession()
   const symbol = config?.currency_symbol || '$'
 
   const [list, setList] = useState(null)
@@ -56,7 +57,19 @@ export default function ShoppingListPage() {
   const [newName, setNewName] = useState('')
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [showChecked, setShowChecked] = useState(true)
+  // Persisted on the user's profile (see PATCH /auth/me) rather than just
+  // local state, so it survives a reload instead of always starting shown.
+  const [showChecked, setShowChecked] = useState(user?.shopping_show_ticked ?? true)
+
+  const toggleShowChecked = (value) => {
+    setShowChecked(value)
+    if (!user) return
+    setUser({ ...user, shopping_show_ticked: value })
+    updateMe({ shopping_show_ticked: value }).catch(() => {
+      // Best-effort — worst case the toggle just doesn't stick past this
+      // session, which isn't worth surfacing an error banner for.
+    })
+  }
 
   // Pantry search-as-you-type, so a name already in the pantry (with a
   // shop and a price) can be added in one tap instead of typed out and
@@ -428,7 +441,7 @@ export default function ShoppingListPage() {
               <input
                 type="checkbox"
                 checked={showChecked}
-                onChange={(event) => setShowChecked(event.target.checked)}
+                onChange={(event) => toggleShowChecked(event.target.checked)}
               />
               Show ticked
             </label>
