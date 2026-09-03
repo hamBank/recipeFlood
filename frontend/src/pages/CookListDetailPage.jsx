@@ -169,7 +169,7 @@ export default function CookListDetailPage() {
   return (
     <div className="max-w-2xl space-y-5">
       <div className="flex items-center gap-2 text-sm">
-        <Link to="/cooking" className="text-ink-muted hover:underline">
+        <Link to="/cooking/all" className="text-ink-muted hover:underline">
           Cooking lists
         </Link>
         <span className="text-ink-muted">/</span>

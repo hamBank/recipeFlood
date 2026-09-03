@@ -47,6 +47,9 @@ class User(SQLModel, table=True):
     role: UserRole = Field(default=UserRole.user)
     is_active: bool = True
     created_at: datetime = Field(default_factory=utcnow)
+    # Per-user UI preference, not a permission — self-editable via
+    # PATCH /auth/me regardless of role (see UserSelfUpdate).
+    shopping_show_ticked: bool = True
 
 
 class UserRead(SQLModel):
@@ -56,12 +59,20 @@ class UserRead(SQLModel):
     avatar_url: str | None
     role: UserRole
     is_active: bool
+    shopping_show_ticked: bool
 
 
 class UserUpdate(SQLModel):
     name: str | None = None
     role: UserRole | None = None
     is_active: bool | None = None
+
+
+class UserSelfUpdate(SQLModel):
+    """Fields a user may change about their own account — a narrow subset
+    of UserUpdate, since role/is_active/name stay admin-only."""
+
+    shopping_show_ticked: bool | None = None
 
 
 class UserInvite(SQLModel):

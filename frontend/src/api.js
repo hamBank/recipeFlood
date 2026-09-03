@@ -73,6 +73,7 @@ export const getAuthConfig = () => apiFetch('/auth/config')
 export const loginWithGoogle = (credential) =>
   apiFetch('/auth/google', { method: 'POST', body: { credential } })
 export const getMe = () => apiFetch('/auth/me')
+export const updateMe = (data) => apiFetch('/auth/me', { method: 'PATCH', body: data })
 
 // Recipes
 export const listRecipes = (params) => apiFetchPaged(`/recipes${query(params)}`)

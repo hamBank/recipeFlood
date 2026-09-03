@@ -9,10 +9,11 @@ import RecipeFormPage from './pages/RecipeFormPage'
 import ImportPage from './pages/ImportPage'
 import PantryPage from './pages/PantryPage'
 import CookListsPage from './pages/CookListsPage'
+import CookListLatestPage from './pages/CookListLatestPage'
 import CookListDetailPage from './pages/CookListDetailPage'
 import ShoppingListPage from './pages/ShoppingListPage'
 
-const SessionContext = createContext({ config: null, user: null })
+const SessionContext = createContext({ config: null, user: null, setUser: () => {} })
 
 const CONFIG_CACHE_KEY = 'rf_auth_config'
 const USER_CACHE_KEY = 'rf_auth_user'
@@ -107,6 +108,13 @@ export default function App() {
     setUser(null)
   }
 
+  // Wraps setUser so a preference update (see ShoppingListPage's "Show
+  // ticked" toggle) also updates the offline cache, not just React state.
+  const updateUser = (next) => {
+    setUser(next)
+    cacheSet(USER_CACHE_KEY, next)
+  }
+
   if (loading) return <Centered>Loading…</Centered>
   if (error) return <Centered>{error}</Centered>
 
@@ -117,7 +125,7 @@ export default function App() {
   }
 
   return (
-    <SessionContext.Provider value={{ config, user }}>
+    <SessionContext.Provider value={{ config, user, setUser: updateUser }}>
       <Routes>
         <Route element={<Layout user={user} onSignOut={signOut} />}>
           <Route index element={<RecipeListPage />} />
@@ -164,6 +172,14 @@ export default function App() {
               "/shopping-list") gets swallowed the same way. */}
           <Route
             path="cooking"
+            element={
+              <RequireAuth user={user}>
+                <CookListLatestPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="cooking/all"
             element={
               <RequireAuth user={user}>
                 <CookListsPage />

@@ -12,6 +12,13 @@ vi.mock('../api', () => ({
   clearCheckedShopping: vi.fn(),
   uncheckAllShopping: vi.fn(),
   listIngredients: vi.fn(),
+  updateMe: vi.fn(),
+}))
+
+let sessionUser = null
+const setSessionUser = vi.fn()
+vi.mock('../App', () => ({
+  useSession: () => ({ user: sessionUser, setUser: setSessionUser, config: null }),
 }))
 
 const baseList = (items) => ({
@@ -54,6 +61,7 @@ beforeEach(() => {
   localStorage.clear()
   setOnline(true)
   api.listIngredients.mockResolvedValue({ items: [], total: 0 })
+  sessionUser = null
 })
 
 describe('ShoppingListPage online', () => {
@@ -273,6 +281,25 @@ describe('ShoppingListPage printing', () => {
     expect(screen.getAllByText('2 L').length).toBeGreaterThan(0)
     expect(screen.getAllByText('$3.50').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Pancakes (500 ml)').length).toBeGreaterThan(0)
+  })
+
+  it('starts with the signed-in user\'s saved "Show ticked" preference, and persists a change to it', async () => {
+    sessionUser = { id: 1, shopping_show_ticked: false }
+    api.getShoppingList.mockResolvedValue(
+      baseList([item({ id: 2, name: 'Salmon', is_checked: true })]),
+    )
+    api.updateMe.mockResolvedValue({})
+    render(<ShoppingListPage />)
+
+    const checkbox = await screen.findByRole('checkbox', { name: 'Show ticked' })
+    expect(checkbox.checked).toBe(false)
+    expect(screen.queryByText('Salmon')).toBeNull()
+
+    fireEvent.click(checkbox)
+
+    expect(screen.getByText('Salmon')).toBeDefined()
+    expect(api.updateMe).toHaveBeenCalledWith({ shopping_show_ticked: true })
+    expect(setSessionUser).toHaveBeenCalledWith({ id: 1, shopping_show_ticked: true })
   })
 
   it('drops the printable list again once the print dialog closes', async () => {
