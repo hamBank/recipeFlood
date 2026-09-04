@@ -276,6 +276,20 @@ lists unless `include_completed` is passed, and the list screen has a
 import batches, the screen would default to mostly those instead of
 what's actually being planned.
 
+### Adding a recipe logs a prepared event
+
+Putting a recipe on a cooking list is "we're cooking this on the list's
+date", so it logs a `PreparedEvent` dated to the list's `cook_date` (see
+"Prepared log"), linked back to the list rather than added by hand. That
+link keeps the two in step without piling up duplicate log entries:
+re-adding the same recipe (e.g. editing its servings, which goes through
+the same endpoint) refreshes the existing entry instead of logging a
+second cook; removing the recipe from the list removes the entry it
+logged; editing the list's date moves every linked entry with it.
+Deleting the list itself is different — the plan can go, but "we cooked
+this" already happened, so its logged entries stay, just as if they'd
+been logged by hand.
+
 ### Completed recipes, within a list
 
 A `CookListRecipe` has its own `completed` flag, the same idea one level

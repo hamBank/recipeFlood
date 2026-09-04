@@ -599,6 +599,11 @@ class PreparedEvent(SQLModel, table=True):
     rating: int | None = Field(default=None, ge=1, le=5)
     note: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
+    # Set only on an entry auto-created when a recipe joined a cooking list
+    # (see routers/cook_lists.py) — links it back to that list so removing
+    # the recipe, or editing the list's date, keeps this entry in step.
+    # Null for anything logged by hand from the recipe page.
+    cook_list_id: int | None = Field(default=None, foreign_key="cooklist.id", index=True)
 
 
 class PreparedEventCreate(SQLModel):

@@ -141,6 +141,95 @@ class TestMembership:
         assert body["recipe_count"] == 1
 
 
+class TestPreparedLog:
+    """Adding a recipe to a cooking list is "we're cooking this on the
+    list's date" — see backend/cook_lists.py's sync_prepared_event."""
+
+    def test_adding_a_recipe_logs_a_prepared_event_dated_to_the_list(
+        self, client, soup
+    ):
+        created = client.post("/cook-lists", json={"cook_date": "2026-08-24"}).json()
+        client.post(f"/cook-lists/{created['id']}/recipes", json={"recipe_id": soup["id"]})
+
+        recipe = client.get(f"/recipes/{soup['slug']}").json()
+        assert recipe["last_prepared_on"] == "2026-08-24"
+        assert recipe["prepared_count"] == 1
+
+    def test_creating_a_list_with_recipes_also_logs_them(self, client, soup, stew):
+        client.post(
+            "/cook-lists",
+            json={"cook_date": "2026-08-24", "recipes": [{"recipe_id": soup["id"]}]},
+        )
+        recipe = client.get(f"/recipes/{soup['slug']}").json()
+        assert recipe["last_prepared_on"] == "2026-08-24"
+
+    def test_editing_servings_does_not_log_a_second_event(self, client, soup):
+        """The same endpoint backs both adding a recipe and editing its
+        servings — a repeat call must sync, not double-log."""
+        created = client.post("/cook-lists", json={"cook_date": "2026-08-24"}).json()
+        client.post(f"/cook-lists/{created['id']}/recipes", json={"recipe_id": soup["id"]})
+        client.post(
+            f"/cook-lists/{created['id']}/recipes",
+            json={"recipe_id": soup["id"], "servings": 4},
+        )
+        recipe = client.get(f"/recipes/{soup['slug']}").json()
+        assert recipe["prepared_count"] == 1
+
+    def test_removing_a_recipe_unlogs_it(self, client, soup):
+        created = client.post("/cook-lists", json={"cook_date": "2026-08-24"}).json()
+        client.post(f"/cook-lists/{created['id']}/recipes", json={"recipe_id": soup["id"]})
+        client.delete(f"/cook-lists/{created['id']}/recipes/{soup['id']}")
+
+        recipe = client.get(f"/recipes/{soup['slug']}").json()
+        assert recipe["last_prepared_on"] is None
+        assert recipe["prepared_count"] == 0
+
+    def test_patching_the_recipes_wholesale_syncs_the_log_too(self, client, soup, stew):
+        created = client.post(
+            "/cook-lists",
+            json={"cook_date": "2026-08-24", "recipes": [{"recipe_id": soup["id"]}]},
+        ).json()
+        client.patch(
+            f"/cook-lists/{created['id']}",
+            json={"recipes": [{"recipe_id": stew["id"]}]},
+        )
+        assert client.get(f"/recipes/{soup['slug']}").json()["prepared_count"] == 0
+        assert client.get(f"/recipes/{stew['slug']}").json()["prepared_count"] == 1
+
+    def test_editing_the_list_date_moves_the_logged_events(self, client, soup, stew):
+        created = client.post(
+            "/cook-lists",
+            json={
+                "cook_date": "2026-08-24",
+                "recipes": [{"recipe_id": soup["id"]}, {"recipe_id": stew["id"]}],
+            },
+        ).json()
+        client.patch(f"/cook-lists/{created['id']}", json={"cook_date": "2026-08-30"})
+
+        assert client.get(f"/recipes/{soup['slug']}").json()["last_prepared_on"] == "2026-08-30"
+        assert client.get(f"/recipes/{stew['slug']}").json()["last_prepared_on"] == "2026-08-30"
+
+    def test_patching_an_unrelated_field_does_not_touch_the_log(self, client, soup):
+        created = client.post(
+            "/cook-lists",
+            json={"cook_date": "2026-08-24", "recipes": [{"recipe_id": soup["id"]}]},
+        ).json()
+        client.patch(f"/cook-lists/{created['id']}", json={"description": "Renamed"})
+        assert client.get(f"/recipes/{soup['slug']}").json()["last_prepared_on"] == "2026-08-24"
+
+    def test_deleting_the_list_keeps_the_logged_events(self, client, soup):
+        """The plan can go, but "we cooked this" already happened."""
+        created = client.post(
+            "/cook-lists",
+            json={"cook_date": "2026-08-24", "recipes": [{"recipe_id": soup["id"]}]},
+        ).json()
+        assert client.delete(f"/cook-lists/{created['id']}").status_code == 204
+
+        recipe = client.get(f"/recipes/{soup['slug']}").json()
+        assert recipe["last_prepared_on"] == "2026-08-24"
+        assert recipe["prepared_count"] == 1
+
+
 class TestListing:
     def test_lists_come_back_newest_date_first(self, client):
         for day in ("2026-08-01", "2026-08-20", "2026-08-10"):

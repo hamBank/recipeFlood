@@ -21,6 +21,7 @@ from .models import (
     CookListRead,
     CookListRecipe,
     CookListRecipeRead,
+    PreparedEvent,
     Recipe,
     RecipeIngredient,
 )
@@ -102,6 +103,48 @@ def cook_list_read(session: Session, cook_list: CookList) -> CookListRead:
         recipe_count=len(rows),
         recipes=rows,
     )
+
+
+def sync_prepared_event(
+    session: Session, cook_list: CookList, recipe_id: int, user_id: int | None
+) -> None:
+    """A recipe joining (or staying on) a list is "we're cooking this on
+    the list's date" — so it gets a `PreparedEvent` dated to `cook_date`,
+    linked back to the list so later edits keep it in step. Idempotent:
+    calling it again for the same (recipe, list) just refreshes the date
+    rather than logging a second cook.
+    """
+    event = session.exec(
+        select(PreparedEvent).where(
+            PreparedEvent.recipe_id == recipe_id,
+            PreparedEvent.cook_list_id == cook_list.id,
+        )
+    ).first()
+    if event is None:
+        session.add(
+            PreparedEvent(
+                recipe_id=recipe_id,
+                prepared_on=cook_list.cook_date,
+                user_id=user_id,
+                cook_list_id=cook_list.id,
+            )
+        )
+    elif event.prepared_on != cook_list.cook_date:
+        event.prepared_on = cook_list.cook_date
+        session.add(event)
+
+
+def unlink_prepared_event(session: Session, cook_list_id: int, recipe_id: int) -> None:
+    """Undo `sync_prepared_event` when a recipe leaves a list — the entry
+    it auto-logged no longer reflects a real plan."""
+    event = session.exec(
+        select(PreparedEvent).where(
+            PreparedEvent.recipe_id == recipe_id,
+            PreparedEvent.cook_list_id == cook_list_id,
+        )
+    ).first()
+    if event is not None:
+        session.delete(event)
 
 
 def shopping_lines(
