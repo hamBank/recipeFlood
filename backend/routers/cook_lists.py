@@ -10,7 +10,14 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlmodel import Session, or_, select
 
-from ..cook_lists import IMPORTED_COOK_LIST_DESCRIPTION, cook_list_read, shopping_lines
+from ..cook_lists import (
+    IMPORTED_COOK_LIST_DESCRIPTION,
+    cook_list_read,
+    entries_of,
+    shopping_lines,
+    sync_prepared_event,
+    unlink_prepared_event,
+)
 from ..database import get_session
 from ..models import (
     AddToShoppingResult,
@@ -39,9 +46,18 @@ def _lookup(session: Session, cook_list_id: int) -> CookList:
 
 
 def _replace_recipes(
-    session: Session, cook_list: CookList, recipes: list[CookListRecipeIn]
+    session: Session,
+    cook_list: CookList,
+    recipes: list[CookListRecipeIn],
+    user_id: int | None,
 ) -> None:
     """Set a list's membership to exactly `recipes`, in the order given."""
+    previous_ids = {
+        entry.recipe_id
+        for entry in session.exec(
+            select(CookListRecipe).where(CookListRecipe.cook_list_id == cook_list.id)
+        ).all()
+    }
     for existing in session.exec(
         select(CookListRecipe).where(CookListRecipe.cook_list_id == cook_list.id)
     ).all():
@@ -71,6 +87,13 @@ def _replace_recipes(
             )
         )
         position += 1
+
+    # Same "we're cooking this on the list's date" logging as add_recipe/
+    # remove_recipe below, for the wholesale-replacement path.
+    for recipe_id in previous_ids - seen:
+        unlink_prepared_event(session, cook_list.id, recipe_id)
+    for recipe_id in seen:
+        sync_prepared_event(session, cook_list, recipe_id, user_id)
 
 
 @router.get("", response_model=list[CookListRead])
@@ -151,7 +174,7 @@ def create_cook_list(
     )
     session.add(cook_list)
     session.flush()
-    _replace_recipes(session, cook_list, body.recipes)
+    _replace_recipes(session, cook_list, body.recipes, user.id)
     session.commit()
     session.refresh(cook_list)
     return cook_list_read(session, cook_list)
@@ -162,17 +185,23 @@ def update_cook_list(
     cook_list_id: int,
     body: CookListUpdate,
     session: Session = Depends(get_session),
-    _user: User = Depends(require_user_role),
+    user: User = Depends(require_user_role),
 ):
     cook_list = _lookup(session, cook_list_id)
     fields = body.model_dump(exclude_unset=True)
     recipes = fields.pop("recipes", None)
+    date_changed = "cook_date" in fields and fields["cook_date"] != cook_list.cook_date
     for name, value in fields.items():
         setattr(cook_list, name, value)
     if recipes is not None:
         _replace_recipes(
-            session, cook_list, [CookListRecipeIn(**r) for r in recipes]
+            session, cook_list, [CookListRecipeIn(**r) for r in recipes], user.id
         )
+    elif date_changed:
+        # No membership change, but the linked "made this" entries still
+        # need to follow the list's date — see sync_prepared_event.
+        for entry in entries_of(session, cook_list.id):
+            sync_prepared_event(session, cook_list, entry.recipe_id, user.id)
     cook_list.updated_at = utcnow()
     session.add(cook_list)
     session.commit()
@@ -189,10 +218,16 @@ def add_recipe(
     cook_list_id: int,
     body: CookListRecipeIn,
     session: Session = Depends(get_session),
-    _user: User = Depends(require_user_role),
+    user: User = Depends(require_user_role),
 ):
     """Add one recipe to the list. Adding one already on it updates its
-    serving count rather than creating a second row."""
+    serving count rather than creating a second row.
+
+    Also logs (or refreshes) a `PreparedEvent` dated to the list's
+    `cook_date` — see `sync_prepared_event`. That makes this call safe to
+    repeat (e.g. editing servings goes through here too): it's a sync, not
+    a fresh log entry each time.
+    """
     cook_list = _lookup(session, cook_list_id)
     if session.get(Recipe, body.recipe_id) is None:
         raise HTTPException(
@@ -223,6 +258,7 @@ def add_recipe(
                 note=body.note,
             )
         )
+    sync_prepared_event(session, cook_list, body.recipe_id, user.id)
     cook_list.updated_at = utcnow()
     session.add(cook_list)
     session.commit()
@@ -274,6 +310,7 @@ def remove_recipe(
     if entry is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That recipe is not on this list")
     session.delete(entry)
+    unlink_prepared_event(session, cook_list.id, recipe_id)
     cook_list.updated_at = utcnow()
     session.add(cook_list)
     session.commit()
@@ -319,20 +356,29 @@ def delete_cook_list(
     _user: User = Depends(require_user_role),
 ):
     """Delete a list. Shopping items it created stay — they may already be
-    half-bought, and losing the list is not a reason to lose the shop."""
+    half-bought, and losing the list is not a reason to lose the shop. Its
+    linked prepared-log entries stay too, same reasoning: the plan can go,
+    but "we cooked this" already happened and shouldn't un-happen — they
+    just become as if logged by hand (see PreparedEvent.cook_list_id)."""
     cook_list = _lookup(session, cook_list_id)
     for entry in session.exec(
         select(CookListRecipe).where(CookListRecipe.cook_list_id == cook_list.id)
     ).all():
         session.delete(entry)
 
-    from ..models import ShoppingItem
+    from ..models import PreparedEvent, ShoppingItem
 
     for item in session.exec(
         select(ShoppingItem).where(ShoppingItem.cook_list_id == cook_list.id)
     ).all():
         item.cook_list_id = None
         session.add(item)
+
+    for event in session.exec(
+        select(PreparedEvent).where(PreparedEvent.cook_list_id == cook_list.id)
+    ).all():
+        event.cook_list_id = None
+        session.add(event)
 
     session.delete(cook_list)
     session.commit()

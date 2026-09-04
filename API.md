@@ -154,9 +154,9 @@ Signed-in only, every endpoint.
 | POST | `/cook-lists` | `{cook_date?, description?, notes?, recipes?}` — date defaults to today |
 | GET | `/cook-lists/{id}` | |
 | PATCH | `/cook-lists/{id}` | `{cook_date?, description?, notes?, completed?, recipes?}`; omit `recipes` to leave membership alone, pass a list to replace it |
-| DELETE | `/cook-lists/{id}` | shopping items it created stay, with `cook_list_id` cleared |
-| POST | `/cook-lists/{id}/recipes` | `{recipe_id, servings?, note?}`; an existing recipe is updated, not duplicated |
-| DELETE | `/cook-lists/{id}/recipes/{recipe_id}` | |
+| DELETE | `/cook-lists/{id}` | shopping items it created stay, with `cook_list_id` cleared; so do the prepared events it logged (see below) |
+| POST | `/cook-lists/{id}/recipes` | `{recipe_id, servings?, note?}`; an existing recipe is updated, not duplicated; logs (or refreshes) a `PreparedEvent` dated to the list's `cook_date` — see SPEC.md "Adding a recipe logs a prepared event" |
+| DELETE | `/cook-lists/{id}/recipes/{recipe_id}` | removes the `PreparedEvent` it logged |
 | POST | `/cook-lists/{id}/add-to-shopping` | folds the list's ingredients into the shopping list |
 
 Each recipe row in a read carries `scalable` and `scale_factor` alongside

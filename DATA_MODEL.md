@@ -155,12 +155,18 @@ reports which fields it actually has rather than filling gaps with zeros.
 ## `preparedevent`
 
 `recipe_id`, `prepared_on` (date), `user_id?`, `rating?` (1–5), `note?`,
-`created_at`.
+`created_at`, `cook_list_id?`.
 
 A log rather than a `last_prepared_date` column on the recipe. The newest
 entry *is* the Last Prepared Date, and keeping the history is what makes
 "not cooked in a year" (`GET /recipes?not_prepared_days=365`) and
 per-cook notes possible.
+
+`cook_list_id` is set only on an entry a cooking list auto-created when
+the recipe joined it (see "Adding a recipe logs a prepared event" in
+SPEC.md) — null for anything logged by hand from the recipe page. It's
+cleared, not cascaded, if that list is later deleted: the plan can go,
+but the entry it logged stays as history.
 
 ## `cooklist` / `cooklistrecipe`
 
