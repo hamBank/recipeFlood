@@ -150,6 +150,81 @@ describe('ShoppingListPage offline', () => {
   })
 })
 
+describe('ShoppingListPage pasting multiple lines', () => {
+  const paste = (input, text) =>
+    fireEvent.paste(input, { clipboardData: { getData: () => text } })
+
+  it('adds each line as its own item, trimmed', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    api.addShoppingItem.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    const input = await screen.findByPlaceholderText('Add something…')
+
+    paste(input, '  Milk  \nEggs\n\nBread  ')
+
+    await waitFor(() => expect(api.addShoppingItem).toHaveBeenCalledTimes(3))
+    expect(api.addShoppingItem).toHaveBeenNthCalledWith(1, { name: 'Milk' })
+    expect(api.addShoppingItem).toHaveBeenNthCalledWith(2, { name: 'Eggs' })
+    expect(api.addShoppingItem).toHaveBeenNthCalledWith(3, { name: 'Bread' })
+    expect(input.value).toBe('')
+  })
+
+  it('collapses tabs from a multi-column paste into a single space', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    api.addShoppingItem.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    const input = await screen.findByPlaceholderText('Add something…')
+
+    paste(input, 'Milk\t2L\nEggs\t1 dozen')
+
+    await waitFor(() => expect(api.addShoppingItem).toHaveBeenCalledTimes(2))
+    expect(api.addShoppingItem).toHaveBeenNthCalledWith(1, { name: 'Milk 2L' })
+    expect(api.addShoppingItem).toHaveBeenNthCalledWith(2, { name: 'Eggs 1 dozen' })
+  })
+
+  it('leaves a single-line paste (blank lines aside) to the default paste behavior', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    render(<ShoppingListPage />)
+    const input = await screen.findByPlaceholderText('Add something…')
+
+    paste(input, '\nMilk\n\n')
+
+    expect(api.addShoppingItem).not.toHaveBeenCalled()
+  })
+
+  it('reports items that failed to add without losing the others', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    api.addShoppingItem
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error('boom'))
+    render(<ShoppingListPage />)
+    const input = await screen.findByPlaceholderText('Add something…')
+
+    paste(input, 'Milk\nEggs')
+
+    expect(await screen.findByText("Couldn't add: Eggs")).toBeDefined()
+    expect(api.addShoppingItem).toHaveBeenCalledTimes(2)
+  })
+
+  it('queues each line while offline instead of calling the API', async () => {
+    setOnline(false)
+    saveCachedList(baseList([item()]))
+    api.getShoppingList.mockRejectedValue(offlineError())
+    render(<ShoppingListPage />)
+    const input = await screen.findByPlaceholderText('Add something…')
+
+    paste(input, 'Tofu\nTempeh')
+
+    expect(api.addShoppingItem).not.toHaveBeenCalled()
+    expect(await screen.findByText('Tofu')).toBeDefined()
+    expect(screen.getByText('Tempeh')).toBeDefined()
+    expect(loadQueue()).toEqual([
+      { type: 'add', name: 'Tofu', tempId: -1 },
+      { type: 'add', name: 'Tempeh', tempId: -2 },
+    ])
+  })
+})
+
 describe('ShoppingListPage pantry search', () => {
   it('searches the pantry as the user types and shows matches in a dropdown', async () => {
     api.getShoppingList.mockResolvedValue(baseList([]))
