@@ -264,6 +264,35 @@ export default function ShoppingListPage() {
     setBusy(false)
   }
 
+  /** Backs a multi-line paste (see the input's onPaste below) — adds every
+   * line as its own item in one go, rather than routing each through
+   * `add` one at a time (which would each fight over `newName`/`busy`). */
+  const addMultiple = async (names) => {
+    setSuggestionsOpen(false)
+    setSuggestions([])
+    setNewName('')
+    if (offline) {
+      const base = nextTempId(displayList)
+      setQueue((current) => [
+        ...current,
+        ...names.map((name, index) => ({ type: 'add', name, tempId: base - index })),
+      ])
+      return
+    }
+    setBusy(true)
+    const failed = []
+    for (const name of names) {
+      try {
+        await addShoppingItem({ name })
+      } catch {
+        failed.push(name)
+      }
+    }
+    await load()
+    setBusy(false)
+    setError(failed.length ? `Couldn't add: ${failed.join(', ')}` : null)
+  }
+
   const onSubmit = (event) => {
     event.preventDefault()
     if (highlighted >= 0 && suggestions[highlighted]) {
@@ -273,6 +302,22 @@ export default function ShoppingListPage() {
     }
     const name = newName.trim()
     if (name) add(name)
+  }
+
+  /** A paste of more than one line — a column copied straight out of a
+   * spreadsheet is the common case — adds each line as its own item
+   * instead of landing as one run-on name. A single-line paste (including
+   * one with a stray blank line around it) is left to the browser's own
+   * default handling, same as typing. */
+  const onPaste = (event) => {
+    const text = event.clipboardData?.getData('text/plain') ?? ''
+    const lines = text
+      .split(/\r\n|\r|\n/)
+      .map((line) => line.replace(/\t+/g, ' ').trim())
+      .filter(Boolean)
+    if (lines.length <= 1) return
+    event.preventDefault()
+    addMultiple(lines)
   }
 
   const onInputKeyDown = (event) => {
@@ -383,6 +428,7 @@ export default function ShoppingListPage() {
           value={newName}
           onChange={(event) => setNewName(event.target.value)}
           onKeyDown={onInputKeyDown}
+          onPaste={onPaste}
           onFocus={() => setSuggestionsOpen(suggestions.length > 0)}
           placeholder="Add something…"
           role="combobox"
