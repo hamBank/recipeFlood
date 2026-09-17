@@ -43,6 +43,14 @@ export function formatCostPerLitre(centsPerLitre, symbol = '$') {
   return `${symbol}${(centsPerLitre / 100).toFixed(2)}/L`
 }
 
+/** Same idea again, for ingredients priced per piece (eggs, a can of
+ * something) — already a normal per-item price, so plain two decimals
+ * reads fine with no need for formatCostPerKg's denser-unit trick. */
+export function formatCostPerUnit(centsPerUnit, symbol = '$') {
+  if (centsPerUnit === null || centsPerUnit === undefined) return null
+  return `${symbol}${(centsPerUnit / 100).toFixed(2)}/ea`
+}
+
 export function formatDate(value) {
   if (!value) return null
   const date = new Date(value)

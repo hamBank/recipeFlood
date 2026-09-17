@@ -5,11 +5,14 @@ result of this module only for signed-in callers.
 
 Prices live as integer cents per kilogram on `Ingredient` — or, for an
 ingredient with `measure_kind == volume` (most liquids: milk, stock, oil,
-wine), integer cents per litre. A weight-priced line costs
+wine), integer cents per litre — or, for `measure_kind == piece` (eggs, a
+can of something, anything sold and priced per item rather than by weight
+or volume), integer cents per single piece. A weight-priced line costs
 `weight_grams / 1000 * cost_per_kg_cents`; a volume-priced line costs
-`volume_ml / 1000 * cost_per_litre_cents`. Same arithmetic either way, just
-a different amount and price feeding it, and the only rounding happens
-once at the end.
+`volume_ml / 1000 * cost_per_litre_cents`; a piece-priced line costs
+`quantity * cost_per_unit_cents`. Same idea every time — an amount times a
+per-unit price — just a different amount and price feeding it, and the
+only rounding happens once at the end.
 
 Which basis applies is decided by `measure_kind`, not by which fields
 happen to be set: a volume ingredient with a leftover `cost_per_kg_cents`
@@ -37,13 +40,37 @@ def cost_per_ml(ingredient: Ingredient) -> float | None:
     return round(ingredient.cost_per_litre_cents / 100_000, 5)
 
 
+def cost_per_unit(ingredient: Ingredient) -> float | None:
+    """Dollars per piece — display only; never used for arithmetic."""
+    if ingredient.cost_per_unit_cents is None:
+        return None
+    return round(ingredient.cost_per_unit_cents / 100, 2)
+
+
+def unit_cost_cents(ingredient: Ingredient) -> int | None:
+    """Cents per whichever unit this ingredient prices by — kg, litre or
+    piece. Used by the Pantry page's "missing cost" filter and cost sort,
+    which need one comparable number regardless of `measure_kind`, the
+    same way `amount_cost_cents` needs to pick the right amount to
+    multiply it by.
+    """
+    if ingredient.measure_kind == MeasureKind.piece:
+        return ingredient.cost_per_unit_cents
+    if ingredient.measure_kind == MeasureKind.volume:
+        return ingredient.cost_per_litre_cents
+    return ingredient.cost_per_kg_cents
+
+
 def package_cost_cents(ingredient: Ingredient) -> int | None:
     """What one usual package costs, for the shopping-list view.
 
-    Reads whichever basis matches `measure_kind`; the other pair of fields
-    (if set) is ignored, for the same reason `line_cost_cents` ignores it
-    below.
+    Reads whichever basis matches `measure_kind`; the other fields (if set)
+    are ignored, for the same reason `line_cost_cents` ignores them below.
     """
+    if ingredient.measure_kind == MeasureKind.piece:
+        if ingredient.cost_per_unit_cents is None or not ingredient.package_size_units:
+            return None
+        return round(ingredient.cost_per_unit_cents * ingredient.package_size_units)
     if ingredient.measure_kind == MeasureKind.volume:
         if ingredient.cost_per_litre_cents is None or not ingredient.package_size_ml:
             return None
@@ -58,16 +85,22 @@ def amount_cost_cents(
     *,
     weight_grams: float | None = None,
     volume_ml: float | None = None,
+    quantity: float | None = None,
 ) -> int | None:
     """Cost of an amount of an ingredient, on whichever basis it prices by.
 
     Shared by `line_cost_cents` below and `shopping.item_cost_cents`, which
     face the same choice for a `RecipeIngredient` and a `ShoppingItem`
     respectively — keeping the measure_kind branch in one place means the
-    two can't quietly drift apart on how a volume ingredient gets priced.
+    two can't quietly drift apart on how a volume or piece ingredient gets
+    priced.
     """
     if ingredient is None:
         return None
+    if ingredient.measure_kind == MeasureKind.piece:
+        if ingredient.cost_per_unit_cents is None or not quantity:
+            return None
+        return round(quantity * ingredient.cost_per_unit_cents)
     if ingredient.measure_kind == MeasureKind.volume:
         if ingredient.cost_per_litre_cents is None or not volume_ml:
             return None
@@ -82,7 +115,10 @@ def line_cost_cents(
 ) -> int | None:
     """Cost of one ingredient line, or None if it can't be priced."""
     return amount_cost_cents(
-        ingredient, weight_grams=line.weight_grams, volume_ml=line.volume_ml
+        ingredient,
+        weight_grams=line.weight_grams,
+        volume_ml=line.volume_ml,
+        quantity=line.quantity,
     )
 
 

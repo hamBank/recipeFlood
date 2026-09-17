@@ -63,6 +63,28 @@ def milk(session):
     return ingredient
 
 
+@pytest.fixture
+def egg(session):
+    """Sold and priced per item, not by weight — the case piece merging
+    exists for. Also has a grams_per_piece, so a confident weight is
+    derivable too; costing and merging should still prefer the piece
+    price, the same way milk's density doesn't pull it back to weight."""
+    from backend.models import MeasureKind
+
+    ingredient = Ingredient(
+        slug="egg",
+        name="egg",
+        measure_kind=MeasureKind.piece,
+        cost_per_unit_cents=50,  # 50c each
+        grams_per_piece=50,
+        source=IngredientSource.supermarket,
+    )
+    session.add(ingredient)
+    session.commit()
+    session.refresh(ingredient)
+    return ingredient
+
+
 def make_recipe(client, title, ingredients, **extra):
     response = client.post(
         "/recipes",
@@ -338,6 +360,50 @@ class TestVolumeMerging:
         cook_list = make_list(client, [recipe])
         result = client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping").json()
         assert result["items"][0]["cost_cents"] == 200  # 1L at $2/L
+
+
+class TestPieceMerging:
+    """Items sold and priced per piece — eggs, a can of something —
+    aggregate on their count rather than a converted weight, even when a
+    weight is derivable too. See backend/shopping.py's module docstring."""
+
+    def test_two_lines_of_the_same_piece_ingredient_merge_by_count(
+        self, client, egg
+    ):
+        a = make_recipe(client, "Cake", [{"name": "egg", "quantity": 2, "unit": "piece"}])
+        b = make_recipe(client, "Omelette", [{"name": "egg", "quantity": 3, "unit": "piece"}])
+        cook_list = make_list(client, [a, b])
+
+        result = client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping").json()
+        assert result["merged"] == 1
+
+        items = client.get("/shopping").json()["items"]
+        assert len(items) == 1
+        assert items[0]["quantity"] == pytest.approx(5)
+        assert items[0]["weight_grams"] is None
+        assert items[0]["amount_text"] == "5"  # "piece" reads redundant, so it's dropped
+
+    def test_a_piece_ingredient_with_a_grams_per_piece_still_merges_on_count(
+        self, client, egg
+    ):
+        """Costing prices eggs per item; merging on the derived weight
+        instead — just because grams_per_piece happens to be set — would
+        leave `quantity` unset on the merged item and the whole line
+        unpriceable."""
+        recipe = make_recipe(client, "Cake", [{"name": "egg", "quantity": 2, "unit": "piece"}])
+        cook_list = make_list(client, [recipe])
+        client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping")
+
+        item = client.get("/shopping").json()["items"][0]
+        assert item["quantity"] == pytest.approx(2)
+        assert item["weight_grams"] is None
+        assert item["cost_cents"] == 100  # 2 eggs at 50c each
+
+    def test_a_piece_line_is_priced_correctly_through_the_api(self, client, egg):
+        recipe = make_recipe(client, "Cake", [{"name": "egg", "quantity": 4, "unit": "piece"}])
+        cook_list = make_list(client, [recipe])
+        result = client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping").json()
+        assert result["items"][0]["cost_cents"] == 200  # 4 eggs at 50c each
 
 
 class TestShops:

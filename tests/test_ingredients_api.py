@@ -52,6 +52,28 @@ class TestListing:
         no_nutrition = client.get("/ingredients?missing_nutrition=true").json()
         assert [i["slug"] for i in no_nutrition] == ["gruyere"]
 
+    def test_missing_cost_understands_volume_and_piece_pricing_too(
+        self, client, flour
+    ):
+        """A volume- or piece-priced ingredient's price lives in a
+        different column than cost_per_kg_cents — the filter has to look
+        at the one that actually matches measure_kind, or a freshly-priced
+        egg or milk would sit in the "missing cost" queue forever."""
+        client.post(
+            "/ingredients",
+            json={"name": "milk", "measure_kind": "volume", "cost_per_litre_cents": 200},
+        )
+        client.post(
+            "/ingredients",
+            json={"name": "egg", "measure_kind": "piece", "cost_per_unit_cents": 50},
+        )
+        client.post("/ingredients", json={"name": "lime", "measure_kind": "piece"})
+
+        missing = {i["slug"] for i in client.get("/ingredients?missing_cost=true").json()}
+        assert missing == {"lime"}
+        priced = {i["slug"] for i in client.get("/ingredients?missing_cost=false").json()}
+        assert priced == {"plain-flour", "milk", "egg"}
+
     def test_search(self, client, flour):
         assert len(client.get("/ingredients?q=flour").json()) == 1
         assert len(client.get("/ingredients?q=zzz").json()) == 0
@@ -417,6 +439,81 @@ class TestMeasureKind:
         # Reclassifying is not part of the merge — the survivor's own
         # measure_kind (its default, weight) is left as it was rather than
         # silently flipped by whatever the absorbed row happened to be.
+        assert merged["measure_kind"] == "weight"
+
+
+class TestPieceMeasureKind:
+    """Some things are sold and priced per item rather than by weight or
+    volume — see backend/models.py's MeasureKind."""
+
+    def test_a_piece_ingredient_is_priced_and_packaged_by_the_unit(self, client):
+        created = client.post(
+            "/ingredients",
+            json={
+                "name": "egg",
+                "measure_kind": "piece",
+                "package_size_units": 12,
+                "cost_per_unit_cents": 50,
+            },
+        ).json()
+        assert created["cost_per_unit"] == pytest.approx(0.50)
+        assert created["package_cost_cents"] == 600  # a dozen at 50c each
+        assert created["cost_per_gram"] is None
+        assert created["cost_per_ml"] is None
+
+    def test_a_weight_ingredients_unit_price_is_never_read(self, client, flour):
+        row = client.get("/ingredients/plain-flour").json()
+        assert row["measure_kind"] == "weight"
+        assert row["cost_per_unit"] is None
+        assert row["package_cost_cents"] == 250  # 1kg at $2.50/kg, from flour fixture, not unit-priced
+
+    def test_can_be_reclassified(self, client):
+        client.post("/ingredients", json={"name": "lime"})
+        updated = client.patch(
+            "/ingredients/lime",
+            json={"measure_kind": "piece", "cost_per_unit_cents": 75},
+        ).json()
+        assert updated["measure_kind"] == "piece"
+        assert updated["cost_per_unit"] == pytest.approx(0.75)
+
+    def test_changing_the_unit_price_stamps_provenance_like_the_others_do(self, client):
+        created = client.post(
+            "/ingredients", json={"name": "egg", "measure_kind": "piece"}
+        ).json()
+        assert created["cost_updated_at"] is None
+
+        updated = client.patch(
+            "/ingredients/egg", json={"cost_per_unit_cents": 50}
+        ).json()
+        assert updated["cost_updated_at"] is not None
+        assert updated["cost_source"] == "manual"
+
+    def test_an_unchanged_price_does_not_restamp(self, client):
+        created = client.post(
+            "/ingredients",
+            json={"name": "egg", "measure_kind": "piece", "cost_per_unit_cents": 50},
+        ).json()
+        stamped = client.patch(
+            "/ingredients/egg", json={"cost_per_unit_cents": 50}
+        ).json()
+        assert stamped["cost_updated_at"] == created["cost_updated_at"]
+
+    def test_merging_inherits_the_unit_fields_the_survivor_was_missing(
+        self, client, admin
+    ):
+        client.post(
+            "/ingredients",
+            json={
+                "name": "large egg",
+                "measure_kind": "piece",
+                "package_size_units": 12,
+                "cost_per_unit_cents": 55,
+            },
+        )
+        client.post("/ingredients", json={"name": "egg"})
+        merged = client.post("/ingredients/egg/merge/large-egg").json()
+        assert merged["package_size_units"] == 12
+        assert merged["cost_per_unit_cents"] == 55
         assert merged["measure_kind"] == "weight"
 
 
