@@ -88,6 +88,8 @@ export default function ShoppingListPage() {
   // update synchronously first, since printing can start before a normal
   // (batched) re-render would otherwise have committed it.
   const [printing, setPrinting] = useState(false)
+  // Reverts on its own after a beat — see copyForSpreadsheet.
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const before = () => setPrinting(true)
@@ -384,6 +386,25 @@ export default function ShoppingListPage() {
   const visible = showChecked ? displayList.items : displayList.items.filter((i) => !i.is_checked)
   const remaining = displayList.total_count - displayList.checked_count
 
+  /** Tab-separated name/amount pairs — a Google Sheets (or Excel) paste
+   * turns each line straight into a row with the name in one cell and the
+   * amount in the next, no reformatting needed. Same items and order as
+   * what's on screen, so hiding ticked items first excludes them here too. */
+  const copyForSpreadsheet = async () => {
+    const rows = displayList.shops.flatMap((shop) =>
+      visible
+        .filter((item) => item.shop === shop)
+        .map((item) => `${item.name}\t${item.amount_text || ''}`),
+    )
+    try {
+      await navigator.clipboard.writeText(rows.join('\n'))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setError("Couldn't copy to the clipboard — your browser may be blocking it.")
+    }
+  }
+
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1 print:hidden">
@@ -399,6 +420,15 @@ export default function ShoppingListPage() {
             className="rounded-lg border border-edge px-3 py-1 text-sm text-ink-muted hover:bg-soft"
           >
             Print
+          </button>
+        )}
+        {visible.length > 0 && (
+          <button
+            type="button"
+            onClick={copyForSpreadsheet}
+            className="rounded-lg border border-edge px-3 py-1 text-sm text-ink-muted hover:bg-soft"
+          >
+            {copied ? 'Copied!' : 'Copy for spreadsheet'}
           </button>
         )}
         {displayList.total_cents !== null && remaining > 0 && (

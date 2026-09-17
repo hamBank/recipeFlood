@@ -390,6 +390,65 @@ describe('ShoppingListPage printing', () => {
   })
 })
 
+describe('ShoppingListPage copy for spreadsheet', () => {
+  let writeText
+
+  beforeEach(() => {
+    writeText = vi.fn().mockResolvedValue()
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+  })
+
+  it('has no button when the list is empty', async () => {
+    api.getShoppingList.mockResolvedValue(baseList([]))
+    render(<ShoppingListPage />)
+    await screen.findByText('Nothing on the list. Add something above, or send a cooking list here.')
+    expect(screen.queryByRole('button', { name: /Copy for spreadsheet/ })).toBeNull()
+  })
+
+  it('copies name/amount as tab-separated lines, grouped in on-screen order', async () => {
+    api.getShoppingList.mockResolvedValue(
+      baseList([
+        item({ id: 1, name: 'Milk', shop: 'supermarket', amount_text: '2 L' }),
+        item({ id: 2, name: 'Steak', shop: 'butcher', amount_text: '' }),
+      ]),
+    )
+    render(<ShoppingListPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy for spreadsheet' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText).toHaveBeenCalledWith('Milk\t2 L\nSteak\t')
+    expect(await screen.findByRole('button', { name: 'Copied!' })).toBeDefined()
+  })
+
+  it('respects "Show ticked" — a hidden item is left out of the copy', async () => {
+    api.getShoppingList.mockResolvedValue(
+      baseList([
+        item({ id: 1, name: 'Milk', amount_text: '2 L' }),
+        item({ id: 2, name: 'Salmon', amount_text: '400 g', is_checked: true }),
+      ]),
+    )
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show ticked' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy for spreadsheet' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('Milk\t2 L'))
+  })
+
+  it('falls back to an error message if the clipboard write is refused', async () => {
+    writeText.mockRejectedValue(new Error('denied'))
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    render(<ShoppingListPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy for spreadsheet' }))
+
+    expect(await screen.findByText(/Couldn't copy to the clipboard/)).toBeDefined()
+  })
+})
+
 describe('ShoppingListPage editing', () => {
   it('edits a bare item into a quantity, and can be cancelled without saving', async () => {
     api.getShoppingList.mockResolvedValue(baseList([item()]))
