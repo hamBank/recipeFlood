@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatCents,
   formatCostPerKg,
+  formatCostPerUnit,
   formatGrams,
   formatMinutes,
   formatPercent,
@@ -49,6 +50,11 @@ describe('money', () => {
     // A per-gram figure rounds to $0.00 for almost everything in the pantry.
     expect(formatCostPerKg(250)).toBe('$2.50/kg')
     expect(formatCostPerKg(null)).toBeNull()
+  })
+
+  it('shows a price per piece for things sold and priced that way', () => {
+    expect(formatCostPerUnit(50)).toBe('$0.50/ea')
+    expect(formatCostPerUnit(null)).toBeNull()
   })
 })
 

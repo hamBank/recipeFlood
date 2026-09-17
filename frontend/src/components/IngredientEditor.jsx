@@ -49,6 +49,12 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
     cost_per_litre: ingredient.cost_per_litre_cents !== null && ingredient.cost_per_litre_cents !== undefined
       ? (ingredient.cost_per_litre_cents / 100).toFixed(2)
       : '',
+    package_size_units: ingredient.package_size_units ?? '',
+    // Same reasoning as cost_per_kg/cost_per_litre above — entered per
+    // piece, stored as cents.
+    cost_per_unit: ingredient.cost_per_unit_cents !== null && ingredient.cost_per_unit_cents !== undefined
+      ? (ingredient.cost_per_unit_cents / 100).toFixed(2)
+      : '',
     cost_source: ingredient.cost_source || '',
     source: ingredient.source,
     density_g_per_ml: ingredient.density_g_per_ml ?? '',
@@ -64,6 +70,7 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
   const set = (key, value) => setForm((previous) => ({ ...previous, [key]: value }))
   const number = (value) => (value === '' ? null : Number(value))
   const byVolume = form.measure_kind === 'volume'
+  const byPiece = form.measure_kind === 'piece'
 
   const submit = async (event) => {
     event.preventDefault()
@@ -84,6 +91,9 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
         package_size_ml: number(form.package_size_ml),
         cost_per_litre_cents:
           form.cost_per_litre === '' ? null : Math.round(Number(form.cost_per_litre) * 100),
+        package_size_units: number(form.package_size_units),
+        cost_per_unit_cents:
+          form.cost_per_unit === '' ? null : Math.round(Number(form.cost_per_unit) * 100),
         source: form.source,
         is_food: form.is_food,
         density_g_per_ml: number(form.density_g_per_ml),
@@ -129,15 +139,27 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
             <input value={form.aliases} onChange={(e) => set('aliases', e.target.value)} className={inputClass} />
           </Field>
 
-          <Field label="Measured by" hint="Most liquids are sold and shelf-priced by volume, not weight">
+          <Field label="Measured by" hint="Most liquids are sold and shelf-priced by volume; some things by the piece">
             <select value={form.measure_kind} onChange={(e) => set('measure_kind', e.target.value)} className={inputClass}>
               <option value="weight">Weight</option>
               <option value="volume">Volume (liquids)</option>
+              <option value="piece">Piece (eggs, a can, ...)</option>
             </select>
           </Field>
           <div />
 
-          {byVolume ? (
+          {byPiece ? (
+            <>
+              <Field label="Usual package size (pieces)" hint="e.g. 12 for a dozen-egg carton">
+                <input type="number" step="any" min="0" value={form.package_size_units}
+                  onChange={(e) => set('package_size_units', e.target.value)} className={inputClass} />
+              </Field>
+              <Field label={`Cost per piece (${symbol})`} hint="Stored as cents each — a dozen at $6.00 is 50c each">
+                <input type="number" step="0.01" min="0" value={form.cost_per_unit}
+                  onChange={(e) => set('cost_per_unit', e.target.value)} className={inputClass} />
+              </Field>
+            </>
+          ) : byVolume ? (
             <>
               <Field label="Usual package size (mL)">
                 <input type="number" step="any" min="0" value={form.package_size_ml}
@@ -199,8 +221,9 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
           <p className="mb-2 text-xs text-ink-faint">
             Saving either of these re-derives the weight of every recipe line that
             uses this ingredient. Worth setting even when this ingredient is
-            measured by volume above — nutrition figures are always per 100g,
-            so density is what lets a volume amount contribute to them.
+            measured by volume or piece above — nutrition figures are always
+            per 100g, so this is what lets an amount in those units still
+            contribute to them.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Density (g per ml)" hint="1 AU cup = 250ml, so flour at 0.6 = 150g per cup">

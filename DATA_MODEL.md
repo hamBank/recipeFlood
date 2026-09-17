@@ -112,12 +112,14 @@ identity worth preserving across an edit.
 |---|---|
 | `slug` (unique), `name` | |
 | `aliases` | JSON list, lowercased; matched against recipe lines |
-| `measure_kind` | `weight` (default) or `volume` — which unit family this ingredient is bought and priced in. Plain VARCHAR, same reasoning as `source` below |
+| `measure_kind` | `weight` (default), `volume`, or `piece` — which unit family this ingredient is bought and priced in. Plain VARCHAR, same reasoning as `source` below |
 | `package_size_grams` | float? |
 | `cost_per_kg_cents` | **int?** — see below |
 | `package_size_ml` | float? — the volume-priced sibling of `package_size_grams` |
 | `cost_per_litre_cents` | **int?** — the volume-priced sibling of `cost_per_kg_cents` |
-| `cost_source`, `cost_updated_at` | Where a price came from and when — "manual" once a human edits it, or an enrichment script's own label. Mirrors `nutrition_source`; shared between both cost bases |
+| `package_size_units` | float? — the piece-priced sibling of `package_size_grams`, e.g. 12 for a dozen-egg carton |
+| `cost_per_unit_cents` | **int?** — the piece-priced sibling of `cost_per_kg_cents`, cents for one piece |
+| `cost_source`, `cost_updated_at` | Where a price came from and when — "manual" once a human edits it, or an enrichment script's own label. Mirrors `nutrition_source`; shared between all three cost bases |
 | `source` | Where it is bought. Fourteen values — see `IngredientSource`. Stored as a plain VARCHAR with no database CHECK: the first seven were a guess and a real shopping list added seven more, so the next addition should not need a migration that behaves differently on SQLite and Postgres |
 | `is_food` | Indexed. False for batteries, shampoo, cat litter — in the pantry as a shopping lookup, out of the ingredient work queues |
 | `density_g_per_ml` | float? — converts volumes to grams |
@@ -126,7 +128,7 @@ identity worth preserving across an edit.
 | `nutrition_source`, `nutrition_updated_at` | Provenance: `"AFCD (<matched food>)"`, `"AI estimate (Claude)"`, a packet, or a human's own note |
 | `notes`, `created_at`, `updated_at` | |
 
-### Why cents per kilogram (and per litre)
+### Why cents per kilogram (and per litre, and per piece)
 
 The spec asked for "cost per gram with enough resolution to be useful".
 Stored per gram in dollars, plain flour at $2.50/kg is `0.0025` — three
@@ -135,13 +137,17 @@ Cents-per-kilogram keeps it an integer (`250`), gives four significant
 figures on the per-gram price, and prices a 2g pinch of saffron and a 1kg
 bag of flour with the same arithmetic. `cost_per_gram` is derived on read,
 for display only. `cost_per_litre_cents` is the same idea for liquids —
-most of them are sold and shelf-priced by volume in Australia, and
-`measure_kind` says which of the two pairs of fields (`*_grams`/`*_kg` or
-`*_ml`/`*_litre`) is the one actually being priced from; the other pair
-is ignored even if it happens to hold a stale value from before the
-ingredient was reclassified. `density_g_per_ml` is still worth setting on
-a volume ingredient regardless — nutrition is always per 100g, so it is
-what lets a volume amount contribute to the nutrition panel.
+most of them are sold and shelf-priced by volume in Australia — and
+`cost_per_unit_cents` again for things sold and priced per item (eggs, a
+can of something), where a per-kilogram or per-litre price would mean
+inventing a weight or volume nobody stated. `measure_kind` says which of
+the three pairs of fields (`*_grams`/`*_kg`, `*_ml`/`*_litre`, or
+`*_units`/`*_unit`) is the one actually being priced from; the other two
+are ignored even if they happen to hold a stale value from before the
+ingredient was reclassified. `density_g_per_ml` (or `grams_per_piece`) is
+still worth setting regardless of `measure_kind` — nutrition is always per
+100g, so it is what lets a volume or piece amount contribute to the
+nutrition panel.
 
 `aliases` is load-bearing beyond search: the shopping-list importer records
 every spelling it saw on the row it resolved to, so a re-import is a no-op

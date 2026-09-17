@@ -124,21 +124,25 @@ filename.
 | POST | `/ingredients/{keep}/merge/{other}` | admin | Repoints recipe lines, inherits missing data, keeps the old name as an alias, deletes `other` |
 | DELETE | `/ingredients/{key}` | admin | Unlinks recipe lines rather than damaging them |
 
-Reads include derived `cost_per_gram`, `cost_per_ml`, `package_cost_cents`,
-`has_nutrition` and `recipe_count`, plus provenance: `nutrition_source` /
-`nutrition_updated_at` and `cost_source` / `cost_updated_at` — a label
-("AFCD (<matched food>)", "AI estimate (Claude)", "manual", a packet) and
-a timestamp for each, filled in by `scripts/enrich_pantry.py` or by a
-human editing the row. `PATCH` stamps `cost_updated_at` (and defaults
-`cost_source` to `"manual"`) whenever either `cost_per_kg_cents` or
-`cost_per_litre_cents` actually changes.
+Reads include derived `cost_per_gram`, `cost_per_ml`, `cost_per_unit`,
+`package_cost_cents`, `has_nutrition` and `recipe_count`, plus provenance:
+`nutrition_source` / `nutrition_updated_at` and `cost_source` /
+`cost_updated_at` — a label ("AFCD (<matched food>)", "AI estimate
+(Claude)", "manual", a packet) and a timestamp for each, filled in by
+`scripts/enrich_pantry.py` or by a human editing the row. `PATCH` stamps
+`cost_updated_at` (and defaults `cost_source` to `"manual"`) whenever any
+of `cost_per_kg_cents`, `cost_per_litre_cents` or `cost_per_unit_cents`
+actually changes.
 
-`measure_kind` (`weight` default, or `volume`) decides which pair of
-fields — `package_size_grams`/`cost_per_kg_cents` or
-`package_size_ml`/`cost_per_litre_cents` — is the one actually used for
-costing and shopping-list pricing; the other pair is accepted and stored
-but ignored. Most liquids (milk, stock, oil, wine) want `volume`, since
-that is how they are sold and shelf-priced.
+`measure_kind` (`weight` default, `volume`, or `piece`) decides which pair
+of fields — `package_size_grams`/`cost_per_kg_cents`,
+`package_size_ml`/`cost_per_litre_cents`, or
+`package_size_units`/`cost_per_unit_cents` — is the one actually used for
+costing and shopping-list pricing; the other two pairs are accepted and
+stored but ignored. Most liquids (milk, stock, oil, wine) want `volume`,
+since that is how they are sold and shelf-priced; things sold per item
+(eggs, a can of something) want `piece`. `missing_cost` checks whichever
+pair `measure_kind` actually uses, not just the weight one.
 
 `is_food=false` lists the non-recipe items a shopping-list import flagged —
 batteries, shampoo, cat litter. `source` accepts any of the fourteen
@@ -183,7 +187,8 @@ One permanent list. Signed-in only — it carries prices.
 
 Each item carries `amount_text` (server-rendered — "450 g", "1.2 l", "1
 bunch") and, for a linked ingredient, `cost_cents` priced from whichever
-of `weight_grams`/`volume_ml` the ingredient's `measure_kind` says to use.
+of `weight_grams`/`volume_ml`/`quantity` the ingredient's `measure_kind`
+says to use.
 `GET` returns `{items, shops, total_count, checked_count, total_cents,
 priced_fraction}`. `shops` is in walking order and each item carries its
 own `shop`, so a client renders the grouping without deciding the order.

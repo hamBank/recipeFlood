@@ -121,12 +121,16 @@ class MeasureKind(str, Enum):
     (milk, stock, oil, wine) are sold and shelf-priced by volume, and
     forcing them through a density guess just to get a cost is both
     unnecessary and a source of error the density might not deserve.
+    Some things — eggs, a can of something, a bunch of coriander — are
+    sold and priced per item instead, and a per-kilogram price makes no
+    sense for those at all without inventing a weight nobody stated.
     `weight` is the default so every ingredient created before this field
     existed keeps behaving exactly as it did.
     """
 
     weight = "weight"
     volume = "volume"
+    piece = "piece"
 
 
 class Ingredient(SQLModel, table=True):
@@ -162,19 +166,26 @@ class Ingredient(SQLModel, table=True):
 
     package_size_grams: float | None = None
     cost_per_kg_cents: int | None = None
-    # The volume-native siblings of the two fields above. Which pair is
-    # authoritative is decided by `measure_kind`, not by which happens to be
-    # set — see costing.py. Both can be populated at once (nothing stops a
-    # volume ingredient from also having a density and a weight-based
-    # price); costing just picks the one matching `measure_kind` first.
+    # The volume- and piece-native siblings of the two fields above. Which
+    # trio is authoritative is decided by `measure_kind`, not by which
+    # happens to be set — see costing.py. All three can be populated at
+    # once (nothing stops a piece-priced ingredient from also having a
+    # weight-based price left over from before it was reclassified);
+    # costing just picks the one matching `measure_kind` first.
     package_size_ml: float | None = None
     cost_per_litre_cents: int | None = None
+    # cost_per_unit_cents is cents for *one* piece — a dozen-egg carton at
+    # $6.00 is cost_per_unit_cents=50, package_size_units=12 — so it reads
+    # the same way cost_per_kg_cents does: a per-unit price, independent of
+    # how many units the usual package happens to hold.
+    package_size_units: float | None = None
+    cost_per_unit_cents: int | None = None
     # Where the price came from and when — mirrors nutrition_source /
     # nutrition_updated_at below. "manual" once a human edits it via the
     # Pantry page; an enrichment script sets its own label (e.g. "AI
     # estimate (mid-season, 2026-08)") so a rough guess is never mistaken
-    # for a price someone actually paid. Shared between both cost bases —
-    # editing either one is "a human looked and this is what it costs."
+    # for a price someone actually paid. Shared between all three cost
+    # bases — editing any one is "a human looked and this is what it costs."
     cost_source: str | None = None
     cost_updated_at: datetime | None = None
     # native_enum=False + create_constraint=False: stored as a plain VARCHAR
@@ -249,6 +260,8 @@ class IngredientCreate(SQLModel):
     cost_per_kg_cents: int | None = Field(default=None, ge=0)
     package_size_ml: float | None = Field(default=None, gt=0)
     cost_per_litre_cents: int | None = Field(default=None, ge=0)
+    package_size_units: float | None = Field(default=None, gt=0)
+    cost_per_unit_cents: int | None = Field(default=None, ge=0)
     source: IngredientSource = IngredientSource.supermarket
     density_g_per_ml: float | None = Field(default=None, gt=0)
     grams_per_piece: float | None = Field(default=None, gt=0)
@@ -264,6 +277,8 @@ class IngredientUpdate(SQLModel):
     cost_per_kg_cents: int | None = Field(default=None, ge=0)
     package_size_ml: float | None = Field(default=None, gt=0)
     cost_per_litre_cents: int | None = Field(default=None, ge=0)
+    package_size_units: float | None = Field(default=None, gt=0)
+    cost_per_unit_cents: int | None = Field(default=None, ge=0)
     source: IngredientSource | None = None
     cost_source: str | None = None
     density_g_per_ml: float | None = Field(default=None, gt=0)
@@ -295,7 +310,10 @@ class IngredientRead(SQLModel):
     package_size_ml: float | None
     cost_per_litre_cents: int | None
     cost_per_ml: float | None  # derived: dollars, 5dp — display only
-    package_cost_cents: int | None  # derived: cost of one usual package, either basis
+    package_size_units: float | None
+    cost_per_unit_cents: int | None
+    cost_per_unit: float | None  # derived: dollars, 2dp — display only
+    package_cost_cents: int | None  # derived: cost of one usual package, whichever basis
     cost_source: str | None
     cost_updated_at: datetime | None
     source: IngredientSource

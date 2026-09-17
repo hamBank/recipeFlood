@@ -6,7 +6,7 @@ import {
   updateIngredient,
 } from '../api'
 import { useSession } from '../App'
-import { formatCents, formatCostPerKg, formatCostPerLitre, SOURCE_LABEL } from '../format'
+import { formatCents, formatCostPerKg, formatCostPerLitre, formatCostPerUnit, SOURCE_LABEL } from '../format'
 import IngredientEditor from '../components/IngredientEditor'
 
 const PAGE_SIZE = 50
@@ -312,18 +312,24 @@ export default function PantryPage() {
                 </td>
                 <td className="px-3 py-2 text-ink-muted">{item.recipe_count}</td>
                 <td className="px-3 py-2 text-ink-muted">
-                  {item.measure_kind === 'volume'
-                    ? item.package_size_ml
-                      ? `${item.package_size_ml} mL`
+                  {item.measure_kind === 'piece'
+                    ? item.package_size_units
+                      ? `${item.package_size_units} ea`
                       : '—'
-                    : item.package_size_grams
-                      ? `${item.package_size_grams} g`
-                      : '—'}
+                    : item.measure_kind === 'volume'
+                      ? item.package_size_ml
+                        ? `${item.package_size_ml} mL`
+                        : '—'
+                      : item.package_size_grams
+                        ? `${item.package_size_grams} g`
+                        : '—'}
                 </td>
                 <td className="px-3 py-2 text-ink-muted">
-                  {(item.measure_kind === 'volume'
-                    ? formatCostPerLitre(item.cost_per_litre_cents, symbol)
-                    : formatCostPerKg(item.cost_per_kg_cents, symbol)) || '—'}
+                  {(item.measure_kind === 'piece'
+                    ? formatCostPerUnit(item.cost_per_unit_cents, symbol)
+                    : item.measure_kind === 'volume'
+                      ? formatCostPerLitre(item.cost_per_litre_cents, symbol)
+                      : formatCostPerKg(item.cost_per_kg_cents, symbol)) || '—'}
                   {item.cost_source && (
                     <span
                       title={item.cost_source}

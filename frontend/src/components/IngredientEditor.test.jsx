@@ -16,6 +16,8 @@ const ingredient = (overrides = {}) => ({
   package_size_ml: null,
   cost_per_kg_cents: 250,
   cost_per_litre_cents: null,
+  package_size_units: null,
+  cost_per_unit_cents: null,
   cost_source: 'supermarket',
   cost_updated_at: null,
   source: 'supermarket',
@@ -73,6 +75,40 @@ describe('IngredientEditor', () => {
     fireEvent.change(screen.getByDisplayValue('Weight'), { target: { value: 'volume' } })
     expect(screen.getByText('Usual package size (mL)')).toBeDefined()
     expect(screen.queryByText('Usual package size (g)')).toBeNull()
+  })
+
+  it('switches to piece fields, and submits them converted to cents', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    renderEditor({ onSave })
+
+    fireEvent.change(screen.getByDisplayValue('Weight'), { target: { value: 'piece' } })
+    expect(screen.getByText('Usual package size (pieces)')).toBeDefined()
+    expect(screen.queryByText('Usual package size (g)')).toBeNull()
+    expect(screen.queryByText('Usual package size (mL)')).toBeNull()
+
+    fireEvent.change(inputForLabel('Usual package size (pieces)'), { target: { value: '12' } })
+    fireEvent.change(inputForLabel('Cost per piece ($)'), { target: { value: '0.50' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      measure_kind: 'piece',
+      package_size_units: 12,
+      cost_per_unit_cents: 50,
+    })
+  })
+
+  it('pre-fills piece fields from the given ingredient', () => {
+    renderEditor({
+      ingredient: ingredient({
+        measure_kind: 'piece',
+        package_size_grams: null,
+        package_size_units: 12,
+        cost_per_unit_cents: 50,
+      }),
+    })
+    expect(inputForLabel('Usual package size (pieces)').value).toBe('12')
+    expect(inputForLabel('Cost per piece ($)').value).toBe('0.50')
   })
 
   it('calls onClose from the header button, the cancel button, and the backdrop', () => {

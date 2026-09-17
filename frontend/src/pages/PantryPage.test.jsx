@@ -27,6 +27,8 @@ const item = (overrides = {}) => ({
   package_size_ml: null,
   cost_per_kg_cents: null,
   cost_per_litre_cents: null,
+  package_size_units: null,
+  cost_per_unit_cents: null,
   cost_source: null,
   package_cost_cents: null,
   source: 'supermarket',
@@ -46,6 +48,29 @@ describe('PantryPage multi-merge (flag off)', () => {
     render(<PantryPage />)
     await screen.findByText('Onion')
     expect(screen.queryByLabelText('Select Onion for merging')).toBeNull()
+  })
+})
+
+describe('PantryPage measure_kind display', () => {
+  it('shows a piece-priced ingredient by the piece, not weight or volume', async () => {
+    api.listIngredients.mockResolvedValue({
+      items: [
+        item({
+          slug: 'egg',
+          name: 'Egg',
+          measure_kind: 'piece',
+          package_size_units: 12,
+          cost_per_unit_cents: 50,
+          package_cost_cents: 600,
+        }),
+      ],
+      total: 1,
+    })
+    render(<PantryPage />)
+    await screen.findByText('Egg')
+    expect(screen.getByText('12 ea')).toBeDefined()
+    expect(screen.getByText('$0.50/ea')).toBeDefined()
+    expect(screen.getByText('$6.00')).toBeDefined()
   })
 })
 

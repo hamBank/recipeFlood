@@ -188,13 +188,16 @@ def amount_text(item: ShoppingItem) -> str:
 def item_cost_cents(item: ShoppingItem, ingredient: Ingredient | None) -> int | None:
     """What this line costs, or None when it can't be known.
 
-    Delegates to costing.amount_cost_cents, which picks weight or volume
-    to price by from the ingredient's `measure_kind` — the same choice
-    `line_cost_cents` makes for a recipe line, kept in one place so the two
-    can't drift apart on how a volume ingredient gets priced.
+    Delegates to costing.amount_cost_cents, which picks weight, volume or
+    piece to price by from the ingredient's `measure_kind` — the same
+    choice `line_cost_cents` makes for a recipe line, kept in one place so
+    the two can't drift apart on how a line gets priced.
     """
     return amount_cost_cents(
-        ingredient, weight_grams=item.weight_grams, volume_ml=item.volume_ml
+        ingredient,
+        weight_grams=item.weight_grams,
+        volume_ml=item.volume_ml,
+        quantity=item.quantity,
     )
 
 
@@ -367,13 +370,21 @@ def add_lines(
             WeightSource.converted,
         )
 
-        # An ingredient priced by volume aggregates on volume even when a
-        # density also happens to make a weight derivable, and vice versa —
-        # this has to match what its cost is computed from (costing.py), or
-        # the merged total and the price it's multiplied by would silently
-        # stop corresponding to the same amount.
+        # An ingredient priced by volume (or by the piece) aggregates on
+        # that basis even when a density or grams-per-piece also happens to
+        # make a weight derivable, and vice versa — this has to match what
+        # its cost is computed from (costing.py), or the merged total and
+        # the price it's multiplied by would silently stop corresponding to
+        # the same amount.
+        prefer_piece = ingredient is not None and ingredient.measure_kind == MeasureKind.piece
         prefer_volume = ingredient is not None and ingredient.measure_kind == MeasureKind.volume
-        if prefer_volume:
+        if prefer_piece:
+            kind = (
+                "quantity"
+                if quantity is not None
+                else "volume" if millilitres is not None else "weight" if grams is not None else None
+            )
+        elif prefer_volume:
             kind = "volume" if millilitres is not None else "weight" if grams is not None else None
         elif confident_weight:
             kind = "weight"

@@ -9,6 +9,7 @@ from backend.costing import (
     compute_cost,
     cost_per_gram,
     cost_per_ml,
+    cost_per_unit,
     package_cost_cents,
 )
 from backend.models import Ingredient, MeasureKind, MeasureUnit, RecipeIngredient, WeightSource
@@ -40,6 +41,36 @@ def volume_line(name, ml, ingredient_id=None):
         unit=MeasureUnit.ml,
         ingredient_id=ingredient_id,
     )
+
+
+def quantity_line(name, count, ingredient_id=None):
+    return RecipeIngredient(
+        id=abs(hash((name, count, "each"))) % 100000,
+        recipe_id=1,
+        name=name,
+        raw_text=name,
+        quantity=count,
+        weight_source=WeightSource.unknown,
+        unit=MeasureUnit.piece,
+        ingredient_id=ingredient_id,
+    )
+
+
+@pytest.fixture
+def egg(session: Session):
+    """A piece-priced ingredient: 50c each, a dozen to a carton — the case
+    this feature exists for (sold per item, not by weight or volume)."""
+    ingredient = Ingredient(
+        slug="egg",
+        name="egg",
+        measure_kind=MeasureKind.piece,
+        package_size_units=12,
+        cost_per_unit_cents=50,
+    )
+    session.add(ingredient)
+    session.commit()
+    session.refresh(ingredient)
+    return ingredient
 
 
 @pytest.fixture
@@ -141,6 +172,50 @@ class TestVolumeCost:
 
     def test_a_volume_line_with_no_ingredient_is_unpriced(self, session: Session):
         cost, _ = compute_cost(session, [volume_line("mystery liquid", 500)])
+        assert cost.total_cents == 0
+        assert cost.known_fraction == 0.0
+
+
+class TestPieceCost:
+    """Ingredients sold and priced per item rather than by weight or
+    volume — eggs, a can of something. See costing.py's module docstring
+    and Ingredient.measure_kind."""
+
+    def test_cost_per_unit(self, egg):
+        assert cost_per_unit(egg) == pytest.approx(0.50)
+
+    def test_package_cost(self, egg):
+        assert package_cost_cents(egg) == 600  # a dozen at 50c each
+
+    def test_a_weight_ingredients_unit_fields_are_ignored(self, flour):
+        assert cost_per_unit(flour) is None
+
+    def test_line_cost_uses_quantity_not_weight(self, egg):
+        priced = amount_cost_cents(egg, weight_grams=1000, quantity=3)
+        assert priced == 150  # 3 eggs at 50c, not 1000g at any weight price
+        assert amount_cost_cents(egg, weight_grams=1000, quantity=None) is None
+
+    def test_a_piece_ingredient_with_no_price_is_unpriced(self, session: Session):
+        unpriced = Ingredient(slug="lime", name="lime", measure_kind=MeasureKind.piece)
+        session.add(unpriced)
+        session.commit()
+        assert cost_per_unit(unpriced) is None
+        assert amount_cost_cents(unpriced, quantity=3) is None
+
+    def test_total_prices_a_piece_line_alongside_a_weight_line(
+        self, session: Session, flour, egg
+    ):
+        lines = [
+            line("plain flour", 300, flour.id),  # 75c
+            quantity_line("egg", 3, egg.id),  # 150c
+        ]
+        cost, per_line = compute_cost(session, lines, servings=2)
+        assert cost.total_cents == 225
+        assert cost.known_fraction == 1.0
+        assert per_line[lines[1].id] == 150
+
+    def test_a_piece_line_with_no_ingredient_is_unpriced(self, session: Session):
+        cost, _ = compute_cost(session, [quantity_line("mystery item", 3)])
         assert cost.total_cents == 0
         assert cost.known_fraction == 0.0
 

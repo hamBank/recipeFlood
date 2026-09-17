@@ -136,10 +136,11 @@ One row per pantry item, referenced by every recipe that uses it.
 | Field | Notes |
 |---|---|
 | Name | Plus aliases used when matching recipe lines ("fetta"/"feta"). |
-| Measured by | Weight (default) or volume — see "Volume-priced ingredients" below. Decides which of the next two rows is the one actually used. |
+| Measured by | Weight (default), volume, or piece — see "Volume-priced ingredients" and "Piece-priced ingredients" below. Decides which of the next three rows is the one actually used. |
 | Usual package size & cost, by weight | Grams, and integer **cents per kilogram** — displayed per kg and per package. This is what gives a useful per-gram resolution. |
-| Usual package size & cost, by volume | Millilitres, and integer **cents per litre** — the same idea, for the ingredients this repo now lets be priced by volume instead. |
-| `cost_source` | Where the price came from and when — "manual", an AI estimate, or blank. Shared between both cost bases. |
+| Usual package size & cost, by volume | Millilitres, and integer **cents per litre** — the same idea, for the ingredients this repo lets be priced by volume instead. |
+| Usual package size & cost, by piece | A piece count, and integer **cents per piece** — the same idea again, for things sold and priced per item rather than by weight or volume at all. |
+| `cost_source` | Where the price came from and when — "manual", an AI estimate, or blank. Shared between all three cost bases. |
 | Source | Markets · Supermarket · Butcher · Nut shop · Deli · Asian grocery · Fishmonger · Bakery · Bottle shop · Cake supplies · Chemist · Hardware · Newsagent · Other |
 | Is food | False for the things that come home from the shops but never go in a recipe — batteries, shampoo, cat litter. They stay in the pantry so it remains a complete shopping lookup, but they are kept out of the "needs a price" work queues. |
 | Density (g/ml) | Turns "1 cup" into grams. Worth setting even for a volume-priced ingredient — nutrition is always per 100g. |
@@ -202,6 +203,27 @@ special treatment until someone flags it — except that a liquid with no
 known density already merges and displays correctly on the shopping list
 regardless, because the exact millilitre amount is there either way; only
 its *cost* needs the flag to come from the right pair of fields.
+
+### Piece-priced ingredients
+
+Some things are sold and priced per item rather than by weight or volume
+at all — eggs, a can of something, a bunch of coriander. Forcing those
+through `grams_per_piece` just to get a cost means inventing a weight
+nobody stated (and re-guessing it every time a "large" vs "small" egg
+shows up); a pantry item can instead be flagged "measured by piece" and
+priced in cents per unit, the same idea as volume-priced ingredients one
+level down. A dozen-egg carton at $6.00 is `cost_per_unit_cents=50`,
+`package_size_units=12` — a per-piece price independent of how many
+pieces the usual package holds, matching how `cost_per_kg_cents` is
+independent of `package_size_grams`.
+
+This changes costing and the shopping list the same way volume does, and
+leaves nutrition alone: `grams_per_piece` (or a density, for a volume
+unit) is still what a recipe's nutrition panel needs, whether or not the
+ingredient is also priced by the piece. A recipe line in a countable unit
+("2 eggs", "1 can") merges and prices on its count directly — no weight
+or density required — the same way a volume line merges and prices on
+its millilitre amount regardless of density.
 
 ### Filling the pantry automatically
 
