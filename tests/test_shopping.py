@@ -560,6 +560,21 @@ class TestPricing:
         assert item["weight_grams"] is None
         assert item["cost_cents"] == 120  # 2 onions at 150g/each, $4/kg
 
+    def test_a_recipe_line_with_no_stated_amount_at_all_still_gets_a_default_price(
+        self, client, onion
+    ):
+        """"onion" with no quantity or unit at all — not even a piece
+        count — still prices from the pantry's own "default item weight"
+        (grams_per_piece), rather than being left out of the total just
+        because the recipe didn't say how many."""
+        recipe = make_recipe(client, "Soup", [{"name": "onion"}])
+        cook_list = make_list(client, [recipe])
+        client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping")
+
+        item = client.get("/shopping").json()["items"][0]
+        assert item["amount_text"] == ""  # still genuinely unstated on the list
+        assert item["cost_cents"] == 60  # 1 onion, 150g, at $4/kg
+
 
 class TestManualItems:
     def test_a_typed_name_is_matched_against_the_pantry(self, client, onion):

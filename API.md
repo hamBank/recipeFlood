@@ -191,7 +191,11 @@ of `weight_grams`/`volume_ml`/`quantity` the ingredient's `measure_kind`
 says to use — except a weight-priced ingredient with no `weight_grams`
 still prices from `quantity * grams_per_piece` when that's set, since a
 hand-typed or hand-edited line never gets a weight computed for it the
-way a cook-list line does (see SPEC.md "Piece-priced ingredients").
+way a cook-list line does. An item with none of the three at all — a
+recipe line that stated no amount — still gets a default price when the
+pantry supports one (one piece, one usual package, or `grams_per_piece`
+for a weight-priced ingredient) rather than being left out of the total
+(see SPEC.md "Piece-priced ingredients").
 `GET` returns `{items, shops, total_count, checked_count, total_cents,
 priced_fraction}`. `shops` is in walking order and each item carries its
 own `shop`, so a client renders the grouping without deciding the order.
