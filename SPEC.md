@@ -225,6 +225,20 @@ ingredient is also priced by the piece. A recipe line in a countable unit
 or density required — the same way a volume line merges and prices on
 its millilitre amount regardless of density.
 
+**A weight-priced ingredient with a piece count still prices, via
+`grams_per_piece`.** Most countable ingredients are *not* flagged
+"measured by piece" — an onion is weighed and priced per kilogram same as
+ever, `grams_per_piece` just being what turns "2 onions" into grams. A
+cook-list line gets that conversion once, up front, when the recipe
+ingredient is saved (see "Ingredients and weight" above), so it already
+carries a weight by the time it reaches the shopping list. A line typed
+or edited by hand on the shopping list itself skips that step entirely —
+it only ever has a piece count — so costing re-derives the same weight
+from `quantity * grams_per_piece` at pricing time instead of coming up
+unpriced. This is purely a costing fallback, used only when no weight
+was already carried on the line; it never applies to a `piece`-flagged
+ingredient, whose whole point is pricing without a weight at all.
+
 ### Filling the pantry automatically
 
 Nutrition and cost are held to different accuracy bars, deliberately.
