@@ -17,6 +17,15 @@ only rounding happens once at the end.
 Which basis applies is decided by `measure_kind`, not by which fields
 happen to be set: a volume ingredient with a leftover `cost_per_kg_cents`
 from before it was reclassified is not read as a weight price.
+
+A weight-priced line with only a piece count and no weight at all — a
+shopping-list line typed or edited by hand never goes through the
+recipe-ingredient weight converter the way a cook-list line does — still
+prices if the ingredient's `grams_per_piece` is known: `quantity *
+grams_per_piece` stands in for the missing `weight_grams`. This only
+applies to `measure_kind == weight`; a `piece`-flagged ingredient is
+priced from its own per-piece price or not at all, never guessed at from
+a weight it was deliberately unflagged from.
 """
 
 from __future__ import annotations
@@ -105,6 +114,11 @@ def amount_cost_cents(
         if ingredient.cost_per_litre_cents is None or not volume_ml:
             return None
         return round(volume_ml / 1000 * ingredient.cost_per_litre_cents)
+    if not weight_grams and quantity and ingredient.grams_per_piece:
+        # No weight was carried on this line — see the module docstring —
+        # but the pantry knows what one piece weighs, so a piece count can
+        # still be priced by weight without inventing a number.
+        weight_grams = quantity * ingredient.grams_per_piece
     if ingredient.cost_per_kg_cents is None or not weight_grams:
         return None
     return round(weight_grams / 1000 * ingredient.cost_per_kg_cents)

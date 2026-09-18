@@ -545,6 +545,21 @@ class TestPricing:
         client.patch(f"/shopping/{item_id}", json={"is_checked": True})
         assert client.get("/shopping").json()["total_cents"] == 0
 
+    def test_a_manually_typed_piece_count_still_prices_via_grams_per_piece(
+        self, client, onion
+    ):
+        """A line typed straight into the shopping list (or edited by
+        hand) never goes through the recipe-ingredient weight converter,
+        so it only ever carries `quantity` — costing.amount_cost_cents
+        still has to bridge that to a weight via the pantry's own
+        grams_per_piece, or every hand-typed "2 onions" would come up
+        unpriced despite the pantry knowing exactly what that costs."""
+        item = client.post(
+            "/shopping", json={"name": "onions", "quantity": 2, "unit": "piece"}
+        ).json()
+        assert item["weight_grams"] is None
+        assert item["cost_cents"] == 120  # 2 onions at 150g/each, $4/kg
+
 
 class TestManualItems:
     def test_a_typed_name_is_matched_against_the_pantry(self, client, onion):

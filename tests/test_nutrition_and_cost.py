@@ -220,6 +220,76 @@ class TestPieceCost:
         assert cost.known_fraction == 0.0
 
 
+class TestPieceCountPricedByWeight:
+    """A weight-priced ingredient (the default, and the common case) with
+    a `grams_per_piece` still needs to price a line that only has a piece
+    count and no weight at all — a shopping-list line typed or edited by
+    hand never goes through the recipe-ingredient weight converter, so it
+    only ever has `quantity`. See costing.py's module docstring."""
+
+    @pytest.fixture
+    def onion(self, session: Session):
+        ingredient = Ingredient(
+            slug="brown-onion",
+            name="brown onion",
+            grams_per_piece=150,
+            cost_per_kg_cents=400,  # $4/kg
+        )
+        session.add(ingredient)
+        session.commit()
+        session.refresh(ingredient)
+        return ingredient
+
+    def test_a_bare_quantity_is_priced_via_grams_per_piece(self, onion):
+        # 2 onions at 150g each = 300g, at $4/kg = $1.20
+        assert amount_cost_cents(onion, quantity=2) == 120
+
+    def test_a_real_weight_still_wins_over_the_quantity_fallback(self, onion):
+        # Whatever actually converted the line's weight (density, an
+        # explicit gram amount) is more trustworthy than re-deriving one
+        # from a possibly-stale quantity — same principle as volume/weight
+        # already not being mixed.
+        assert amount_cost_cents(onion, weight_grams=1000, quantity=2) == 400
+
+    def test_no_grams_per_piece_means_still_unpriced(self, session: Session):
+        no_conversion = Ingredient(
+            slug="parsley", name="parsley", cost_per_kg_cents=1000
+        )
+        session.add(no_conversion)
+        session.commit()
+        assert amount_cost_cents(no_conversion, quantity=2) is None
+
+    def test_no_kg_price_means_still_unpriced(self, session: Session):
+        unpriced = Ingredient(slug="chive", name="chive", grams_per_piece=5)
+        session.add(unpriced)
+        session.commit()
+        assert amount_cost_cents(unpriced, quantity=10) is None
+
+    def test_a_piece_ingredient_never_falls_back_to_a_weight_guess(
+        self, session: Session
+    ):
+        """measure_kind=piece is a deliberate flag that this ingredient is
+        NOT to be priced by weight — grams_per_piece left over from before
+        it was reclassified must not quietly resurrect a weight price."""
+        reclassified = Ingredient(
+            slug="egg-again",
+            name="egg again",
+            measure_kind=MeasureKind.piece,
+            grams_per_piece=50,
+            cost_per_kg_cents=6000,  # stale, from before reclassifying
+        )
+        session.add(reclassified)
+        session.commit()
+        assert amount_cost_cents(reclassified, quantity=3) is None
+
+    def test_total_prices_a_bare_quantity_line_via_the_pantry(
+        self, session: Session, onion
+    ):
+        cost, per_line = compute_cost(session, [quantity_line("onion", 2, onion.id)])
+        assert cost.total_cents == 120
+        assert cost.known_fraction == 1.0
+
+
 class TestNutrition:
     def test_has_nutrition(self, session: Session, flour):
         assert has_nutrition(flour)
