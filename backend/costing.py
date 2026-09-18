@@ -26,6 +26,18 @@ grams_per_piece` stands in for the missing `weight_grams`. This only
 applies to `measure_kind == weight`; a `piece`-flagged ingredient is
 priced from its own per-piece price or not at all, never guessed at from
 a weight it was deliberately unflagged from.
+
+A line with no amount stated *at all* — not even a piece count, like a
+recipe that just says "olive oil" — still gets a price when the pantry
+can support a reasonable guess, rather than being left out of the total
+just because nobody said how much: assume one piece for a piece-priced
+ingredient, one usual package for a volume-priced one, and for a
+weight-priced one, the ingredient's own "default item weight"
+(`grams_per_piece`, when it's naturally countable — the weight *one* of
+it comes to) before falling back to one usual package as a last resort.
+This never crosses `measure_kind` — a piece-priced ingredient with no
+per-piece price stays unpriced, same as with a stated amount — it only
+picks a *default amount* to price with when no real one was given.
 """
 
 from __future__ import annotations
@@ -106,11 +118,21 @@ def amount_cost_cents(
     """
     if ingredient is None:
         return None
+
+    # Not even a piece count — see the module docstring's "try everything"
+    # paragraph. Mutually exclusive with every fallback below that only
+    # fires when a quantity *was* given, since those all require one.
+    nothing_stated = weight_grams is None and volume_ml is None and quantity is None
+
     if ingredient.measure_kind == MeasureKind.piece:
+        if nothing_stated:
+            quantity = 1  # least surprising guess: buy one
         if ingredient.cost_per_unit_cents is None or not quantity:
             return None
         return round(quantity * ingredient.cost_per_unit_cents)
     if ingredient.measure_kind == MeasureKind.volume:
+        if nothing_stated:
+            volume_ml = ingredient.package_size_ml  # assume one usual package
         if ingredient.cost_per_litre_cents is None or not volume_ml:
             return None
         return round(volume_ml / 1000 * ingredient.cost_per_litre_cents)
@@ -119,6 +141,8 @@ def amount_cost_cents(
         # but the pantry knows what one piece weighs, so a piece count can
         # still be priced by weight without inventing a number.
         weight_grams = quantity * ingredient.grams_per_piece
+    elif nothing_stated:
+        weight_grams = ingredient.grams_per_piece or ingredient.package_size_grams
     if ingredient.cost_per_kg_cents is None or not weight_grams:
         return None
     return round(weight_grams / 1000 * ingredient.cost_per_kg_cents)

@@ -239,6 +239,18 @@ unpriced. This is purely a costing fallback, used only when no weight
 was already carried on the line; it never applies to a `piece`-flagged
 ingredient, whose whole point is pricing without a weight at all.
 
+**A line with no amount stated at all still gets a default price, if
+the pantry can support one.** "Olive oil" with no quantity is a real
+"unknown" on the shopping list — see "One permanent shopping list" — but
+costing tries harder than the list display does: rather than leaving
+such a line out of the total, it assumes one piece for a piece-priced
+ingredient, one usual package for a volume-priced one, and for a
+weight-priced one, `grams_per_piece` (the ingredient's own "default item
+weight," for something naturally countable) before falling back to one
+usual package. Same rule as above about never crossing `measure_kind` —
+a piece-priced ingredient with no per-piece price still stays unpriced
+rather than being guessed at by weight.
+
 ### Filling the pantry automatically
 
 Nutrition and cost are held to different accuracy bars, deliberately.

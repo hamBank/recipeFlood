@@ -290,6 +290,87 @@ class TestPieceCountPricedByWeight:
         assert cost.known_fraction == 1.0
 
 
+def bare_line(name, ingredient_id=None):
+    """A recipe line with no stated amount at all — "olive oil", no
+    quantity, no unit — the case TestNoAmountAtAll exists for."""
+    return RecipeIngredient(
+        id=abs(hash((name, "bare"))) % 100000,
+        recipe_id=1,
+        name=name,
+        raw_text=name,
+        weight_source=WeightSource.unknown,
+        ingredient_id=ingredient_id,
+    )
+
+
+class TestNoAmountAtAll:
+    """Not even a piece count — a recipe line that states no amount at
+    all still gets a price when the pantry can support a reasonable
+    default guess, rather than being left out of the total just because
+    nobody said how much. See costing.py's module docstring."""
+
+    def test_a_piece_priced_ingredient_assumes_one(self, egg):
+        assert amount_cost_cents(egg) == 50  # 1 egg at 50c
+
+    def test_a_volume_priced_ingredient_assumes_one_package(self, milk):
+        assert amount_cost_cents(milk) == 400  # 2L package at $2/L
+
+    def test_a_volume_priced_ingredient_with_no_package_size_stays_unpriced(
+        self, session: Session
+    ):
+        no_package = Ingredient(
+            slug="stock", name="stock", measure_kind=MeasureKind.volume,
+            cost_per_litre_cents=300,
+        )
+        session.add(no_package)
+        session.commit()
+        assert amount_cost_cents(no_package) is None
+
+    def test_a_weight_priced_countable_ingredient_assumes_its_own_default_weight(
+        self, session: Session
+    ):
+        onion = Ingredient(
+            slug="brown-onion", name="brown onion",
+            grams_per_piece=150, cost_per_kg_cents=400,  # $4/kg
+        )
+        session.add(onion)
+        session.commit()
+        assert amount_cost_cents(onion) == 60  # 150g at $4/kg
+
+    def test_falls_back_to_one_package_when_there_is_no_default_item_weight(
+        self, flour
+    ):
+        # flour has no grams_per_piece (it isn't naturally countable) but
+        # does have a package size — 1kg at $2.50/kg — so that's the guess.
+        assert amount_cost_cents(flour) == 250
+
+    def test_a_weight_priced_ingredient_with_neither_stays_unpriced(
+        self, session: Session
+    ):
+        nothing_to_go_on = Ingredient(slug="salt", name="salt", cost_per_kg_cents=500)
+        session.add(nothing_to_go_on)
+        session.commit()
+        assert amount_cost_cents(nothing_to_go_on) is None
+
+    def test_a_piece_priced_ingredient_with_no_price_stays_unpriced_not_guessed_by_weight(
+        self, session: Session
+    ):
+        reclassified = Ingredient(
+            slug="lime", name="lime", measure_kind=MeasureKind.piece,
+            grams_per_piece=100, cost_per_kg_cents=4000,
+        )
+        session.add(reclassified)
+        session.commit()
+        assert amount_cost_cents(reclassified) is None
+
+    def test_total_prices_a_recipe_line_with_no_stated_amount_at_all(
+        self, session: Session, egg
+    ):
+        cost, per_line = compute_cost(session, [bare_line("egg", egg.id)])
+        assert cost.total_cents == 50
+        assert cost.known_fraction == 1.0
+
+
 class TestNutrition:
     def test_has_nutrition(self, session: Session, flour):
         assert has_nutrition(flour)
