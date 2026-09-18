@@ -57,6 +57,15 @@ def add_item(
     A typed name is matched against the pantry so "milk" lands under the
     right shop and gets a price — the same matcher the recipe importers
     use. No match is fine; the item goes on the list as plain text.
+
+    Defaults to a quantity of 1 when no amount is given at all — typing
+    just "eggs" means "buy some", and 1 is the least surprising amount to
+    assume by hand. This is deliberately unlike a recipe line with no
+    stated amount (see shopping.add_lines and SPEC.md "One permanent
+    shopping list"): a recipe saying nothing about how much olive oil to
+    buy is a real "unknown", not a "buy 1", and inventing a number there
+    would misrepresent what the recipe actually asked for. Typing a bare
+    name by hand carries no such intent to preserve.
     """
     name = body.name.strip()
     if not name:
@@ -71,11 +80,11 @@ def add_item(
             status.HTTP_422_UNPROCESSABLE_ENTITY, f"No ingredient with id {ingredient_id}"
         )
 
-    item = ShoppingItem(
-        **body.model_dump(exclude={"name", "ingredient_id"}),
-        name=name,
-        ingredient_id=ingredient_id,
-    )
+    fields = body.model_dump(exclude={"name", "ingredient_id"})
+    if fields["weight_grams"] is None and fields["volume_ml"] is None and fields["quantity"] is None:
+        fields["quantity"] = 1
+
+    item = ShoppingItem(**fields, name=name, ingredient_id=ingredient_id)
     session.add(item)
     session.commit()
     session.refresh(item)

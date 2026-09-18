@@ -82,7 +82,14 @@ describe('applyQueue', () => {
     const result = applyQueue(base, [{ type: 'add', name: 'Tofu', tempId: -1 }])
     expect(result.items).toHaveLength(2)
     const added = result.items.find((i) => i.id === -1)
-    expect(added).toMatchObject({ name: 'Tofu', shop: 'other', is_checked: false, pendingSync: true })
+    expect(added).toMatchObject({
+      name: 'Tofu',
+      shop: 'other',
+      is_checked: false,
+      pendingSync: true,
+      // Matches the default the server applies once this syncs.
+      amount_text: '1',
+    })
     expect(result.shops).toContain('other')
     expect(result.total_count).toBe(2)
   })
