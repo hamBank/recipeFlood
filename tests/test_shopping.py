@@ -575,6 +575,35 @@ class TestManualItems:
         assert item["ingredient_id"] is None
         assert item["cost_cents"] is None
 
+    def test_a_bare_name_defaults_to_a_quantity_of_one(self, client):
+        """Typing just "eggs" means "buy some" — 1 is the least surprising
+        amount to assume, unlike a recipe line with no stated amount (see
+        TestMerging.test_an_ingredient_with_no_stated_amount_still_reaches
+        _the_list), which is a genuine "unknown" the recipe itself left
+        blank rather than something worth guessing at."""
+        item = client.post("/shopping", json={"name": "eggs"}).json()
+        assert item["quantity"] == 1
+        assert item["unit"] is None
+        assert item["amount_text"] == "1"
+
+    def test_a_stated_amount_of_any_kind_is_never_overridden(self, client, onion):
+        weighed = client.post("/shopping", json={"name": "flour", "weight_grams": 500}).json()
+        assert weighed["quantity"] is None
+
+        measured = client.post("/shopping", json={"name": "milk", "volume_ml": 500}).json()
+        assert measured["quantity"] is None
+
+        counted = client.post(
+            "/shopping", json={"name": "onions", "quantity": 3, "unit": "piece"}
+        ).json()
+        assert counted["quantity"] == 3
+
+    def test_a_zero_quantity_counts_as_stated_not_defaulted(self, client):
+        # ge=0 on the field means 0 is a legal, deliberate "none needed"
+        # rather than "unspecified" — must not be clobbered back to 1.
+        item = client.post("/shopping", json={"name": "eggs", "quantity": 0}).json()
+        assert item["quantity"] == 0
+
     def test_a_shorter_typed_name_matches_a_pantry_row_that_contains_it(self, client):
         # No alias needed: "garlic" is a plain substring (whole-word) of
         # the pantry's "jar garlic", so it should still get that row's

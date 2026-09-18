@@ -179,7 +179,7 @@ One permanent list. Signed-in only — it carries prices.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/shopping` | the whole list, grouped and ordered |
-| POST | `/shopping` | `{name, ingredient_id?, weight_grams?, volume_ml?, quantity?, unit?, note?}` — an unmatched name is matched against the pantry |
+| POST | `/shopping` | `{name, ingredient_id?, weight_grams?, volume_ml?, quantity?, unit?, note?}` — an unmatched name is matched against the pantry; no `weight_grams`/`volume_ml`/`quantity` at all defaults `quantity` to 1 |
 | PATCH | `/shopping/{id}` | edit an amount, or `{is_checked}` to tick off |
 | DELETE | `/shopping/{id}` | |
 | POST | `/shopping/clear-checked` | deletes only the ticked items |

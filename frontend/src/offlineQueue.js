@@ -72,7 +72,10 @@ export function applyQueue(list, queue) {
           name: entry.name,
           shop: 'other',
           is_checked: false,
-          amount_text: '',
+          // Matches the default the server applies once this syncs (see
+          // routers/shopping.py's add_item) — a queued add has no way to
+          // state an amount, same as typing a bare name while online.
+          amount_text: '1',
           cost_cents: null,
           contributions: [],
           pendingSync: true,

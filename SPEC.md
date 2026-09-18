@@ -348,6 +348,14 @@ half-finished shop survives closing the phone, and "clear ticked" is the
 one destructive action — offered explicitly, with "untick all" as the
 escape hatch.
 
+A line added by hand with no amount at all defaults to a quantity of
+1 — typing just "eggs" means "buy some", and 1 is the least surprising
+guess. This is unlike a recipe line reaching the list with no stated
+amount ("olive oil", no quantity given), which stays genuinely
+amount-less rather than being guessed at: the recipe itself said
+nothing, so inventing a number would misrepresent it, whereas typing a
+bare name by hand carries no such intent to preserve.
+
 ### Grouped by shop, in walking order
 
 Each line inherits its pantry ingredient's `source` — markets, butcher,
