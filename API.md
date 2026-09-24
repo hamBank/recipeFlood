@@ -208,6 +208,24 @@ Each item also carries `amount_text` (rendered server-side, so "450 g" and
 breakdown of a merged line. Editing an amount via `PATCH` clears
 `contributions`.
 
+### Google Sheet sync
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/shopping/sheet-sync` | on-demand full reconcile with the configured Google Sheet |
+
+Only present in effect when `GET /auth/config` reports
+`sheet_sync_enabled: true` (both `GOOGLE_SHEET_ID` and
+`GOOGLE_SERVICE_ACCOUNT_FILE` set — see DEPLOYMENT.md); otherwise it's a
+no-op that returns all-zero counts. Every other shopping-list write
+(`POST`/`PATCH`/`DELETE /shopping/{id}`, `clear-checked`, `uncheck-all`,
+`POST /cook-lists/{id}/add-to-shopping`) also pushes to the sheet in the
+background — see SPEC.md "Google Sheet sync" for the full rules.
+
+Returns `{imported, linked, ticked, pushed, deleted, errors}` — counts
+from that one reconcile pass, plus any Sheets API error messages
+(the request still succeeds; a sync failure is reported, not raised).
+
 ## AI import
 
 | Method | Path | Access | Notes |

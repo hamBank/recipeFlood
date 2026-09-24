@@ -221,6 +221,26 @@ a breakdown never sits next to a number it no longer explains.
 baseline migration and a second `CREATE TYPE` for it fails — the same
 dual-dialect trap `ingredient.source` documents.
 
+`sheet_linked`, `sheet_detached`, `sheet_dirty` are Google Sheet sync
+state (see SPEC.md "Google Sheet sync" and `backend/sheet_sync.py`), all
+plain booleans defaulting false. `sheet_linked` — this item has a row on
+the sheet, identified by an `rf:<id>` tag in column I. `sheet_detached` —
+that row was found gone during a reconcile; the item stays on the app's
+list (ticked off), but is never pushed again, so it can't create a
+duplicate row later. `sheet_dirty` — the sheet needs refreshing (name,
+amount, or ticked state changed since the last successful push); cleared
+on success, so a failed push leaves it set for the next sync to retry.
+
+## `sheetpendingdelete`
+
+`item_id` (primary key — a `ShoppingItem.id`, though the item itself may
+already be gone by the time this is read), `created_at`.
+
+One row per shopping-item deletion whose sheet-row removal failed (the
+Sheets API errored) rather than one whose row simply wasn't found — see
+the HARD SAFETY RULE in SPEC.md "Google Sheet sync". Retried, and cleared
+on success, by the next `POST /shopping/sheet-sync`.
+
 ## Migrations
 
 ```bash

@@ -941,6 +941,32 @@ class ShoppingItem(SQLModel, table=True):
 
     added_at: datetime = Field(default_factory=utcnow)
 
+    # Google Sheet sync state (see backend/sheet_sync.py and SPEC.md
+    # "Google Sheet sync"). `sheet_linked` — this item has (or is believed
+    # to have) a row on the sheet, identified by the `rf:<id>` tag in
+    # column I; only linked items are ever refreshed rather than appended.
+    # `sheet_detached` — the sheet's row for this item vanished (deleted by
+    # a human on the sheet, discovered on a reconcile): the item stays on
+    # the app's list, ticked off, but is never pushed to the sheet again,
+    # so a detach can't cause a duplicate row later. `sheet_dirty` — a
+    # field the sheet needs refreshed (name/amount/ticked state changed)
+    # since the last successful push; cleared on success, so a failed push
+    # leaves it set for the next on-demand sync to retry.
+    sheet_linked: bool = Field(default=False)
+    sheet_detached: bool = Field(default=False)
+    sheet_dirty: bool = Field(default=False)
+
+
+class SheetPendingDelete(SQLModel, table=True):
+    """A shopping item removed in the app whose sheet row could not be
+    deleted yet (the Sheets API call failed) — retried on the next
+    on-demand sync. See the HARD SAFETY RULE in SPEC.md's "Google Sheet
+    sync": nothing deletes a sheet row without going through this path or
+    an immediate, successful, id-matched deletion."""
+
+    item_id: int = Field(primary_key=True)
+    created_at: datetime = Field(default_factory=utcnow)
+
 
 # --- schemas ---------------------------------------------------------------
 
@@ -1077,3 +1103,15 @@ class AddToShoppingResult(SQLModel):
     # Recipe lines that could not be turned into an amount ("salt to
     # taste"). Reported rather than dropped.
     skipped: list[str] = Field(default_factory=list)
+
+
+class SheetSyncResult(SQLModel):
+    """Summary of one POST /shopping/sheet-sync reconcile pass — see
+    backend/sheet_sync.py."""
+
+    imported: int = 0
+    linked: int = 0
+    ticked: int = 0
+    pushed: int = 0
+    deleted: int = 0
+    errors: list[str] = Field(default_factory=list)

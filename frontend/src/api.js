@@ -156,3 +156,4 @@ export const clearCheckedShopping = () =>
   apiFetch('/shopping/clear-checked', { method: 'POST' })
 export const uncheckAllShopping = () =>
   apiFetch('/shopping/uncheck-all', { method: 'POST' })
+export const syncSheet = () => apiFetch('/shopping/sheet-sync', { method: 'POST' })

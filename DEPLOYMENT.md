@@ -155,6 +155,33 @@ The same key drives `scripts/parse_blog.py`, but that is an offline job —
 run it on a workstation and commit the resulting `data/recipes.json` rather
 than running it on the server.
 
+## Google Sheet sync (optional)
+
+Two-way sync between the shopping list and a Google Sheet — see SPEC.md
+"Google Sheet sync". Off unless both settings below are set.
+
+1. <https://console.cloud.google.com/> → the same project as OAuth, or a
+   new one → **IAM & Admin → Service Accounts → Create service account**
+   (no roles needed — access is granted by sharing the sheet, not IAM).
+2. **Keys → Add key → Create new key → JSON**, downloads a key file. Copy
+   it to the server as `/opt/recipeFlood/google-sa.json`, then
+   `chown recipeFlood:recipeFlood /opt/recipeFlood/google-sa.json` and
+   `chmod 600` it — it's a bearer credential, not a config file.
+3. **APIs & Services → Library** → enable the **Google Sheets API** for
+   the project.
+4. Open the household's spreadsheet, **Share** it with the service
+   account's email (from the JSON key's `client_email`, looks like
+   `...@...iam.gserviceaccount.com`) as **Editor**.
+5. In `/opt/recipeFlood/.env`, set:
+   ```
+   GOOGLE_SHEET_ID=<the id from the sheet's URL>
+   GOOGLE_SERVICE_ACCOUNT_FILE=/opt/recipeFlood/google-sa.json
+   GOOGLE_SHEET_TAB=Shopping   # optional — this is the default
+   ```
+6. `systemctl restart recipeflood`. `GET /auth/config` should now report
+   `sheet_sync_enabled: true`, and a "Sync now" button appears on the
+   shopping list page.
+
 ## Configuration
 
 Environment lives in `/opt/recipeFlood/.env` (loaded by the systemd unit;

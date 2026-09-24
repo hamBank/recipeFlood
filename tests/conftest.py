@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from backend import auth as auth_module
+from backend import database as database_module
 from backend.config import settings
 from backend.database import get_session
 from backend.main import create_app
@@ -42,6 +43,11 @@ def session(engine):
 def app(engine, monkeypatch):
     monkeypatch.setattr(settings, "auth_enabled", False)
     monkeypatch.setattr(settings, "public_read", True)
+    # Sheet-sync background tasks open their own session against
+    # backend.database.engine rather than reusing the request's — see
+    # backend/sheet_sync.py — so tests need that name patched to the same
+    # in-memory database the request-scoped override below uses.
+    monkeypatch.setattr(database_module, "engine", engine)
     application = create_app()
 
     def override():

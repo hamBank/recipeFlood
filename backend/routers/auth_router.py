@@ -11,6 +11,7 @@ from ..auth import (
 from ..config import settings
 from ..database import get_session
 from ..models import User, UserRead, UserRole, UserSelfUpdate
+from ..sheet_sync import sheet_sync_enabled
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -34,6 +35,7 @@ def auth_config():
         "currency_symbol": settings.currency_symbol,
         "units_system": settings.units_system,
         "pantry_multi_merge": settings.pantry_multi_merge,
+        "sheet_sync_enabled": sheet_sync_enabled(),
     }
 
 

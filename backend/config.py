@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
 
+    # Google Sheets sync for the shopping list (see backend/sheet_sync.py
+    # and SPEC.md "Google Sheet sync"). Sync is enabled only when both the
+    # sheet id and the service-account key file are set; leaving either
+    # blank makes every sync hook a no-op rather than erroring, so a
+    # deployment that hasn't set this up yet behaves exactly as before.
+    google_sheet_id: str = ""
+    google_service_account_file: str = ""
+    google_sheet_tab: str = "Shopping"
+
     # OpenAI Images API — used only by scripts/generate_recipe_images.py.
     # Claude has no image-generation endpoint of its own, so placeholder
     # illustrations are a separate provider and a separate key. gpt-image-1

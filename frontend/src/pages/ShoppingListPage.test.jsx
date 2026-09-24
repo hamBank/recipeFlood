@@ -13,12 +13,14 @@ vi.mock('../api', () => ({
   uncheckAllShopping: vi.fn(),
   listIngredients: vi.fn(),
   updateMe: vi.fn(),
+  syncSheet: vi.fn(),
 }))
 
 let sessionUser = null
+let sessionConfig = null
 const setSessionUser = vi.fn()
 vi.mock('../App', () => ({
-  useSession: () => ({ user: sessionUser, setUser: setSessionUser, config: null }),
+  useSession: () => ({ user: sessionUser, setUser: setSessionUser, config: sessionConfig }),
 }))
 
 const baseList = (items) => ({
@@ -62,6 +64,55 @@ beforeEach(() => {
   setOnline(true)
   api.listIngredients.mockResolvedValue({ items: [], total: 0 })
   sessionUser = null
+  sessionConfig = null
+})
+
+describe('ShoppingListPage Google Sheet sync', () => {
+  it('has no Sync now button when sync is not configured', async () => {
+    sessionConfig = { sheet_sync_enabled: false }
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+    expect(screen.queryByRole('button', { name: /Sync now/ })).toBeNull()
+  })
+
+  it('calls the sync endpoint and shows a summary, then reloads the list', async () => {
+    sessionConfig = { sheet_sync_enabled: true }
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    api.syncSheet.mockResolvedValue({ imported: 2, linked: 0, ticked: 1, pushed: 0, deleted: 0, errors: [] })
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sync now' }))
+
+    await waitFor(() => expect(api.syncSheet).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Synced — 2 imported, 1 ticked')).toBeDefined()
+    expect(api.getShoppingList).toHaveBeenCalledTimes(2) // initial load + post-sync reload
+  })
+
+  it('shows sync errors in the error banner', async () => {
+    sessionConfig = { sheet_sync_enabled: true }
+    api.getShoppingList.mockResolvedValue(baseList([item()]))
+    api.syncSheet.mockResolvedValue({
+      imported: 0, linked: 0, ticked: 0, pushed: 0, deleted: 0, errors: ['Sheets API is down'],
+    })
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sync now' }))
+
+    expect(await screen.findByText('Sheets API is down')).toBeDefined()
+  })
+
+  it('is disabled while offline', async () => {
+    setOnline(false)
+    sessionConfig = { sheet_sync_enabled: true }
+    saveCachedList(baseList([item()]))
+    api.getShoppingList.mockRejectedValue(offlineError())
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+    expect(screen.getByRole('button', { name: 'Sync now' }).disabled).toBe(true)
+  })
 })
 
 describe('ShoppingListPage online', () => {
