@@ -1,3 +1,6 @@
+import re
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -48,6 +51,18 @@ class Settings(BaseSettings):
     google_sheet_id: str = ""
     google_service_account_file: str = ""
     google_sheet_tab: str = "Shopping"
+
+    @field_validator(
+        "google_sheet_id", "google_service_account_file", "google_sheet_tab"
+    )
+    @classmethod
+    def _strip_inline_comment(cls, value: str) -> str:
+        # systemd's EnvironmentFile (how production loads .env) keeps an
+        # inline "  # comment" as part of the value, so a tab named
+        # "Shopping   # the default" would reach the Sheets API verbatim.
+        # None of these three values legitimately contains whitespace
+        # followed by "#".
+        return re.sub(r"\s+#.*$", "", value).strip()
 
     # OpenAI Images API — used only by scripts/generate_recipe_images.py.
     # Claude has no image-generation endpoint of its own, so placeholder

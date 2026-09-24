@@ -82,6 +82,32 @@ class RestSheetClient:
             self._session = AuthorizedSession(creds)
         return self._session
 
+    def _check(self, response) -> None:
+        """`raise_for_status`, but carrying Google's own explanation.
+
+        A bare "403 Forbidden" can mean the sheet isn't shared with the
+        service account or that the Sheets API isn't enabled for its
+        project; Google's error body says which, so surface it.
+        """
+        if response.ok:
+            return
+        try:
+            detail = response.json().get("error", {}).get("message", "")
+        except ValueError:
+            detail = ""
+        message = f"Google Sheets API {response.status_code}"
+        if detail:
+            message += f": {detail}"
+        if response.status_code == 403:
+            message += (
+                " (check the sheet is shared as Editor with the service"
+                " account's client_email, and that the Google Sheets API is"
+                " enabled for its project)"
+            )
+        elif response.status_code == 404:
+            message += " (check GOOGLE_SHEET_ID)"
+        raise RuntimeError(message)
+
     def _base(self) -> str:
         return f"https://sheets.googleapis.com/v4/spreadsheets/{self._spreadsheet_id}"
 
@@ -90,7 +116,7 @@ class RestSheetClient:
             response = self._authed_session().get(
                 f"{self._base()}", params={"fields": "sheets.properties"}
             )
-            response.raise_for_status()
+            self._check(response)
             for sheet in response.json().get("sheets", []):
                 props = sheet.get("properties", {})
                 if props.get("title") == self._tab:
@@ -106,7 +132,7 @@ class RestSheetClient:
             f"{self._base()}/values/{quote(range_)}",
             params={"valueRenderOption": "FORMATTED_VALUE"},
         )
-        response.raise_for_status()
+        self._check(response)
         values = response.json().get("values", [])
         rows = []
         for index, row in enumerate(values, start=1):
@@ -135,7 +161,7 @@ class RestSheetClient:
             f"{self._base()}/values:batchUpdate",
             json={"valueInputOption": "RAW", "data": data},
         )
-        response.raise_for_status()
+        self._check(response)
 
     def delete_rows(self, rows: list[int]) -> None:
         if not rows:
@@ -160,7 +186,7 @@ class RestSheetClient:
         response = self._authed_session().post(
             f"{self._base()}:batchUpdate", json={"requests": requests}
         )
-        response.raise_for_status()
+        self._check(response)
 
     def set_strikethrough(self, rows: list[int], strike: bool) -> None:
         if not rows:
@@ -189,7 +215,7 @@ class RestSheetClient:
         response = self._authed_session().post(
             f"{self._base()}:batchUpdate", json={"requests": requests}
         )
-        response.raise_for_status()
+        self._check(response)
 
 
 class FakeSheetClient:
