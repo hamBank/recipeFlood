@@ -4,7 +4,7 @@ One permanent list, shared by the household. Signed-in only — it carries
 prices, and it is nobody else's business what we're having for dinner.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlmodel import Session, select
 
 from ..database import get_session
@@ -15,10 +15,12 @@ from ..models import (
     ShoppingItemRead,
     ShoppingItemUpdate,
     ShoppingListRead,
+    SheetSyncResult,
     User,
 )
 from ..permissions import require_user_role
 from ..recipes_service import find_ingredient
+from ..sheet_sync import delete_items_from_sheet, reconcile, sync_item
 from ..shopping import item_read, read_list, set_checked
 
 router = APIRouter(prefix="/shopping", tags=["shopping"])
@@ -49,6 +51,7 @@ def get_shopping_list(
 @router.post("", response_model=ShoppingItemRead, status_code=status.HTTP_201_CREATED)
 def add_item(
     body: ShoppingItemCreate,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     _user: User = Depends(require_user_role),
 ):
@@ -84,10 +87,11 @@ def add_item(
     if fields["weight_grams"] is None and fields["volume_ml"] is None and fields["quantity"] is None:
         fields["quantity"] = 1
 
-    item = ShoppingItem(**fields, name=name, ingredient_id=ingredient_id)
+    item = ShoppingItem(**fields, name=name, ingredient_id=ingredient_id, sheet_dirty=True)
     session.add(item)
     session.commit()
     session.refresh(item)
+    background_tasks.add_task(sync_item, item.id)
     return _read(session, item)
 
 
@@ -95,6 +99,7 @@ def add_item(
 def update_item(
     item_id: int,
     body: ShoppingItemUpdate,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     _user: User = Depends(require_user_role),
 ):
@@ -117,25 +122,35 @@ def update_item(
     for name, value in fields.items():
         setattr(item, name, value)
 
+    # Anything that changes what the sheet should show — name, amount,
+    # ticked state — needs a push; shop_override/note don't, since the
+    # sheet has no columns for them.
+    if fields or checked is not None:
+        item.sheet_dirty = True
     session.add(item)
     session.commit()
     session.refresh(item)
+    background_tasks.add_task(sync_item, item.id)
     return _read(session, item)
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_item(
     item_id: int,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     _user: User = Depends(require_user_role),
 ):
-    session.delete(_lookup(session, item_id))
+    item = _lookup(session, item_id)
+    session.delete(item)
     session.commit()
+    background_tasks.add_task(delete_items_from_sheet, [item_id])
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/clear-checked", response_model=ShoppingListRead)
 def clear_checked(
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     _user: User = Depends(require_user_role),
 ):
@@ -144,25 +159,47 @@ def clear_checked(
     Only checked items go. Clearing the whole list is not offered: the one
     irreversible action here should be the one you asked for.
     """
+    checked_ids = []
     for item in session.exec(
         select(ShoppingItem).where(ShoppingItem.is_checked == True)  # noqa: E712
     ).all():
+        checked_ids.append(item.id)
         session.delete(item)
     session.commit()
+    if checked_ids:
+        background_tasks.add_task(delete_items_from_sheet, checked_ids)
     return read_list(session, with_cost=True)
 
 
 @router.post("/uncheck-all", response_model=ShoppingListRead)
 def uncheck_all(
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     _user: User = Depends(require_user_role),
 ):
     """Undo a shop's worth of ticking — the escape hatch for tapping
     "clear" too eagerly, offered because clearing is not reversible."""
+    touched_ids = []
     for item in session.exec(
         select(ShoppingItem).where(ShoppingItem.is_checked == True)  # noqa: E712
     ).all():
         set_checked(item, False)
+        if item.sheet_linked and not item.sheet_detached:
+            item.sheet_dirty = True
+            touched_ids.append(item.id)
         session.add(item)
     session.commit()
+    for item_id in touched_ids:
+        background_tasks.add_task(sync_item, item_id)
     return read_list(session, with_cost=True)
+
+
+@router.post("/sheet-sync", response_model=SheetSyncResult)
+def sheet_sync(
+    session: Session = Depends(get_session),
+    _user: User = Depends(require_user_role),
+):
+    """On-demand full reconcile with the Google Sheet — see
+    backend/sheet_sync.py. No cron, no polling: this is the only way the
+    sheet's own edits ever reach the app."""
+    return reconcile(session)

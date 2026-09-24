@@ -424,6 +424,53 @@ devices is an acceptable outcome, fixed the same way any other pantry
 duplicate is — a merge). Both queue locally and replay once back online;
 see `DEVELOPMENT.md`'s "Offline shopping list / PWA" for how.
 
+### Google Sheet sync
+
+Two-way sync with a Google Sheet the household already uses, via a
+Google service account (`backend/sheet_sync.py`, `backend/sheet_client.py`).
+Enabled only when both `GOOGLE_SHEET_ID` and `GOOGLE_SERVICE_ACCOUNT_FILE`
+are set (`sheet_sync_enabled` on `GET /auth/config`); otherwise every hook
+below is a no-op. See DEPLOYMENT.md for setup.
+
+**The sheet.** One tab (`GOOGLE_SHEET_TAB`, default "Shopping"), no header
+row — row 1 is the first data row. Column A is the item name, column B its
+display amount (`shopping.amount_text`, e.g. "500 g"). Column G is an
+auto-lookup formula for the item's location, maintained by the sheet
+itself; the app **never reads or writes G, and never writes a whole row**
+— only cells A, B and I of a row. Column I carries the link and status in
+one cell, `rf:<item_id> <status>` (`synced`, `ticked`, or `missing in
+app`), parsed with `^rf:(\d+)` so editing the rest of the status text by
+hand never breaks the link. A ticked item shows as strikethrough on that
+row's A:B.
+
+**App → sheet**, pushed in the background right after the request's own
+commit (`FastAPI BackgroundTasks`, its own DB session, never blocking or
+failing the request): a new item appends a row (skipped while already
+checked); an amount change updates B; ticking/unticking toggles the
+strikethrough and I's status; a name edit updates A; removing an item or
+"Clear ticked" deletes its row. An item marked **detached** (its sheet row
+was found gone during a reconcile) is never pushed again.
+
+**Sheet → app**, only on demand — `POST /shopping/sheet-sync`, no cron, no
+polling — a full reconcile: link or import unlinked rows (same-name
+unchecked app item wins over creating a duplicate; an amount in B is
+parsed the same way a typed shopping line is, unparseable or blank
+defaulting to quantity 1, same as `POST /shopping`); tick off and detach
+any linked app item whose row vanished from the sheet; mark a row whose id
+isn't a real app item `missing in app`; then push anything still owed
+(new unchecked items, dirty linked ones). Returns
+`{imported, linked, ticked, pushed, deleted, errors}`.
+
+**The hard rule: the app never deletes a sheet row except by re-reading
+column I fresh and matching an item's id exactly**, never by a
+remembered row number, and never a row with an empty or unparseable I.
+Deletions happen bottom-up. If a deletion can't be performed (the Sheets
+API errors), it's recorded as a `SheetPendingDelete` and retried on the
+next on-demand sync rather than silently dropped or force-retried inline.
+Every path that removes a `ShoppingItem` — single delete, clear-checked —
+goes through this one function (`sheet_sync.delete_items_from_sheet`);
+nothing else in the codebase deletes a sheet row.
+
 ## Prepared log
 
 Recording a cook appends a dated entry, optionally with a 1–5 rating and a

@@ -6,6 +6,7 @@ import {
   deleteShoppingItem,
   getShoppingList,
   listIngredients,
+  syncSheet,
   uncheckAllShopping,
   updateMe,
   updateShoppingItem,
@@ -90,6 +91,11 @@ export default function ShoppingListPage() {
   const [printing, setPrinting] = useState(false)
   // Reverts on its own after a beat — see copyForSpreadsheet.
   const [copied, setCopied] = useState(false)
+
+  // Pulls the sheet's own edits into the app — see syncNow. Only offered
+  // when the backend has a Google Sheet configured (GET /auth/config).
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState(null)
 
   useEffect(() => {
     const before = () => setPrinting(true)
@@ -405,6 +411,33 @@ export default function ShoppingListPage() {
     }
   }
 
+  /** Full two-way reconcile with the Google Sheet (see backend/sheet_sync.py)
+   * — the only way the sheet's own edits (a row added, ticked, or deleted by
+   * hand there) ever reach the app, since sync is on-demand, not polled. */
+  const syncNow = async () => {
+    setSyncing(true)
+    setSyncMessage(null)
+    try {
+      const result = await syncSheet()
+      const parts = [
+        result.imported && `${result.imported} imported`,
+        result.linked && `${result.linked} linked`,
+        result.ticked && `${result.ticked} ticked`,
+        result.pushed && `${result.pushed} pushed`,
+        result.deleted && `${result.deleted} deleted`,
+      ].filter(Boolean)
+      setSyncMessage(`Synced${parts.length ? ` — ${parts.join(', ')}` : ' — nothing to do'}`)
+      await load()
+      // After `load` (which clears any previous error on success) so a
+      // sync-only error — the sheet call failed but the list is fine —
+      // still reaches the banner instead of being wiped straight back out.
+      if (result.errors?.length) setError(result.errors.join('; '))
+    } catch (caught) {
+      setError(caught.message)
+    }
+    setSyncing(false)
+  }
+
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1 print:hidden">
@@ -431,6 +464,17 @@ export default function ShoppingListPage() {
             {copied ? 'Copied!' : 'Copy for spreadsheet'}
           </button>
         )}
+        {config?.sheet_sync_enabled && (
+          <button
+            type="button"
+            onClick={syncNow}
+            disabled={busy || offline || syncing}
+            className="rounded-lg border border-edge px-3 py-1 text-sm text-ink-muted hover:bg-soft disabled:opacity-50"
+          >
+            {syncing ? 'Syncing…' : 'Sync now'}
+          </button>
+        )}
+        {syncMessage && <p className="text-sm text-ink-muted print:hidden">{syncMessage}</p>}
         {displayList.total_cents !== null && remaining > 0 && (
           <p className="ml-auto text-sm text-ink-muted">
             <span className="font-medium text-ink">

@@ -7,7 +7,7 @@ it (SPEC.md "Visibility").
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sqlmodel import Session, or_, select
 
 from ..cook_lists import (
@@ -33,6 +33,7 @@ from ..models import (
     utcnow,
 )
 from ..permissions import require_user_role
+from ..sheet_sync import sync_item
 from ..shopping import add_lines, read_items
 
 router = APIRouter(prefix="/cook-lists", tags=["cook-lists"])
@@ -321,6 +322,7 @@ def remove_recipe(
 @router.post("/{cook_list_id}/add-to-shopping", response_model=AddToShoppingResult)
 def add_to_shopping(
     cook_list_id: int,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     _user: User = Depends(require_user_role),
 ):
@@ -337,9 +339,16 @@ def add_to_shopping(
     items, added, merged, skipped = add_lines(
         session, lines, cook_list_id=cook_list.id
     )
+    # New items push as an append; a merge that grew an existing linked
+    # item's amount needs its row refreshed — same "mark dirty, let the
+    # background task sort out which" as PATCH /shopping/{id}.
+    for item in items:
+        item.sheet_dirty = True
+        session.add(item)
     session.commit()
     for item in items:
         session.refresh(item)
+        background_tasks.add_task(sync_item, item.id)
 
     return AddToShoppingResult(
         added=added,
