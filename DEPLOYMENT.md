@@ -176,8 +176,10 @@ Two-way sync between the shopping list and a Google Sheet — see SPEC.md
    ```
    GOOGLE_SHEET_ID=<the id from the sheet's URL>
    GOOGLE_SERVICE_ACCOUNT_FILE=/opt/recipeFlood/google-sa.json
-   GOOGLE_SHEET_TAB=Shopping   # optional — this is the default
    ```
+   `GOOGLE_SHEET_TAB` defaults to `Shopping`; set it only if the tab is
+   named differently. Keep comments on their own lines in `.env` —
+   systemd doesn't strip an inline `# ...` from a value.
 6. `systemctl restart recipeflood`. `GET /auth/config` should now report
    `sheet_sync_enabled: true`, and a "Sync now" button appears on the
    shopping list page.
