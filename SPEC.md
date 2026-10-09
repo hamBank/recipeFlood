@@ -112,6 +112,14 @@ automatically:
 5. Count × a weight from the built-in table → `estimated`
 6. Nothing matched → no weight (`unknown`)
 
+Steps 3 and 5 are for counts of the item itself (pieces, slices, cloves).
+A **sprig** is always 4 g whatever herb it's of (`estimated`), so "6 sprigs
+lemon thyme" is 24 g rather than six lemons. A **bunch** or **can** (also
+jar/packet) uses the pantry item's grams-per-piece if it has one and is
+otherwise left `unknown`, never weighed as one of its contents. Recipes
+saved before this rule can be re-derived with
+`scripts/reconvert_unit_weights.py` (`--dry-run` to preview).
+
 Estimates are marked with an asterisk in the UI and explained on hover.
 Adding a density to a pantry item re-derives every recipe line that uses
 it — except lines whose weight the recipe stated outright, which are never

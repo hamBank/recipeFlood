@@ -30,6 +30,10 @@ collection by a third, so the convention is explicit per recipe
 5. Count x a weight from PIECE_WEIGHTS below       -> `estimated`
 6. Nothing matched                                 -> `unknown`, no weight
 
+Steps 3 and 5 apply to units that count the item itself (piece, slice,
+clove). A sprig, bunch or can is a fixed-ish size whatever it's of, so
+those never borrow the named item's weight — see `to_grams`.
+
 Steps 4 and 5 are keyword lookups against the ingredient name and are
 deliberately marked `estimated`: they are good enough for a shopping list
 and a rough cost, and not good enough to present as fact.
@@ -168,6 +172,10 @@ DENSITIES: dict[str, float] = {
     "basil": 0.10, "rocket": 0.10, "spinach": 0.12, "baby spinach": 0.12,
 }
 
+#: Grams in one sprig of a herb, whichever herb. Generous for a single
+#: sprig, but it's what a recipe's "6 sprigs" costs at the shop.
+SPRIG_GRAMS = 4.0
+
 #: Grams for one of a countable thing, keyed by ingredient-name substring.
 #: Same longest-key-wins rule as DENSITIES.
 PIECE_WEIGHTS: dict[str, float] = {
@@ -188,7 +196,7 @@ PIECE_WEIGHTS: dict[str, float] = {
     "bacon": 30.0, "rasher": 30.0, "sausage": 60.0,
     "chicken breast": 200.0, "chicken thigh": 100.0,
     "bread": 35.0, "tortilla": 45.0, "sheet": 170.0,
-    "bunch": 30.0, "sprig": 2.0, "can": 400.0, "tin": 400.0,
+    "bunch": 30.0, "sprig": SPRIG_GRAMS, "can": 400.0, "tin": 400.0,
 }
 
 #: Unicode vulgar fractions the blog uses inline (½ cup, ¼ tsp).
@@ -358,6 +366,22 @@ def to_grams(
             return round(millilitres * estimated, 3), WeightSource.estimated
         # No density anywhere: for water-like things 1ml ~ 1g is defensible,
         # but guessing that for an unknown solid is not. Leave it unset.
+        return None, WeightSource.unknown
+
+    if unit == MeasureUnit.sprig:
+        # The linked ingredient's grams_per_piece is one of *it* (a bunch or
+        # punnet of thyme), and the name lookup would weigh "lemon thyme"
+        # as a lemon. A sprig is a sprig.
+        return round(quantity * SPRIG_GRAMS, 3), WeightSource.estimated
+
+    if unit in (MeasureUnit.bunch, MeasureUnit.can):
+        # The linked ingredient's piece weight is trusted here — something
+        # bought by the bunch or can records what one weighs — but never
+        # the name lookup, which gives one tomato for "1 can tomatoes".
+        # No fixed fallback either: `can` also stands in for jar and
+        # packet, so 400g would make "1 packet yeast" 400g.
+        if grams_per_piece:
+            return round(quantity * grams_per_piece, 3), WeightSource.converted
         return None, WeightSource.unknown
 
     if unit in COUNT_UNITS:
