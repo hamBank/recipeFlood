@@ -101,6 +101,33 @@ class TestToGrams:
         grams, source = to_grams(2, MeasureUnit.piece, "brown onion")
         assert (grams, source) == (300.0, WeightSource.estimated)
 
+    def test_a_sprig_is_weighed_as_a_sprig_not_as_its_name(self):
+        """"Lemon thyme" contains "lemon": weighing the sprig by name made
+        6 sprigs 600g, six whole lemons."""
+        grams, source = to_grams(6, MeasureUnit.sprig, "lemon thyme")
+        assert (grams, source) == (24.0, WeightSource.estimated)
+
+    def test_a_sprig_ignores_the_linked_ingredients_piece_weight(self):
+        # The pantry's piece weight for thyme is a bunch or punnet of it.
+        grams, _ = to_grams(2, MeasureUnit.sprig, "thyme", grams_per_piece=30)
+        assert grams == 8.0
+
+    def test_a_can_is_not_weighed_as_one_of_its_contents(self):
+        assert to_grams(1, MeasureUnit.can, "tomatoes") == (None, WeightSource.unknown)
+
+    def test_a_can_or_bunch_uses_the_linked_piece_weight(self):
+        assert to_grams(2, MeasureUnit.can, "tomatoes", grams_per_piece=400) == (
+            800.0,
+            WeightSource.converted,
+        )
+        assert to_grams(1, MeasureUnit.bunch, "parsley", grams_per_piece=60) == (
+            60.0,
+            WeightSource.converted,
+        )
+
+    def test_a_bunch_is_not_weighed_by_its_name(self):
+        assert to_grams(1, MeasureUnit.bunch, "lemon thyme") == (None, WeightSource.unknown)
+
     def test_unknown_solid_in_cups_is_not_guessed_as_water(self):
         # Assuming 1ml = 1g for an unrecognised solid would quietly invent
         # a weight. Better to report that we don't know.
