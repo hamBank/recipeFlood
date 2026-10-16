@@ -265,6 +265,7 @@ def reconcile(session: Session) -> dict:
         writes: dict[int, dict[str, str]] = {}
         strike_on: list[int] = []
         strike_off: list[int] = []
+        restyled: list[ShoppingItem] = []  # items whose strikethrough is in strike_on/off
         imported = linked = ticked = pushed = 0
 
         # Step 2: unlinked rows -> link to a same-name unchecked, not-yet-
@@ -370,13 +371,25 @@ def reconcile(session: Session) -> dict:
                     {"A": item.name, "B": amount_text(item), "I": _status_cell(item.id, status)}
                 )
                 (strike_on if item.is_checked else strike_off).append(row_number)
+                restyled.append(item)
                 item.sheet_dirty = False
                 session.add(item)
                 pushed += 1
 
-        deleted = 0
         try:
             client.write_cells(writes)
+        except Exception as exc:
+            # Nothing reached the sheet, so none of the links, imports or
+            # appends decided above are real: committing them would leave
+            # items "linked" to rows that carry no rf: id, and the next sync
+            # would tick those items off (step 3) and re-import the rows as
+            # duplicates (step 2). Undo the lot and let the next sync redo it.
+            logger.exception("Sheet write failed during sync")
+            session.rollback()
+            return {**empty, "errors": [str(exc)]}
+
+        deleted = 0
+        try:
             if strike_on:
                 client.set_strikethrough(strike_on, True)
             if strike_off:
@@ -389,13 +402,22 @@ def reconcile(session: Session) -> dict:
                     if pending is not None:
                         session.delete(pending)
         except Exception as exc:
-            logger.exception("Sheet write failed during sync")
-            session.commit()  # keep the imports/links/ticks already decided
+            # The cell writes above landed, so every rf: id this pass wrote
+            # is on the sheet and the links/imports/appends are real; only
+            # the formatting or the retried deletes didn't happen. Keep the
+            # rest; re-dirty the restyled items so the next sync reapplies
+            # their strikethrough, and an undone delete is still queued in
+            # SheetPendingDelete.
+            logger.exception("Sheet formatting or row deletion failed during sync")
+            for item in restyled:
+                item.sheet_dirty = True
+                session.add(item)
+            session.commit()
             return {
                 "imported": imported,
                 "linked": linked,
                 "ticked": ticked,
-                "pushed": 0,
+                "pushed": pushed,
                 "deleted": deleted,
                 "errors": [str(exc)],
             }

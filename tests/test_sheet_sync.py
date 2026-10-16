@@ -167,6 +167,65 @@ class TestPush:
         assert client.get("/shopping").json()["items"][0]["name"] == "milk"
 
 
+class TestFailedSyncWrite:
+    """A sync whose sheet write fails must leave nothing half-linked: the
+    rf: ids never reached column I, so the next sync has to start over
+    rather than tick items off and re-import rows as duplicates."""
+
+    def test_a_failed_write_ticks_nothing_and_duplicates_nothing_next_time(
+        self, client, sheet, session, monkeypatch
+    ):
+        # An app item that never reached the sheet: its background push
+        # failed, so it is still unlinked.
+        def boom(*args, **kwargs):
+            raise RuntimeError("503 from Google")
+
+        # Scoped patches: monkeypatch.undo() would also revert the app
+        # fixture's own patches (auth, engine) made through the same object.
+        with monkeypatch.context() as patch:
+            patch.setattr(sheet, "read_rows", boom)
+            milk = client.post("/shopping", json={"name": "milk"}).json()
+        sheet.seed(1, a="bread", b="1")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(sheet, "write_cells", boom)
+            failed = client.post("/shopping/sheet-sync").json()
+        assert failed["errors"] == ["503 from Google"]
+        assert (failed["imported"], failed["pushed"]) == (0, 0)
+
+        result = client.post("/shopping/sheet-sync").json()
+        assert result["errors"] == []
+        assert (result["imported"], result["pushed"], result["ticked"]) == (1, 1, 0)
+
+        items = {i["name"]: i for i in client.get("/shopping").json()["items"]}
+        assert sorted(items) == ["bread", "milk"]  # no duplicate bread
+        assert not items["milk"]["is_checked"]
+        assert _row_for(sheet, milk["id"])[0] is not None
+
+    def test_a_failed_strikethrough_is_retried_on_the_next_sync(
+        self, client, sheet, session, monkeypatch
+    ):
+        item = client.post("/shopping", json={"name": "milk"}).json()
+        row, _entry = _row_for(sheet, item["id"])
+        stored = session.get(ShoppingItem, item["id"])
+        stored.is_checked = True
+        stored.sheet_dirty = True
+        session.add(stored)
+        session.commit()
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("503 from Google")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(sheet, "set_strikethrough", boom)
+            failed = client.post("/shopping/sheet-sync").json()
+        assert failed["errors"] == ["503 from Google"]
+        assert "ticked" in sheet.rows[row]["i"]  # the cell write itself landed
+
+        client.post("/shopping/sheet-sync")
+        assert sheet.rows[row]["strike"] is True
+
+
 class TestDeletionSafety:
     def test_deletion_matches_a_fresh_id_read_not_a_cached_row(self, client, sheet):
         """If deletion trusted a remembered row number instead of re-reading

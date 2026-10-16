@@ -467,7 +467,11 @@ defaulting to quantity 1, same as `POST /shopping`); tick off and detach
 any linked app item whose row vanished from the sheet; mark a row whose id
 isn't a real app item `missing in app`; then push anything still owed
 (new unchecked items, dirty linked ones). Returns
-`{imported, linked, ticked, pushed, deleted, errors}`.
+`{imported, linked, ticked, pushed, deleted, errors}`. If the sheet write
+fails, the whole reconcile is undone (nothing imported, linked or ticked)
+and the next sync starts over, since none of its `rf:` ids reached column
+I; if only the strikethrough or a retried delete fails, the rest stands
+and that part is retried next sync.
 
 **The hard rule: the app never deletes a sheet row except by re-reading
 column I fresh and matching an item's id exactly**, never by a
