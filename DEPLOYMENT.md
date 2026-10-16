@@ -145,6 +145,16 @@ ID tokens against the client ID.
 Note that this only gates **editing**. Reading is public
 (`PUBLIC_READ=true`); set it to `false` to require sign-in for everything.
 
+## Desktop app origins (optional)
+
+`DESKTOP_ORIGINS` in `.env` lists the origins the desktop app's webview
+calls the API from, so the browser lets it. The default
+(`tauri://localhost,http://tauri.localhost,https://tauri.localhost`)
+covers the Linux and Windows builds. Set it empty to turn CORS off
+entirely. It is never `*`, and the web app doesn't need it (same origin).
+Keep the comment on its own line in `.env`; systemd doesn't strip an
+inline `# ...` from a value.
+
 ## Anthropic API key (optional)
 
 `ANTHROPIC_API_KEY` in `.env` enables the paste and photo importers. Leave

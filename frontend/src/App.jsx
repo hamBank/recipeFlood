@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { getAuthConfig, getMe, getToken, setToken } from './api'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
+import DesktopLoginPage from './pages/DesktopLoginPage'
 import RecipeListPage from './pages/RecipeListPage'
 import RecipeDetailPage from './pages/RecipeDetailPage'
 import RecipeFormPage from './pages/RecipeFormPage'
@@ -208,6 +209,11 @@ export default function App() {
               user ? <Navigate to="/" replace /> : <LoginPage config={config} onSignedIn={setUser} embedded />
             }
           />
+          {/* Not behind RequireAuth: it renders the sign-in itself, so the
+              ?port=&state= query survives the sign-in (no redirect to
+              /sign-in), including on a private site, where the gate above
+              shows the login at this same URL until the user is set. */}
+          <Route path="desktop-login" element={<DesktopLoginPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

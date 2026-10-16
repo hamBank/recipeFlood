@@ -58,11 +58,13 @@ Three things distinguish it from a plain CRUD app:
 
 ```
 backend/
-  main.py            # app factory, /health, /deploy webhook, /media mount,
+  main.py            # app factory, CORS for the desktop app, /health,
+                     # /deploy webhook, /media mount,
                      # static SPA catch-all
   config.py          # environment settings
   database.py        # engine setup (Postgres/SQLite), session dependency
   models.py          # SQLModel tables + API schemas (see DATA_MODEL.md)
+  desktop_handoff.py # single-use codes for the desktop app sign-in handoff
   auth.py            # JWT issue/verify, Google token verification,
                      # get_current_user AND get_optional_user
   permissions.py     # require_admin_role / require_user_role / allow_public_read
@@ -81,7 +83,8 @@ backend/
                       # nutrition/cost fallback and reclassification pass
   ai_import.py       # Claude prompt + response normalisation (3 callers)
   routers/
-    auth_router.py   # /auth/google, /auth/me, /auth/config
+    auth_router.py   # /auth/google, /auth/me, /auth/config,
+                     # /auth/desktop-handoff + /auth/desktop-exchange
     users.py         # /users admin management
     taxonomy.py      # /tags (sections are tags flagged for the nav)
     recipes.py       # /recipes CRUD, prepared log, image upload
@@ -118,7 +121,7 @@ frontend/
     api.js           # fetch wrapper + all endpoint helpers
     format.js        # display formatting (times, grams, money, fractions)
     themes.js        # light / dark / herb / berry
-    pages/           # RecipeList, RecipeDetail, RecipeForm, Import, Pantry, Login
+    pages/           # RecipeList, RecipeDetail, RecipeForm, Import, Pantry, Login, DesktopLogin
     components/      # Layout, RecipeCard, NutritionPanel, CostPanel,
                      # PreparedLog, IngredientEditor, ThemePicker
 tests/               # pytest (backend); frontend/src/**/*.test.{js,jsx} (vitest)

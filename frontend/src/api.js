@@ -74,6 +74,12 @@ const query = (params) => {
 export const getAuthConfig = () => apiFetch('/auth/config')
 export const loginWithGoogle = (credential) =>
   apiFetch('/auth/google', { method: 'POST', body: { credential } })
+// Desktop app sign-in (see SPEC.md "Desktop app sign-in"): the website
+// page calls desktopHandoff; the desktop app calls desktopExchange.
+export const desktopHandoff = ({ port, state }) =>
+  apiFetch('/auth/desktop-handoff', { method: 'POST', body: { port, state } })
+export const desktopExchange = ({ code, state }) =>
+  apiFetch('/auth/desktop-exchange', { method: 'POST', body: { code, state } })
 export const getMe = () => apiFetch('/auth/me')
 export const updateMe = (data) => apiFetch('/auth/me', { method: 'PATCH', body: data })
 

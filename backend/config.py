@@ -21,6 +21,11 @@ class Settings(BaseSettings):
 
     currency_symbol: str = "$"
 
+    # Origins the desktop app's webview calls the API from (see SPEC.md
+    # "Desktop app sign-in"): comma-separated, and an empty value turns
+    # CORS off entirely. The web app is same-origin and needs none of it.
+    desktop_origins: str = "tauri://localhost,http://tauri.localhost,https://tauri.localhost"
+
     # Temporary cleanup switch: lets the Pantry page select several rows
     # at once and merge them all into one in a single action, instead of
     # the normal one-pair-at-a-time flow. Off by default — flip it on for
@@ -53,15 +58,18 @@ class Settings(BaseSettings):
     google_sheet_tab: str = "Shopping"
 
     @field_validator(
-        "google_sheet_id", "google_service_account_file", "google_sheet_tab"
+        "google_sheet_id",
+        "google_service_account_file",
+        "google_sheet_tab",
+        "desktop_origins",
     )
     @classmethod
     def _strip_inline_comment(cls, value: str) -> str:
         # systemd's EnvironmentFile (how production loads .env) keeps an
         # inline "  # comment" as part of the value, so a tab named
         # "Shopping   # the default" would reach the Sheets API verbatim.
-        # None of these three values legitimately contains whitespace
-        # followed by "#".
+        # None of these values legitimately contains whitespace followed
+        # by "#".
         return re.sub(r"\s+#.*$", "", value).strip()
 
     # OpenAI Images API — used only by scripts/generate_recipe_images.py.

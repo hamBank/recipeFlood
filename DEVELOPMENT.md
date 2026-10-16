@@ -52,6 +52,7 @@ admin — never set in production.
 | `JWT_SECRET` | — | app token signing |
 | `ALLOWED_EMAILS` | — | comma-separated bootstrap allowlist (first admin) |
 | `DEPLOY_SECRET` | — | HMAC key for the `/deploy` webhook |
+| `DESKTOP_ORIGINS` | `tauri://localhost,http://tauri.localhost,https://tauri.localhost` | CORS origins for the desktop app; empty = CORS off |
 | `CURRENCY_SYMBOL` | `$` | display only |
 | `PANTRY_MULTI_MERGE` | `false` | `true` = temporary multi-select merge on the Pantry page — see "Finding duplicate pantry rows" |
 | `UNITS_SYSTEM` | `au` | `au` = 250ml cup / 20ml tbsp; `us` = 240ml / 15ml |
