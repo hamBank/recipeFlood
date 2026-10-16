@@ -43,6 +43,13 @@ export const loadQueue = () => readJSON(QUEUE_KEY, [])
 export const saveQueue = (queue) => writeJSON(QUEUE_KEY, queue)
 export const loadCachedList = () => readJSON(CACHE_KEY, null)
 export const saveCachedList = (list) => writeJSON(CACHE_KEY, list)
+export function clearCachedList() {
+  try {
+    localStorage.removeItem(CACHE_KEY)
+  } catch {
+    // storage unavailable: there is no cache to clear
+  }
+}
 
 /** A fresh negative id for an offline-added row — distinct from every id
  * the server has ever handed out (those start at 1) and from every other

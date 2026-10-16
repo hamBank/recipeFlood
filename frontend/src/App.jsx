@@ -13,11 +13,13 @@ import CookListsPage from './pages/CookListsPage'
 import CookListLatestPage from './pages/CookListLatestPage'
 import CookListDetailPage from './pages/CookListDetailPage'
 import ShoppingListPage from './pages/ShoppingListPage'
+import SettingsPage from './pages/SettingsPage'
+import { IS_DESKTOP } from './platform'
 
 const SessionContext = createContext({ config: null, user: null, setUser: () => {} })
 
-const CONFIG_CACHE_KEY = 'rf_auth_config'
-const USER_CACHE_KEY = 'rf_auth_user'
+export const CONFIG_CACHE_KEY = 'rf_auth_config'
+export const USER_CACHE_KEY = 'rf_auth_user'
 
 function cacheGet(key) {
   try {
@@ -116,13 +118,34 @@ export default function App() {
     cacheSet(USER_CACHE_KEY, next)
   }
 
+  // Desktop app only: a mistyped or unreachable server would otherwise
+  // strand the user on a screen with no way back to Settings, since the
+  // saved server survives restarts.
+  const changeServer = IS_DESKTOP ? (
+    <div className="mt-6">
+      <SettingsPage />
+    </div>
+  ) : null
+
   if (loading) return <Centered>Loading…</Centered>
-  if (error) return <Centered>{error}</Centered>
+  if (error)
+    return (
+      <Centered>
+        {error}
+        {changeServer}
+      </Centered>
+    )
 
   // With PUBLIC_READ off the whole site is allowlist-only, so an anonymous
   // visitor gets the sign-in page instead of an empty recipe grid.
   if (!user && config && !config.public_read) {
-    return <LoginPage config={config} onSignedIn={setUser} />
+    if (!IS_DESKTOP) return <LoginPage config={config} onSignedIn={setUser} />
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-page p-4">
+        <LoginPage config={config} onSignedIn={setUser} embedded />
+        {changeServer}
+      </div>
+    )
   }
 
   return (
@@ -214,6 +237,8 @@ export default function App() {
               /sign-in), including on a private site, where the gate above
               shows the login at this same URL until the user is set. */}
           <Route path="desktop-login" element={<DesktopLoginPage />} />
+          {/* Desktop app only: which server to talk to. */}
+          {IS_DESKTOP && <Route path="settings" element={<SettingsPage />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
