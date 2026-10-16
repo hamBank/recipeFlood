@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { formatMinutes, formatRelative } from '../format'
+import { mediaUrl } from '../platform'
 import QuickAddToCookList from './QuickAddToCookList'
 
 /** Placeholder for the ~99% of scraped recipes with no usable photo:
@@ -40,7 +41,7 @@ export default function RecipeCard({ recipe, cookList, onCookListChange }) {
 
         {recipe.image_path ? (
           <img
-            src={`/media/${recipe.image_path}`}
+            src={mediaUrl(recipe.image_path)}
             alt=""
             loading="lazy"
             className="h-40 w-full object-cover"

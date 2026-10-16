@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import RecipeCard from './RecipeCard'
 
 const base = {
@@ -28,6 +28,10 @@ const renderCard = (overrides = {}, cardProps = {}) =>
   )
 
 describe('RecipeCard', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('shows the title, section and time', () => {
     renderCard()
     expect(screen.getByText('Flax Bread')).toBeDefined()
@@ -61,6 +65,21 @@ describe('RecipeCard', () => {
     const { container } = renderCard({ image_path: 'recipes/flax-bread.jpg' })
     expect(container.querySelector('img').getAttribute('src')).toBe(
       '/media/recipes/flax-bread.jpg',
+    )
+  })
+
+  it('prefixes the server URL in the desktop build', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_TARGET', 'desktop')
+    vi.stubEnv('VITE_DEFAULT_SERVER_URL', 'https://server.example')
+    const { default: DesktopCard } = await import('./RecipeCard')
+    const { container } = render(
+      <MemoryRouter>
+        <DesktopCard recipe={{ ...base, image_path: 'recipes/flax-bread.jpg' }} />
+      </MemoryRouter>,
+    )
+    expect(container.querySelector('img').getAttribute('src')).toBe(
+      'https://server.example/media/recipes/flax-bread.jpg',
     )
   })
 

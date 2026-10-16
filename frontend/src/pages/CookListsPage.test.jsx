@@ -1,12 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '../api'
 import CookListsPage from './CookListsPage'
 
 vi.mock('../api', () => ({
   createCookList: vi.fn(),
   listCookLists: vi.fn(),
+}))
+
+const navigateSpy = vi.fn()
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useNavigate: () => navigateSpy,
 }))
 
 const row = (overrides = {}) => ({
@@ -25,21 +31,9 @@ const renderPage = () =>
     </MemoryRouter>
   )
 
-const originalLocation = window.location
-let assignSpy
-
 beforeEach(() => {
   vi.clearAllMocks()
   api.listCookLists.mockResolvedValue({ items: [], total: 0 })
-  assignSpy = vi.fn()
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    value: { ...originalLocation, assign: assignSpy },
-  })
-})
-
-afterEach(() => {
-  Object.defineProperty(window, 'location', { configurable: true, value: originalLocation })
 })
 
 describe('CookListsPage', () => {
@@ -104,7 +98,7 @@ describe('CookListsPage', () => {
     await waitFor(() => expect(api.listCookLists).toHaveBeenCalled())
 
     fireEvent.click(screen.getByRole('button', { name: 'New list' }))
-    await waitFor(() => expect(assignSpy).toHaveBeenCalledWith('/cooking/99'))
+    await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith('/cooking/99'))
   })
 
   it('shows an error and re-enables the button when creation fails', async () => {

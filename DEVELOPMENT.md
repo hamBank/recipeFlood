@@ -486,6 +486,31 @@ fallback to `index.html`). It's deliberately *not* used for API data, so
 the offline behaviour stays visible in `offlineQueue.js` rather than living
 inside an opaque Workbox runtime-caching rule.
 
+## Desktop build (frontend side)
+
+The same React app can be bundled for a desktop shell (Tauri, added in a
+later change) that talks to a remote Recipe Flood server instead of being
+served by it:
+
+```bash
+cd frontend
+npm run build:desktop   # -> desktop/dist/ (gitignored); `npm run build` is unchanged
+```
+
+`vite build --mode desktop` loads `frontend/.env.desktop` (committed, no
+secrets: `VITE_TARGET=desktop` and the default `VITE_DEFAULT_SERVER_URL`),
+and `vite.config.js` then switches the output to `desktop/dist/`, uses
+relative `./` asset URLs, and turns the PWA plugin off (no service worker).
+`main.jsx` uses `HashRouter` instead of `BrowserRouter`, since there is no
+server to fall back to `index.html`.
+
+`frontend/src/platform.js` is the one place that knows the target. On the
+web it adds nothing, so every API and `/media` URL stays root-relative; on
+desktop it prefixes the server URL (saved under `rf_server_url`, else the
+default). Build API and image URLs with `apiUrl()` / `mediaUrl()` rather
+than hard-coding a leading `/`, and navigate with the router (`Link`,
+`useNavigate`) rather than `href="/..."` or `window.location`.
+
 ## Tests
 
 ```bash

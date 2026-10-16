@@ -23,6 +23,7 @@ import {
   groupIngredients,
   WEIGHT_SOURCE_LABEL,
 } from '../format'
+import { mediaUrl } from '../platform'
 
 function Meta({ label, children }) {
   if (!children) return null
@@ -200,7 +201,7 @@ export default function RecipeDetailPage() {
         {recipe.image_path ? (
           <div className="relative">
             <img
-              src={`/media/${recipe.image_path}`}
+              src={mediaUrl(recipe.image_path)}
               alt=""
               className="max-h-96 w-full rounded-xl object-cover"
             />

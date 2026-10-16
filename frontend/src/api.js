@@ -1,3 +1,5 @@
+import { apiUrl } from './platform'
+
 const TOKEN_KEY = 'rf_token'
 
 export function getToken() {
@@ -30,7 +32,7 @@ async function toError(response) {
 
 export async function apiFetch(path, { method = 'GET', body } = {}) {
   const headers = authHeaders(body !== undefined ? { 'Content-Type': 'application/json' } : {})
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -41,7 +43,7 @@ export async function apiFetch(path, { method = 'GET', body } = {}) {
 
 /** Paged GET: resolves to { items, total } using the X-Total-Count header. */
 export async function apiFetchPaged(path) {
-  const response = await fetch(path, { headers: authHeaders() })
+  const response = await fetch(apiUrl(path), { headers: authHeaders() })
   if (!response.ok) throw await toError(response)
   return {
     items: await response.json(),
@@ -50,7 +52,7 @@ export async function apiFetchPaged(path) {
 }
 
 async function apiUpload(path, formData) {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method: 'POST',
     headers: authHeaders(), // no Content-Type: the browser sets the boundary
     body: formData,
