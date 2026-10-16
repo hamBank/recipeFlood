@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { createCookList, listCookLists } from '../api'
 import { formatDate } from '../format'
 
@@ -14,6 +14,7 @@ const PAGE_SIZE = 30
  * the list ever gets hard to scan.
  */
 export default function CookListsPage() {
+  const navigate = useNavigate()
   const [lists, setLists] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -50,7 +51,7 @@ export default function CookListsPage() {
     setCreating(true)
     try {
       const created = await createCookList({})
-      window.location.assign(`/cooking/${created.id}`)
+      navigate(`/cooking/${created.id}`)
     } catch (caught) {
       setError(caught.message)
       setCreating(false)

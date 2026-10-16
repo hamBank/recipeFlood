@@ -127,3 +127,36 @@ describe('typed endpoints', () => {
     expect(options.headers['Content-Type']).toBeUndefined()
   })
 })
+
+describe('desktop build', () => {
+  // The server prefix is decided when platform.js loads, so import a fresh
+  // api module with the desktop target stubbed in.
+  let desktop
+  beforeEach(async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_TARGET', 'desktop')
+    vi.stubEnv('VITE_DEFAULT_SERVER_URL', 'https://server.example')
+    desktop = await import('./api')
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('apiFetch prefixes the server URL', async () => {
+    global.fetch.mockResolvedValue(jsonResponse({}))
+    await desktop.apiFetch('/recipes/x')
+    expect(global.fetch.mock.calls[0][0]).toBe('https://server.example/recipes/x')
+  })
+
+  it('apiFetchPaged prefixes the server URL', async () => {
+    global.fetch.mockResolvedValue(jsonResponse([]))
+    await desktop.apiFetchPaged('/recipes')
+    expect(global.fetch.mock.calls[0][0]).toBe('https://server.example/recipes')
+  })
+
+  it('uploads prefix the server URL', async () => {
+    global.fetch.mockResolvedValue(jsonResponse({}))
+    await desktop.uploadRecipeImage('flax-bread', new File(['x'], 'p.jpg'))
+    expect(global.fetch.mock.calls[0][0]).toBe('https://server.example/recipes/flax-bread/image')
+  })
+})

@@ -19,51 +19,58 @@ const apiPrefixes = [
   '/media',
 ]
 
-export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-    // Installability (manifest + home-screen icon) and app-shell caching
-    // only — precache the built JS/CSS/HTML so a reload works with no
-    // network. Deliberately *not* used for API data: the shopping list's
-    // offline support (src/offlineQueue.js) is a hand-rolled localStorage
-    // outbox instead, so it stays visible and debuggable rather than
-    // living inside a Workbox runtime-caching rule.
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
-      manifest: {
-        name: 'Recipe Flood',
-        short_name: 'Recipe Flood',
-        description: 'A self-hosted family recipe manager',
-        theme_color: '#c2410c',
-        background_color: '#faf7f2',
-        display: 'standalone',
-        start_url: '/',
-        icons: [
-          { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-        ],
-      },
-    }),
-  ],
-  build: {
-    outDir: '../backend/static',
-    emptyOutDir: true,
-  },
-  server: {
-    proxy: Object.fromEntries(apiPrefixes.map((p) => [p, 'http://localhost:8000'])),
-  },
-  test: {
-    environment: 'jsdom',
-    // Testing Library only registers its automatic between-test unmount when
-    // a global afterEach exists. Without this, each render stacks on top of
-    // the last and single-element queries start finding several.
-    globals: true,
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'html'],
-      include: ['src/**'],
-      exclude: ['src/main.jsx', 'src/**/*.test.{js,jsx}'],
+export default defineConfig(({ mode }) => {
+  // `vite build --mode desktop` bundles the same app for the Tauri shell.
+  const desktop = mode === 'desktop'
+  return {
+    plugins: [
+      react(),
+      tailwindcss(),
+      // Installability (manifest + home-screen icon) and app-shell caching
+      // only — precache the built JS/CSS/HTML so a reload works with no
+      // network. Deliberately *not* used for API data: the shopping list's
+      // offline support (src/offlineQueue.js) is a hand-rolled localStorage
+      // outbox instead, so it stays visible and debuggable rather than
+      // living inside a Workbox runtime-caching rule.
+      VitePWA({
+        disable: desktop,
+        registerType: 'autoUpdate',
+        includeAssets: ['favicon.svg'],
+        manifest: {
+          name: 'Recipe Flood',
+          short_name: 'Recipe Flood',
+          description: 'A self-hosted family recipe manager',
+          theme_color: '#c2410c',
+          background_color: '#faf7f2',
+          display: 'standalone',
+          start_url: '/',
+          icons: [
+            { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          ],
+        },
+      }),
+    ],
+    // Relative asset URLs for desktop: the page isn't served from a domain root.
+    base: desktop ? './' : '/',
+    build: {
+      outDir: desktop ? '../desktop/dist' : '../backend/static',
+      emptyOutDir: true,
     },
-  },
+    server: {
+      proxy: Object.fromEntries(apiPrefixes.map((p) => [p, 'http://localhost:8000'])),
+    },
+    test: {
+      environment: 'jsdom',
+      // Testing Library only registers its automatic between-test unmount when
+      // a global afterEach exists. Without this, each render stacks on top of
+      // the last and single-element queries start finding several.
+      globals: true,
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'html'],
+        include: ['src/**'],
+        exclude: ['src/main.jsx', 'src/**/*.test.{js,jsx}'],
+      },
+    },
+  }
 })

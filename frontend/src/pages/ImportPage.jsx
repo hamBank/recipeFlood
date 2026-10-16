@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { getImportConfig, importImage, importPaste } from '../api'
 
 /**
@@ -56,9 +56,9 @@ export default function ImportPage() {
           AI import is not configured on this server. Set{' '}
           <code className="rounded bg-card px-1">ANTHROPIC_API_KEY</code> in the
           environment file and restart (see DEPLOYMENT.md). You can still{' '}
-          <a href="/new" className="text-accent hover:underline">
+          <Link to="/new" className="text-accent hover:underline">
             add a recipe by hand
-          </a>
+          </Link>
           .
         </p>
       )}
