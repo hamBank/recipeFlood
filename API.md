@@ -25,7 +25,13 @@ Auth is a bearer JWT: `Authorization: Bearer <token>` from `POST /auth/google`.
 |---|---|---|---|
 | GET | `/auth/config` | public | `{auth_enabled, google_client_id, public_read, currency_symbol, units_system}` |
 | POST | `/auth/google` | public | Body `{credential}` → `{token, user}` |
+| POST | `/auth/desktop-handoff` | user | Body `{port, state}` (`port` 1024-65535, `state` `^[A-Za-z0-9_-]{32,128}$`, else 422) → `{redirect_url}`: `http://127.0.0.1:{port}/callback?code=…&state=…`, always loopback. Single-use code, 120 s |
+| POST | `/auth/desktop-exchange` | public | Body `{code, state}` → `{token, user}`. 401 if the code is unknown, used, expired or the state differs (a wrong state burns the code); 403 if the account is now deactivated |
 | GET | `/auth/me` | user | The signed-in user |
+
+The two `desktop-*` routes are the desktop app's sign-in handoff; see
+SPEC.md "Desktop app sign-in". Responses also carry CORS headers for the
+origins in `DESKTOP_ORIGINS` (never `*`), with `X-Total-Count` exposed.
 
 ## Users
 

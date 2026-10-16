@@ -18,6 +18,40 @@ Cost is the only thing hidden from the public. Nutrition is not sensitive
 and is shown to everyone. Setting `PUBLIC_READ=false` puts the whole site
 behind the allowlist without any code change.
 
+## Desktop app sign-in
+
+The desktop app can't use Google sign-in itself: Google only works from
+origins registered for the client ID, and a desktop webview's origin
+(`tauri://localhost` and friends) can't be. So it borrows the website:
+
+1. The app picks a random `state`, starts a listener on a free loopback
+   port, and opens `/desktop-login?port=…&state=…` in the user's normal
+   browser.
+2. The user signs in with Google there as usual. The page then asks
+   "Sign in to the desktop app as *email*?" and only on **Continue** calls
+   `POST /auth/desktop-handoff`, which returns a loopback URL carrying a
+   single-use code.
+3. The browser goes to `http://127.0.0.1:{port}/callback?code=…&state=…`;
+   the app checks `state` and calls `POST /auth/desktop-exchange` to trade
+   the code for the usual 30-day token.
+
+Why each guard exists:
+
+- **Explicit Continue click**: a crafted link can't silently mint a code
+  for whoever happens to be signed in.
+- **The backend builds the URL, host always `127.0.0.1`**: no open
+  redirect, so the code can only reach a process on the user's own machine.
+  Ports below 1024 are refused.
+- **The token never appears in a URL**; only the code does. It is
+  single-use, expires after 120 seconds, and is held in memory (so a
+  server restart just means trying again).
+- **Bound to `state`**: a code is useless to anything that didn't see the
+  state the app generated. Redeeming with the wrong state still burns the
+  code, so it can't be guessed at.
+- **CORS** allows only the origins in `DESKTOP_ORIGINS`, never `*`, with
+  no cookies (auth is a bearer header). `X-Total-Count` is exposed so
+  paging works cross-origin.
+
 ## A recipe
 
 | Field | Notes |

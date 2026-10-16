@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
+from .. import desktop_handoff
 from ..auth import (
     allowed_emails,
     create_access_token,
@@ -23,6 +24,18 @@ class GoogleLoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     token: str
     user: UserRead
+
+
+class DesktopHandoffRequest(BaseModel):
+    # Unprivileged ports only, so the handoff can't be aimed at a system
+    # service; `state` is the desktop app's own random nonce.
+    port: int = Field(ge=1024, le=65535)
+    state: str = Field(pattern=r"^[A-Za-z0-9_-]{32,128}$")
+
+
+class DesktopExchangeRequest(BaseModel):
+    code: str
+    state: str
 
 
 @router.get("/config")
@@ -74,6 +87,41 @@ def google_login(body: GoogleLoginRequest, session: Session = Depends(get_sessio
     session.add(user)
     session.commit()
     session.refresh(user)
+    return LoginResponse(token=create_access_token(user), user=user)
+
+
+@router.post("/desktop-handoff")
+def desktop_handoff_start(
+    body: DesktopHandoffRequest, user: User = Depends(get_current_user)
+):
+    """Step 1 of the desktop app's sign-in: a signed-in user, having
+    clicked Continue on the website, gets a single-use code addressed to
+    the app's loopback listener. The URL is built here, not taken from the
+    client, so the host is always 127.0.0.1 — no open redirect, and the
+    code can only reach a process on the user's own machine."""
+    code = desktop_handoff.issue(user.id, body.state)
+    return {
+        "redirect_url": f"http://127.0.0.1:{body.port}/callback"
+        f"?code={code}&state={body.state}"
+    }
+
+
+@router.post("/desktop-exchange", response_model=LoginResponse)
+def desktop_exchange(
+    body: DesktopExchangeRequest, session: Session = Depends(get_session)
+):
+    """Step 2: the desktop app trades its code (plus the state it
+    generated) for the same token `POST /auth/google` returns. Public by
+    necessity — the code is the credential."""
+    user_id = desktop_handoff.redeem(body.code, body.state)
+    if user_id is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Invalid or expired sign-in code"
+        )
+    user = session.get(User, user_id)
+    # Deactivated in the (up to two-minute) gap since the code was issued.
+    if user is None or not user.is_active:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is deactivated")
     return LoginResponse(token=create_access_token(user), user=user)
 
 

@@ -4,9 +4,12 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from starlette.datastructures import Headers
+from starlette.types import Receive, Scope, Send
 
 from .config import settings
 from .database import engine
@@ -27,6 +30,23 @@ STATIC_DIR = Path(__file__).parent / "static"
 #: Never served as the app shell, even when a browser navigates straight to
 #: them — the real health check / webhook / FastAPI's own interactive docs.
 _API_ONLY_PATHS = {"/health", "/deploy", "/docs", "/redoc", "/openapi.json"}
+
+
+class _CrossOriginOnlyCORS(CORSMiddleware):
+    """CORSMiddleware that leaves a request with no `Origin` header alone.
+
+    Starlette's own version appends `Vary: Origin` to every response, even
+    one with nothing cross-origin about it. The web app's same-origin GETs
+    carry no `Origin`, and they (the app shell's `Vary: Accept` above in
+    particular) must come out byte-for-byte as they did before CORS
+    existed here.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and "origin" not in Headers(scope=scope):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
 
 
 def _static_file(path: str) -> Path | None:
@@ -127,6 +147,31 @@ def create_app() -> FastAPI:
             ):
                 return _index_response()
             return await call_next(request)
+
+    # Added after the middleware above on purpose: Starlette makes the last
+    # one added the outermost, so CORS answers a preflight OPTIONS itself
+    # and stamps its headers on every response, including the app shell,
+    # before anything else sees the request. (The shell middleware only
+    # acts on GET, so it would ignore OPTIONS anyway.) Only the desktop
+    # app's origins are listed, never "*", and credentials stay off: auth
+    # is a bearer header, not a cookie.
+    desktop_origins = [
+        origin.strip()
+        for origin in settings.desktop_origins.split(",")
+        if origin.strip()
+    ]
+    if desktop_origins:
+        app.add_middleware(
+            _CrossOriginOnlyCORS,
+            allow_origins=desktop_origins,
+            allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
+            allow_headers=["Authorization", "Content-Type"],
+            # Cross-origin, a response hides every header but the basics;
+            # the frontend's paging reads X-Total-Count (api.js).
+            expose_headers=["X-Total-Count"],
+            allow_credentials=False,
+            max_age=600,
+        )
 
     app.include_router(auth_router.router)
     app.include_router(users.router)
