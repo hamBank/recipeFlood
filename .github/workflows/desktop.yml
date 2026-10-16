@@ -50,12 +50,24 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         with:
           projectPath: desktop
+      - name: Check every installer type was built
+        # upload-artifact's if-no-files-found only fails when *no* pattern
+        # matches, so a target that silently stopped being produced (an
+        # .msi, say, beside a good .exe) would otherwise pass unnoticed.
+        shell: bash
+        run: |
+          cd desktop/src-tauri/target/release/bundle
+          if [ "$RUNNER_OS" = "Windows" ]; then expected="nsis/*.exe msi/*.msi"
+          else expected="deb/*.deb appimage/*.AppImage"; fi
+          for pattern in $expected; do
+            compgen -G "$pattern" > /dev/null || { echo "::error::no $pattern was built"; exit 1; }
+            echo "found $pattern"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}
           # Only the installers, not the bundler's intermediate AppDir and
-          # staging folders. An empty match is an error, so a target that
-          # silently stopped being produced fails the job.
+          # staging folders.
           path: |
             desktop/src-tauri/target/release/bundle/**/*.deb
             desktop/src-tauri/target/release/bundle/**/*.AppImage
