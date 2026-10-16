@@ -59,3 +59,7 @@ data/afcd/
 data/recipe_history*.csv
 data/recipe_html/
 data/recipes_to_look_up.csv
+
+# Tauri build output
+desktop/src-tauri/target/
+desktop/src-tauri/gen/

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { loginWithGoogle, setToken } from '../api'
+import { IS_DESKTOP } from '../platform'
 
 /**
  * Google Identity Services sign-in.
@@ -14,6 +15,9 @@ export default function LoginPage({ config, onSignedIn, embedded = false }) {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
+    // The desktop webview's origin can't be registered with Google, so it
+    // signs in through the browser instead (see below).
+    if (IS_DESKTOP) return
     if (!config?.auth_enabled || !config?.google_client_id) return
     let cancelled = false
 
@@ -56,6 +60,19 @@ export default function LoginPage({ config, onSignedIn, embedded = false }) {
     }
   }, [config, onSignedIn])
 
+  const signInWithBrowser = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      // Dynamic, so the Tauri code stays out of the web bundle.
+      const { browserSignIn } = await import('../desktop')
+      onSignedIn(await browserSignIn())
+    } catch (caught) {
+      setError(caught.message || String(caught))
+      setBusy(false)
+    }
+  }
+
   const body = (
     <div className="mx-auto max-w-md rounded-xl border border-edge bg-card p-8 text-center shadow-sm">
       <h1 className="text-xl font-bold text-ink">
@@ -72,8 +89,31 @@ export default function LoginPage({ config, onSignedIn, embedded = false }) {
         </p>
       )}
 
-      <div ref={buttonRef} className="mt-6 flex justify-center" />
-      {busy && <p className="mt-4 text-sm text-ink-muted">Signing in…</p>}
+      {IS_DESKTOP ? (
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={signInWithBrowser}
+            disabled={busy}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-[color:var(--accent-ink)] disabled:opacity-50"
+          >
+            Sign in with your browser
+          </button>
+          <p className="mt-3 text-xs text-ink-muted">
+            Your browser will open Recipe Flood; sign in there and come back.
+          </p>
+          {busy && (
+            <p className="mt-4 text-sm text-ink-muted">
+              Waiting for you to finish signing in in your browser…
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
+          <div ref={buttonRef} className="mt-6 flex justify-center" />
+          {busy && <p className="mt-4 text-sm text-ink-muted">Signing in…</p>}
+        </>
+      )}
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
     </div>
   )

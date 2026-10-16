@@ -121,9 +121,15 @@ frontend/
     api.js           # fetch wrapper + all endpoint helpers
     format.js        # display formatting (times, grams, money, fractions)
     themes.js        # light / dark / herb / berry
-    pages/           # RecipeList, RecipeDetail, RecipeForm, Import, Pantry, Login, DesktopLogin
+    desktop.js       # desktop-only (dynamic import): browser sign-in, external links
+    platform.js      # web vs desktop target, server URL
+    pages/           # RecipeList, RecipeDetail, RecipeForm, Import, Pantry, Login, DesktopLogin,
+                     # Settings (desktop only)
     components/      # Layout, RecipeCard, NutritionPanel, CostPanel,
                      # PreparedLog, IngredientEditor, ThemePicker
+desktop/             # Tauri 2 shell for Windows/Linux (see DEVELOPMENT.md "Desktop app")
+  src-tauri/         # Rust: loopback sign-in listener (login.rs), plugins, tauri.conf.json
+  dist/              # the build:desktop bundle (gitignored)
 tests/               # pytest (backend); frontend/src/**/*.test.{js,jsx} (vitest)
 deploy.sh            # idempotent server provisioning + --update mode
 ```

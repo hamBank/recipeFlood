@@ -489,8 +489,8 @@ inside an opaque Workbox runtime-caching rule.
 
 ## Desktop build (frontend side)
 
-The same React app can be bundled for a desktop shell (Tauri, added in a
-later change) that talks to a remote Recipe Flood server instead of being
+The same React app can be bundled for a desktop shell (Tauri, see **Desktop
+app** below) that talks to a remote Recipe Flood server instead of being
 served by it:
 
 ```bash
@@ -511,6 +511,48 @@ desktop it prefixes the server URL (saved under `rf_server_url`, else the
 default). Build API and image URLs with `apiUrl()` / `mediaUrl()` rather
 than hard-coding a leading `/`, and navigate with the router (`Link`,
 `useNavigate`) rather than `href="/..."` or `window.location`.
+
+## Desktop app
+
+`desktop/` is a [Tauri 2](https://tauri.app) shell (Windows and Linux) around
+the `build:desktop` bundle. Rust holds only what a webview can't do: the
+loopback listener for browser sign-in (`src-tauri/src/login.rs`) and the
+opener and window-state plugins. Everything else is the React app, using
+`frontend/src/desktop.js` (loaded only on desktop, by dynamic import, so the
+web bundle has no Tauri code) for the bits that need the shell.
+
+Prerequisites:
+
+- **Rust** (stable, via [rustup](https://rustup.rs)) and Node 20+.
+- **Linux:** the WebKitGTK build packages:
+  ```bash
+  sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential \
+    libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+  ```
+- **Windows:** the Visual Studio C++ build tools (MSVC). WebView2 already
+  ships with Windows 10/11.
+
+```bash
+cd desktop
+npm install
+npm run dev                         # app + frontend dev server (HMR) on :5173
+npx tauri build --bundles deb       # release binary + .deb, under src-tauri/target/
+npx tauri build --no-bundle         # just the binary: src-tauri/target/release/recipe-flood
+(cd src-tauri && cargo test)        # the Rust tests
+```
+
+`dev` and `build` run the frontend build for you (`beforeDevCommand` /
+`beforeBuildCommand` in `src-tauri/tauri.conf.json`), writing to the
+gitignored `desktop/dist/`. To point a build at a local backend, set
+`VITE_DEFAULT_SERVER_URL=http://localhost:8000` when building; the app's
+**Settings** page (desktop only) changes the server afterwards. Changing it
+signs you out and clears the cached config and shopping list, and is refused
+while offline shopping changes are still waiting to sync.
+
+Keep the version in `tauri.conf.json`, `desktop/package.json` and
+`src-tauri/Cargo.toml` the same. On Linux a headless smoke run is
+`xvfb-run -a timeout 20 src-tauri/target/release/recipe-flood` (exit 124 means
+it was still running when the timeout killed it).
 
 ## Tests
 

@@ -1,4 +1,5 @@
 import { NavLink, Outlet, Link } from 'react-router-dom'
+import { IS_DESKTOP } from '../platform'
 import ThemePicker from './ThemePicker'
 
 function Tab({ to, children, end = false }) {
@@ -37,6 +38,7 @@ export default function Layout({ user, onSignOut }) {
             {user && <Tab to="/pantry">Pantry</Tab>}
             {user && <Tab to="/cooking">Cooking</Tab>}
             {user && <Tab to="/groceries">Shopping</Tab>}
+            {IS_DESKTOP && <Tab to="/settings">Settings</Tab>}
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
