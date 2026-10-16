@@ -550,7 +550,9 @@ signs you out and clears the cached config and shopping list, and is refused
 while offline shopping changes are still waiting to sync.
 
 Keep the version in `tauri.conf.json`, `desktop/package.json` and
-`src-tauri/Cargo.toml` the same. On Linux a headless smoke run is
+`src-tauri/Cargo.toml` the same. Release tags are checked
+against them by `node desktop/scripts/check-version.mjs desktop-vX.Y.Z`; see
+DEPLOYMENT.md "Desktop releases". On Linux a headless smoke run is
 `xvfb-run -a timeout 20 src-tauri/target/release/recipe-flood` (exit 124 means
 it was still running when the timeout killed it).
 

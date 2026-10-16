@@ -1,0 +1,105 @@
+name: Desktop
+
+on:
+  pull_request:
+    # The frontend is the desktop app's UI, so a frontend change can break
+    # the desktop build even when nothing under desktop/ moved.
+    paths:
+      - desktop/**
+      - frontend/**
+      - .github/workflows/desktop.yml
+      - .github/actions/desktop-setup/**
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+
+# Read-only by default; only the release job below asks for more.
+permissions:
+  contents: read
+
+jobs:
+  version-check:
+    # The version lives in three hand-bumped files. A tag that disagrees
+    # with them would publish installers named for one version inside a
+    # release titled for another, so stop before spending a build on it.
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node desktop/scripts/check-version.mjs "$GITHUB_REF_NAME"
+
+  build:
+    # PR / manual build check: proves both installers' toolchains still
+    # work, and uploads the installers so they can be tried before a
+    # release. Tags go through `release` instead.
+    if: github.ref_type != 'tag'
+    strategy:
+      fail-fast: false # one OS failing shouldn't hide the other's result
+      matrix:
+        # 22.04 rather than latest: a binary links the glibc it was built
+        # against, so building on the older release keeps the .deb and
+        # AppImage runnable on older distros too.
+        os: [ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/desktop-setup
+      - uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: desktop
+      - name: Check every installer type was built
+        # upload-artifact's if-no-files-found only fails when *no* pattern
+        # matches, so a target that silently stopped being produced (an
+        # .msi, say, beside a good .exe) would otherwise pass unnoticed.
+        shell: bash
+        run: |
+          cd desktop/src-tauri/target/release/bundle
+          if [ "$RUNNER_OS" = "Windows" ]; then expected="nsis/*.exe msi/*.msi"
+          else expected="deb/*.deb appimage/*.AppImage"; fi
+          for pattern in $expected; do
+            compgen -G "$pattern" > /dev/null || { echo "::error::no $pattern was built"; exit 1; }
+            echo "found $pattern"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          # Only the installers, not the bundler's intermediate AppDir and
+          # staging folders.
+          path: |
+            desktop/src-tauri/target/release/bundle/**/*.deb
+            desktop/src-tauri/target/release/bundle/**/*.AppImage
+            desktop/src-tauri/target/release/bundle/**/*.exe
+            desktop/src-tauri/target/release/bundle/**/*.msi
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    # A desktop-vX.Y.Z tag builds the installers and attaches them to a
+    # draft GitHub Release; publishing it is a manual step. Unsigned, so no
+    # signing secrets are passed (GITHUB_TOKEN is the only credential).
+    needs: version-check
+    permissions:
+      contents: write # create the release and upload its assets
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest] # 22.04: see `build`
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/desktop-setup
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "Recipe Flood desktop v__VERSION__"
+          releaseDraft: true
+          releaseBody: >-
+            Unsigned installers. See
+            [Desktop releases](https://github.com/${{ github.repository }}/blob/main/DEPLOYMENT.md#desktop-releases)
+            for how to install them, including the Windows SmartScreen prompt.
