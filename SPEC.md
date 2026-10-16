@@ -545,7 +545,12 @@ Four ways in:
 
 1. **Manual entry** — the form.
 2. **Paste** — paste any recipe text; Claude structures it.
-3. **Photo** — photograph a cookbook page or handwritten card.
+3. **Photo** — photograph a cookbook page or handwritten card. The photo
+   can be chosen with the file picker or dropped onto it; the recipe form's
+   Photo field takes a dropped image the same way. A dropped file that
+   isn't a JPEG, PNG, WebP or GIF is refused with a message, and only the
+   first of several is used. In the desktop app a file dropped anywhere
+   else does nothing.
 4. **Cooking-history import** — an offline, one-off batch run over a whole
    spreadsheet of past cooking at once. See "Importing cooking history"
    below.

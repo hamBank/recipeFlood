@@ -521,6 +521,13 @@ opener and window-state plugins. Everything else is the React app, using
 `frontend/src/desktop.js` (loaded only on desktop, by dynamic import, so the
 web bundle has no Tauri code) for the bits that need the shell.
 
+The window sets `dragDropEnabled: false` in `tauri.conf.json` (JSON has no
+comments, so the reason lives here). With it on, Tauri takes OS file drops
+for its own events and the webview's HTML5 `drop` never fires, which would
+break dropping a photo onto `ImageDropZone`. With it off, a file dropped on
+the window would navigate it to the file, so `installDropGuard()` in
+`desktop.js` cancels every drop outside a `data-dropzone` element.
+
 Prerequisites:
 
 - **Rust** (stable, via [rustup](https://rustup.rs)) and Node 20+.

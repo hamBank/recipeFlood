@@ -7,6 +7,9 @@ import {
   updateRecipe,
   uploadRecipeImage,
 } from '../api'
+import ImageDropZone from '../components/ImageDropZone'
+
+const IMAGE_TYPES = 'image/jpeg,image/png,image/webp,image/gif'
 
 const UNITS = [
   '', 'g', 'kg', 'ml', 'l', 'cup', 'tbsp', 'dsp', 'tsp', 'piece', 'slice',
@@ -400,14 +403,16 @@ export default function RecipeFormPage() {
           />
         </Field>
 
-        <Field label="Photo">
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            onChange={(event) => setImageFile(event.target.files?.[0] || null)}
-            className="mt-1 w-full text-sm text-ink-muted"
-          />
-        </Field>
+        <ImageDropZone accept={IMAGE_TYPES} onFile={setImageFile}>
+          <Field label="Photo" hint="Or drop an image here.">
+            <input
+              type="file"
+              accept={IMAGE_TYPES}
+              onChange={(event) => setImageFile(event.target.files?.[0] || null)}
+              className="mt-1 w-full text-sm text-ink-muted"
+            />
+          </Field>
+        </ImageDropZone>
         <label className="flex items-center gap-2 self-end text-sm text-ink">
           <input
             type="checkbox"

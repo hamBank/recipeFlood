@@ -10,8 +10,15 @@ import './index.css'
 initTheme()
 
 // Links to other sites (a recipe's source) open in the system browser, not in
-// the app window. Dynamic, so none of the Tauri code is in the web bundle.
-if (IS_DESKTOP) import('./desktop').then((m) => m.installExternalLinkHandler())
+// the app window, and a file dropped outside a photo drop zone must not
+// replace the app with the image. Dynamic, so none of the Tauri code is in the
+// web bundle.
+if (IS_DESKTOP) {
+  import('./desktop').then((m) => {
+    m.installExternalLinkHandler()
+    m.installDropGuard()
+  })
+}
 
 // The desktop bundle loads from the app's own origin with no server-side
 // fallback to index.html, so routes live in the URL hash there.

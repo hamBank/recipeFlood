@@ -168,6 +168,22 @@ describe('RecipeFormPage — creating', () => {
     await waitFor(() => expect(api.uploadRecipeImage).toHaveBeenCalledWith('new-recipe', file))
   })
 
+  it('uploads a photo dropped on the Photo field after a successful save', async () => {
+    api.createRecipe.mockResolvedValue({ slug: 'new-recipe' })
+    renderNewForm()
+    await waitFor(() => expect(api.listSections).toHaveBeenCalled())
+
+    fireEvent.change(inputForLabel('Title'), { target: { value: 'New Recipe' } })
+    const file = new File(['fake'], 'recipe.jpg', { type: 'image/jpeg' })
+    fireEvent.drop(document.querySelector('[data-dropzone]'), {
+      dataTransfer: { files: [file], types: ['Files'] },
+    })
+    expect(screen.getByText('Selected: recipe.jpg')).toBeDefined()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create recipe' })[0])
+
+    await waitFor(() => expect(api.uploadRecipeImage).toHaveBeenCalledWith('new-recipe', file))
+  })
+
   it('shows an error and re-enables the form when creation fails', async () => {
     api.createRecipe.mockRejectedValue(new Error('title already exists'))
     renderNewForm()
