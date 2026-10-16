@@ -177,19 +177,21 @@ class TestFailedSyncWrite:
     ):
         # An app item that never reached the sheet: its background push
         # failed, so it is still unlinked.
-        monkeypatch.setattr(sheet, "read_rows", lambda: (_ for _ in ()).throw(RuntimeError("down")))
-        milk = client.post("/shopping", json={"name": "milk"}).json()
-        monkeypatch.undo()
-        sheet.seed(1, a="bread", b="1")
-
         def boom(*args, **kwargs):
             raise RuntimeError("503 from Google")
 
-        monkeypatch.setattr(sheet, "write_cells", boom)
-        failed = client.post("/shopping/sheet-sync").json()
+        # Scoped patches: monkeypatch.undo() would also revert the app
+        # fixture's own patches (auth, engine) made through the same object.
+        with monkeypatch.context() as patch:
+            patch.setattr(sheet, "read_rows", boom)
+            milk = client.post("/shopping", json={"name": "milk"}).json()
+        sheet.seed(1, a="bread", b="1")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(sheet, "write_cells", boom)
+            failed = client.post("/shopping/sheet-sync").json()
         assert failed["errors"] == ["503 from Google"]
         assert (failed["imported"], failed["pushed"]) == (0, 0)
-        monkeypatch.undo()
 
         result = client.post("/shopping/sheet-sync").json()
         assert result["errors"] == []
@@ -214,11 +216,11 @@ class TestFailedSyncWrite:
         def boom(*args, **kwargs):
             raise RuntimeError("503 from Google")
 
-        monkeypatch.setattr(sheet, "set_strikethrough", boom)
-        failed = client.post("/shopping/sheet-sync").json()
+        with monkeypatch.context() as patch:
+            patch.setattr(sheet, "set_strikethrough", boom)
+            failed = client.post("/shopping/sheet-sync").json()
         assert failed["errors"] == ["503 from Google"]
         assert "ticked" in sheet.rows[row]["i"]  # the cell write itself landed
-        monkeypatch.undo()
 
         client.post("/shopping/sheet-sync")
         assert sheet.rows[row]["strike"] is True
