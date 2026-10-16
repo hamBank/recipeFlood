@@ -1,0 +1,42 @@
+name: Desktop build setup
+description: >-
+  Toolchains, system packages and dependencies the Tauri desktop build
+  needs, shared by the PR build check and the tagged release in
+  desktop.yml so the two cannot drift apart. Expects the repo to be
+  checked out already.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+        cache: npm
+        # The desktop build runs the frontend build too, so both lockfiles
+        # decide the cache key.
+        cache-dependency-path: |
+          frontend/package-lock.json
+          desktop/package-lock.json
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: desktop/src-tauri
+    - name: Install Linux system packages
+      if: runner.os == 'Linux'
+      shell: bash
+      # The WebKitGTK/GTK build packages from DEVELOPMENT.md, plus patchelf,
+      # which the AppImage bundler uses.
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential \
+          libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+          patchelf
+    - run: npm ci
+      shell: bash
+      working-directory: frontend
+    - run: npm ci
+      shell: bash
+      working-directory: desktop
+    - run: cargo test
+      shell: bash
+      working-directory: desktop/src-tauri

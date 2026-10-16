@@ -155,6 +155,41 @@ entirely. It is never `*`, and the web app doesn't need it (same origin).
 Keep the comment on its own line in `.env`; systemd doesn't strip an
 inline `# ...` from a value.
 
+## Desktop releases
+
+The Windows and Linux desktop app (`desktop/`) is released separately from
+the server: a `desktop-vX.Y.Z` tag builds the installers in GitHub Actions
+(`.github/workflows/desktop.yml`) and attaches them to a **draft** release.
+Nothing here touches the server, and no secrets are needed (the installers
+are unsigned).
+
+To release:
+
+1. Bump `version` to `X.Y.Z` in `desktop/src-tauri/tauri.conf.json`,
+   `desktop/package.json` and `desktop/src-tauri/Cargo.toml` (and let
+   `Cargo.lock` follow), and merge that.
+2. Push the tag: `git tag desktop-vX.Y.Z && git push origin desktop-vX.Y.Z`.
+   The workflow first checks the tag against the three versions and fails
+   if they disagree; you can run the same check locally with
+   `node desktop/scripts/check-version.mjs desktop-vX.Y.Z`.
+3. Wait for the **Desktop** workflow, then open the draft under
+   **Releases**, check the installers are all there (`.exe`, `.msi`,
+   `.deb`, `.AppImage`) and publish it.
+
+Pull requests that touch `desktop/` or `frontend/` run the same build
+without a release and keep the installers as workflow artifacts for 7 days.
+
+### Installing
+
+- **Windows:** run the `.exe` (NSIS, installs per-user, no admin prompt) or
+  the `.msi`. Because the installer is unsigned, SmartScreen shows
+  "Windows protected your PC": click **More info -> Run anyway**. That is
+  expected. WebView2 is downloaded by the installer if the machine lacks it.
+- **Linux:** `sudo apt install ./Recipe.Flood_X.Y.Z_amd64.deb`, or
+  `chmod +x` the `.AppImage` and run it.
+
+The app's server defaults to production; change it in **Settings**.
+
 ## Anthropic API key (optional)
 
 `ANTHROPIC_API_KEY` in `.env` enables the paste and photo importers. Leave

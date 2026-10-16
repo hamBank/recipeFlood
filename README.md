@@ -34,6 +34,8 @@ blog, plus manual entry and AI-assisted import from a photo or a paste.
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Local setup, and running the blog import |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Server, deploy, OAuth, backups |
 
+**Desktop app:** Windows and Linux installers are attached to GitHub releases; see [Desktop releases](DEPLOYMENT.md#desktop-releases).
+
 ## Quick start
 
 ```bash

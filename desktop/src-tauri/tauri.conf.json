@@ -34,6 +34,14 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "hamBank",
+    "shortDescription": "Recipe Flood desktop app",
+    "longDescription": "Recipe Flood on your desktop: browse, cook from and shop for your recipe collection.",
+    "category": "Lifestyle",
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": { "installMode": "currentUser" }
+    }
   }
 }
