@@ -91,3 +91,32 @@ describe('installExternalLinkHandler', () => {
     expect(event.defaultPrevented).toBe(false)
   })
 })
+
+describe('installDropGuard', () => {
+  async function dropOn(element, type = 'drop') {
+    const { installDropGuard } = await load()
+    installDropGuard()
+    document.body.appendChild(element)
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    element.dispatchEvent(event)
+    return event
+  }
+
+  it('cancels a drop or dragover outside a drop zone so the window cannot navigate', async () => {
+    expect((await dropOn(document.createElement('div'))).defaultPrevented).toBe(true)
+    expect((await dropOn(document.createElement('div'), 'dragover')).defaultPrevented).toBe(true)
+  })
+
+  it('leaves a drop inside a drop zone to the zone', async () => {
+    const zone = document.createElement('div')
+    zone.setAttribute('data-dropzone', '')
+    const child = document.createElement('input')
+    zone.appendChild(child)
+    document.body.appendChild(zone)
+    const { installDropGuard } = await load()
+    installDropGuard()
+    const event = new Event('drop', { bubbles: true, cancelable: true })
+    child.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
+  })
+})

@@ -91,6 +91,37 @@ describe('ImportPage', () => {
     expect(screen.getByRole('button', { name: 'Import' }).disabled).toBe(false)
   })
 
+  it('takes a dropped photo the same as a chosen one and submits it', async () => {
+    api.importImage.mockResolvedValue({ title: 'Lemon Slice' })
+    renderPage()
+    await waitFor(() => expect(api.getImportConfig).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'From a photo' }))
+    expect(screen.getByRole('button', { name: 'Import' }).disabled).toBe(true)
+
+    const file = new File(['fake'], 'recipe.jpg', { type: 'image/jpeg' })
+    fireEvent.drop(document.querySelector('[data-dropzone]'), {
+      dataTransfer: { files: [file], types: ['Files'] },
+    })
+    expect(screen.getByRole('button', { name: 'Import' }).disabled).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }))
+    await waitFor(() => expect(screen.getByText('Draft title: Lemon Slice')).toBeDefined())
+    expect(api.importImage).toHaveBeenCalledWith(file, null)
+  })
+
+  it('keeps Import disabled when the dropped file is not an image', async () => {
+    renderPage()
+    await waitFor(() => expect(api.getImportConfig).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'From a photo' }))
+
+    fireEvent.drop(document.querySelector('[data-dropzone]'), {
+      dataTransfer: { files: [new File(['x'], 'a.pdf', { type: 'application/pdf' })], types: ['Files'] },
+    })
+    expect(screen.getByText(/That's not a JPEG/)).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Import' }).disabled).toBe(true)
+  })
+
   it('shows an error and re-enables the form when the import fails', async () => {
     api.importPaste.mockRejectedValue(new Error('Could not read that'))
     renderPage()

@@ -37,3 +37,17 @@ export function installExternalLinkHandler() {
     openExternal(target.href)
   })
 }
+
+/** Dropping a file on a webview navigates it to that file, which in the app
+ * would replace the whole UI with the image. Drops are refused everywhere
+ * except inside an ImageDropZone (marked `data-dropzone`). Desktop only: a
+ * browser tab's own behaviour is left as it was. */
+export function installDropGuard() {
+  const outsideZone = (event) =>
+    !(event.target instanceof Element && event.target.closest('[data-dropzone]'))
+  for (const type of ['dragover', 'drop']) {
+    document.addEventListener(type, (event) => {
+      if (outsideZone(event)) event.preventDefault()
+    })
+  }
+}

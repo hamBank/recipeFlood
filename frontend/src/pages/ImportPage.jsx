@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getImportConfig, importImage, importPaste } from '../api'
+import ImageDropZone from '../components/ImageDropZone'
+
+const IMAGE_TYPES = 'image/jpeg,image/png,image/webp,image/gif'
 
 /**
  * AI import: paste a recipe, or photograph one.
@@ -105,19 +108,21 @@ export default function ImportPage() {
             />
           </label>
         ) : (
-          <label className="block">
-            <span className="text-sm font-medium text-ink">Photo of the recipe</span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={(event) => setFile(event.target.files?.[0] || null)}
-              className="mt-1 w-full text-sm text-ink-muted"
-            />
-            <span className="mt-1 block text-xs text-ink-faint">
-              A cookbook page, a handwritten card, a screenshot. JPEG, PNG, WebP
-              or GIF, up to 8MB.
-            </span>
-          </label>
+          <ImageDropZone accept={IMAGE_TYPES} onFile={setFile}>
+            <label className="block">
+              <span className="text-sm font-medium text-ink">Photo of the recipe</span>
+              <input
+                type="file"
+                accept={IMAGE_TYPES}
+                onChange={(event) => setFile(event.target.files?.[0] || null)}
+                className="mt-1 w-full text-sm text-ink-muted"
+              />
+              <span className="mt-1 block text-xs text-ink-faint">
+                A cookbook page, a handwritten card, a screenshot. JPEG, PNG, WebP
+                or GIF, up to 8MB. Or drop the photo here.
+              </span>
+            </label>
+          </ImageDropZone>
         )}
 
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
