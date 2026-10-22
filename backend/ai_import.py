@@ -89,6 +89,67 @@ Rules:
 """
 
 
+def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
+    return {"anyOf": [schema, {"type": "null"}]}
+
+
+_STRING = {"type": "string"}
+_STRINGS = {"type": "array", "items": _STRING}
+
+#: The same shape SYSTEM_PROMPT describes, enforced by the API's structured
+#: outputs (`output_config.format`) so the reply is always valid JSON. Asking
+#: for JSON in prose alone failed on real recipes: a measurement like
+#: `cut into 2" pieces` came back with the inch mark unescaped inside a
+#: string, which no amount of fence-stripping can repair. Every key is
+#: required and nullable instead of optional, so a missing value is an
+#: explicit null; normalise_draft still guards the values themselves.
+RECIPE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "title": _STRING,
+        "description": _nullable(_STRING),
+        "section": _nullable({"type": "string", "enum": SECTION_SLUGS}),
+        "tags": _STRINGS,
+        "servings": _nullable({"type": "integer"}),
+        "servings_note": _nullable(_STRING),
+        "prep_minutes": _nullable({"type": "integer"}),
+        "cook_minutes": _nullable({"type": "integer"}),
+        "storage": _nullable(_STRING),
+        "ingredients": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": _STRING,
+                    "quantity": _nullable({"type": "number"}),
+                    "quantity_max": _nullable({"type": "number"}),
+                    "unit": _nullable({"type": "string", "enum": UNIT_VALUES}),
+                    "note": _nullable(_STRING),
+                    "optional": {"type": "boolean"},
+                    "group": _nullable(_STRING),
+                    "raw_text": _STRING,
+                },
+                "required": [
+                    "name", "quantity", "quantity_max", "unit", "note",
+                    "optional", "group", "raw_text",
+                ],
+                "additionalProperties": False,
+            },
+        },
+        "steps": _STRINGS,
+        "notes": _nullable(_STRING),
+        "confidence": {"type": "number"},
+        "uncertain": _STRINGS,
+    },
+    "required": [
+        "title", "description", "section", "tags", "servings",
+        "servings_note", "prep_minutes", "cook_minutes", "storage",
+        "ingredients", "steps", "notes", "confidence", "uncertain",
+    ],
+    "additionalProperties": False,
+}
+
+
 class AIImportUnavailable(RuntimeError):
     """Raised when no API key is configured — callers turn this into a 503
     rather than a stack trace, so the feature degrades to "not set up yet"
@@ -208,13 +269,23 @@ def normalise_draft(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _call(content: list[dict[str, Any]], *, max_tokens: int = 4096) -> dict[str, Any]:
+def _call(content: list[dict[str, Any]]) -> dict[str, Any]:
     response = _client().messages.create(
         model=settings.anthropic_model,
-        max_tokens=max_tokens,
+        # A long recipe with a split-up method runs to a few thousand tokens;
+        # this leaves room without needing to stream.
+        max_tokens=8192,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": content}],
+        output_config={"format": {"type": "json_schema", "schema": RECIPE_SCHEMA}},
     )
+    # The schema guarantees valid JSON only for a reply that finished: a cut
+    # off one is incomplete and a refused one needn't match. Say which,
+    # rather than surface a JSON decoder error about a half-written string.
+    if response.stop_reason == "max_tokens":
+        raise ValueError("the recipe was too long to structure in one reply")
+    if response.stop_reason == "refusal":
+        raise ValueError("the model declined to structure this recipe")
     text = "".join(block.text for block in response.content if block.type == "text")
     return normalise_draft(parse_json_response(text))
 
@@ -245,5 +316,4 @@ def draft_from_image(
                 "text": f"{prefix}Transcribe and structure the recipe in this image.",
             },
         ],
-        max_tokens=8192,
     )
