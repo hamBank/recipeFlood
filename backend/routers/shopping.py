@@ -21,7 +21,7 @@ from ..models import (
 from ..permissions import require_user_role
 from ..recipes_service import find_ingredient
 from ..sheet_sync import delete_items_from_sheet, reconcile, sync_item
-from ..shopping import item_read, read_list, set_checked
+from ..shopping import absorb, item_read, merge_target, read_list, set_checked
 
 router = APIRouter(prefix="/shopping", tags=["shopping"])
 
@@ -61,9 +61,12 @@ def add_item(
     right shop and gets a price — the same matcher the recipe importers
     use. No match is fine; the item goes on the list as plain text.
 
-    Defaults to a quantity of 1 when no amount is given at all — typing
-    just "eggs" means "buy some", and 1 is the least surprising amount to
-    assume by hand. This is deliberately unlike a recipe line with no
+    A name already on the list (unticked) joins that row instead of
+    adding a duplicate, by the same rule recipe lines follow.
+
+    A new row defaults to a quantity of 1 when no amount is given at all —
+    typing just "eggs" means "buy some", and 1 is the least surprising
+    amount to assume by hand. This is deliberately unlike a recipe line with no
     stated amount (see shopping.add_lines and SPEC.md "One permanent
     shopping list"): a recipe saying nothing about how much olive oil to
     buy is a real "unknown", not a "buy 1", and inventing a number there
@@ -84,7 +87,38 @@ def add_item(
         )
 
     fields = body.model_dump(exclude={"name", "ingredient_id"})
-    if fields["weight_grams"] is None and fields["volume_ml"] is None and fields["quantity"] is None:
+    kind = (
+        "weight" if fields["weight_grams"] is not None
+        else "volume" if fields["volume_ml"] is not None
+        else "quantity" if fields["quantity"] is not None
+        else "bare"
+    )
+
+    # Already on the list (same name or pantry ingredient, unticked): join
+    # that row rather than add a duplicate — the rule recipe lines follow
+    # (shopping.merge_target). Typing just "olive oil" when it's already
+    # there changes nothing; a typed amount adds to a matching one.
+    rows = list(session.exec(select(ShoppingItem)).all())
+    target = merge_target(rows, ingredient_id, name, kind, fields["unit"])
+    if target is not None:
+        if kind != "bare":
+            absorb(
+                target,
+                kind,
+                grams=fields["weight_grams"],
+                millilitres=fields["volume_ml"],
+                quantity=fields["quantity"],
+                unit=fields["unit"],
+                ingredient_id=ingredient_id,
+            )
+            target.sheet_dirty = True
+            session.add(target)
+            session.commit()
+            background_tasks.add_task(sync_item, target.id)
+        session.refresh(target)
+        return _read(session, target)
+
+    if kind == "bare":
         fields["quantity"] = 1
 
     item = ShoppingItem(**fields, name=name, ingredient_id=ingredient_id, sheet_dirty=True)
