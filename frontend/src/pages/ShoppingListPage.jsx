@@ -113,6 +113,18 @@ export default function ShoppingListPage() {
     window.print()
   }
 
+  // Per device: a phone that never prints doesn't care, and the kitchen
+  // computer that does keeps whichever order it last used.
+  const [printOrder, setPrintOrder] = useState(loadPrintOrder)
+  const choosePrintOrder = (value) => {
+    setPrintOrder(value)
+    try {
+      localStorage.setItem(PRINT_ORDER_KEY, value)
+    } catch {
+      // storage unavailable: the choice just lasts this visit
+    }
+  }
+
   useEffect(() => {
     saveQueue(queue)
   }, [queue])
@@ -455,6 +467,23 @@ export default function ShoppingListPage() {
             Print
           </button>
         )}
+        {displayList.total_count > 0 && (
+          <label className="flex items-center gap-1 text-sm text-ink-muted">
+            <span className="sr-only">Print order</span>
+            <select
+              value={printOrder}
+              onChange={(event) => choosePrintOrder(event.target.value)}
+              aria-label="Print order"
+              className="rounded-lg border border-edge bg-card px-2 py-1 text-sm text-ink-muted"
+            >
+              {Object.entries(PRINT_ORDERS).map(([value, { label }]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {visible.length > 0 && (
           <button
             type="button"
@@ -612,11 +641,50 @@ export default function ShoppingListPage() {
             })}
           </div>
 
-          {printing && <PrintableList displayList={displayList} symbol={symbol} />}
+          {printing && <PrintableList displayList={displayList} symbol={symbol} order={printOrder} />}
         </>
       )}
     </div>
   )
+}
+
+/** Print orders offered beside the Print button. `walking` is the list's
+ * own order (backend/shopping.py SHOP_ORDER). `shops_first` is one trip:
+ * the specialist shops in the order they're visited, then the supermarket
+ * on a page of its own, so the first sheet can stay behind once the
+ * specialist run is done. */
+export const PRINT_ORDERS = {
+  walking: { label: 'Walking order' },
+  shops_first: {
+    label: 'Shops first, supermarket on a new page',
+    first: ['markets', 'asian_grocery', 'deli', 'nut_shop', 'butcher'],
+    newPage: 'supermarket',
+  },
+}
+
+const PRINT_ORDER_KEY = 'rf_print_order'
+
+function loadPrintOrder() {
+  try {
+    const saved = localStorage.getItem(PRINT_ORDER_KEY)
+    return saved in PRINT_ORDERS ? saved : 'walking'
+  } catch {
+    return 'walking'
+  }
+}
+
+/** Split `shops` (already in walking order) into the pages a print order
+ * asks for: [shops on the first page(s), shops after the forced break].
+ * Shops the order doesn't name keep their walking order — specialist
+ * shops ahead of the break, "other" (unlinked items) after the
+ * supermarket at the very end, where the walking order has it too. */
+export function printGroups(shops, orderKey) {
+  const order = PRINT_ORDERS[orderKey]
+  if (!order?.first) return [shops, []]
+  const named = order.first.filter((shop) => shops.includes(shop))
+  const after = [order.newPage, 'other'].filter((shop) => shops.includes(shop))
+  const rest = shops.filter((shop) => !named.includes(shop) && !after.includes(shop))
+  return [[...named, ...rest], after]
 }
 
 /** The on-screen list above is filtered (Show ticked), truncated (the
@@ -625,7 +693,8 @@ export default function ShoppingListPage() {
  * everything: every item regardless of the Show ticked toggle, grouped by
  * shop in the same walking order, with amount, price and the full
  * "why is this here" line spelled out. */
-function PrintableList({ displayList, symbol }) {
+function PrintableList({ displayList, symbol, order }) {
+  const [firstPages, afterBreak] = printGroups(displayList.shops, order)
   return (
     <div>
       {/* One line, not a heading plus a separate line below it — on a
@@ -642,58 +711,72 @@ function PrintableList({ displayList, symbol }) {
         )}
       </p>
 
-      {/* Two columns so the page isn't mostly empty margin either side of
-          one narrow list. column-fill:auto (Tailwind's columns-2 leaves
-          the default, "balance") — balance sizes each column from the
-          *whole* list's height rather than what's left of the current
-          page, so on a long list Chrome would rather leave a page almost
-          empty than start a column it can't finish there. Auto just fills
-          each page in turn. */}
-      <div className="mt-4 columns-2 gap-8 [column-fill:auto]">
-        {displayList.shops.map((shop) => {
-          const rows = displayList.items.filter((item) => item.shop === shop)
-          if (!rows.length) return null
-          return (
-            // Not break-inside-avoid on the whole section: a shop with
-            // more lines than fit in what's left of a column is *supposed*
-            // to spill onto the next one — the same list this heading
-            // introduces just continues under a repeated cue rather than
-            // stranding an entire page blank because the group as a whole
-            // didn't fit. break-after-avoid on the heading below is the
-            // part that actually matters: it stops the heading itself
-            // from being orphaned with its first item pushed over.
-            <section key={shop} className="mb-4">
-              <h2 className="break-after-avoid border-b border-black text-sm font-bold uppercase tracking-wide text-black">
-                {SOURCE_LABEL[shop] || shop}
-              </h2>
-              <ul>
-                {rows.map((item) => {
-                  const why = (item.contributions || [])
-                    .map((c) => `${c.recipe}${c.amount ? ` (${c.amount})` : ''}`)
-                    .join(' · ')
-                  return (
-                    <li key={item.id} className="flex items-start gap-2 py-1.5 text-sm">
-                      <span aria-hidden="true">{item.is_checked ? '☑' : '☐'}</span>
-                      <span className="flex-1">
-                        <span className={item.is_checked ? 'text-black/60 line-through' : 'text-black'}>
-                          {item.name}
-                        </span>
-                        {item.amount_text && <span className="ml-2 text-black/70">{item.amount_text}</span>}
-                        {why && <span className="block text-xs text-black/60">{why}</span>}
+      <ShopColumns shops={firstPages} items={displayList.items} symbol={symbol} />
+      {afterBreak.length > 0 && (
+        // A page break can't be forced from inside a multi-column box
+        // (Chrome only breaks the column), so the shops after the break
+        // get a box of their own that starts on a fresh page.
+        <div className="break-before-page">
+          <ShopColumns shops={afterBreak} items={displayList.items} symbol={symbol} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The two-column, shop-grouped body of the printed list. */
+function ShopColumns({ shops, items, symbol }) {
+  return (
+    // Two columns so the page isn't mostly empty margin either side of
+    // one narrow list. column-fill:auto (Tailwind's columns-2 leaves the
+    // default, "balance") — balance sizes each column from the *whole*
+    // list's height rather than what's left of the current page, so on a
+    // long list Chrome would rather leave a page almost empty than start a
+    // column it can't finish there. Auto just fills each page in turn.
+    <div className="mt-4 columns-2 gap-8 [column-fill:auto]">
+      {shops.map((shop) => {
+        const rows = items.filter((item) => item.shop === shop)
+        if (!rows.length) return null
+        return (
+          // Not break-inside-avoid on the whole section: a shop with
+          // more lines than fit in what's left of a column is *supposed*
+          // to spill onto the next one — the same list this heading
+          // introduces just continues under a repeated cue rather than
+          // stranding an entire page blank because the group as a whole
+          // didn't fit. break-after-avoid on the heading below is the
+          // part that actually matters: it stops the heading itself
+          // from being orphaned with its first item pushed over.
+          <section key={shop} className="mb-4">
+            <h2 className="break-after-avoid border-b border-black text-sm font-bold uppercase tracking-wide text-black">
+              {SOURCE_LABEL[shop] || shop}
+            </h2>
+            <ul>
+              {rows.map((item) => {
+                const why = (item.contributions || [])
+                  .map((c) => `${c.recipe}${c.amount ? ` (${c.amount})` : ''}`)
+                  .join(' · ')
+                return (
+                  <li key={item.id} className="flex items-start gap-2 py-1.5 text-sm">
+                    <span aria-hidden="true">{item.is_checked ? '☑' : '☐'}</span>
+                    <span className="flex-1">
+                      <span className={item.is_checked ? 'text-black/60 line-through' : 'text-black'}>
+                        {item.name}
                       </span>
-                      {item.cost_cents !== null && item.cost_cents !== undefined && (
-                        <span className="shrink-0 tabular-nums text-black/70">
-                          {formatCents(item.cost_cents, symbol)}
-                        </span>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            </section>
-          )
-        })}
-      </div>
+                      {item.amount_text && <span className="ml-2 text-black/70">{item.amount_text}</span>}
+                      {why && <span className="block text-xs text-black/60">{why}</span>}
+                    </span>
+                    {item.cost_cents !== null && item.cost_cents !== undefined && (
+                      <span className="shrink-0 tabular-nums text-black/70">
+                        {formatCents(item.cost_cents, symbol)}
+                      </span>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )
+      })}
     </div>
   )
 }
