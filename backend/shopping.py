@@ -38,13 +38,22 @@ ingredient only merges on weight when the conversion was stated outright
 or came from a real linked density (`explicit`/`converted`); an estimated
 weight defers to the exact millilitre figure when one is available.
 
+"The same thing" means the same pantry ingredient **or the same name**
+(ignoring case and spacing): "extra virgin olive oil" from two recipes is
+one purchase whether or not either line was ever linked to the pantry.
+Different wording still stays apart, since nothing says "1 bunch coriander"
+and "coriander leaves" are the same purchase.
+
+A line that states **no amount at all** ("olive oil", for frying) folds
+into any row for the same thing, and a measured line fills in a row that
+had no amount. "Some olive oil" plus "90 ml olive oil" is one trip to the
+oil shelf, and listing it twice was the duplicate shoppers noticed; the
+amount-less recipe still shows in the row's contributions.
+
 Everything else stays separate:
 
-* **Unlinked lines never merge**, even when the text is identical. Without
-  a pantry row there is no evidence that "1 bunch coriander" from one
-  recipe and "coriander leaves" from another are the same purchase.
-* **Same ingredient, no weight and no volume** ("1 bunch parsley", "salt to
-  taste") stays its own line. Adding 1 bunch to 30g would mean inventing a
+* **Same thing, amounts of different kinds** ("1 bunch parsley" and "250g
+  parsley") stays two lines. Adding 1 bunch to 250g would mean inventing a
   bunch weight the pantry hasn't been told.
 
 The result is a list that sometimes says "onion 400g" and "onion, 1 bunch
@@ -270,12 +279,29 @@ def read_list(session: Session, *, with_cost: bool) -> ShoppingListRead:
 # --------------------------------------------------------------------------
 
 
-def _mergeable(item: ShoppingItem, line_ingredient_id: int | None, kind: str, unit) -> bool:
-    """Whether an existing list row can absorb an incoming line.
+def _same_thing(item: ShoppingItem, ingredient_id: int | None, name: str) -> bool:
+    """Whether a list row is the same purchase as an incoming line: the
+    same pantry ingredient, or failing that the same name. Checked rows
+    never count — adding to something already in the trolley would
+    silently reopen it and the shopper would walk past."""
+    if item.is_checked:
+        return False
+    if ingredient_id is not None and item.ingredient_id == ingredient_id:
+        return True
+    return _name_key(item.name) == _name_key(name)
 
-    Four kinds of line, four rules — and all of them require the same
-    pantry ingredient, because without one there is no evidence two lines
-    are the same purchase.
+
+def _name_key(name: str | None) -> str:
+    return " ".join((name or "").split()).casefold()
+
+
+def _has_amount(item: ShoppingItem) -> bool:
+    return not (item.weight_grams is None and item.volume_ml is None and item.quantity is None)
+
+
+def _mergeable(item: ShoppingItem, kind: str, unit) -> bool:
+    """Whether an existing row's amount can absorb an incoming line's,
+    once `_same_thing` has said they are the same purchase.
 
     * ``weight``   — both sides have grams. Add them.
     * ``volume``   — both sides have millilitres. Add them — this is exact
@@ -283,21 +309,15 @@ def _mergeable(item: ShoppingItem, line_ingredient_id: int | None, kind: str, un
       in ("2 cups" and "500ml" both merge here).
     * ``quantity`` — neither has grams or millilitres, and the units match
       ("1 bunch" plus "2 bunch"). Same arithmetic, different unit.
-    * ``bare``     — neither side states any amount at all. Nothing to add;
-      the two lines are simply the same shopping trip.
+    * ``bare``     — the line states no amount, so any row will do: there
+      is nothing to add, only another recipe asking for the same thing.
 
-    A line never merges into a row of a different kind: folding an unknown
-    amount into a known one, or a volume into a weight, would present a
-    number that is quietly missing some of the food (or double-counting
-    it, if both got summed independently).
-
-    Checked items are excluded throughout. Adding to something already in
-    the trolley would silently reopen it and the shopper would walk past.
+    Otherwise a line only joins a row that has no amount yet (see
+    `merge_target`). Folding a known amount into a row holding an amount
+    of a different kind, or a volume into a weight, would present a number
+    that is quietly missing some of the food (or double-counting it, if
+    both got summed independently).
     """
-    if line_ingredient_id is None or item.ingredient_id != line_ingredient_id:
-        return False
-    if item.is_checked:
-        return False
     if kind == "weight":
         return item.weight_grams is not None
     if kind == "volume":
@@ -309,7 +329,49 @@ def _mergeable(item: ShoppingItem, line_ingredient_id: int | None, kind: str, un
             and item.quantity is not None
             and item.unit == unit
         )
-    return item.weight_grams is None and item.volume_ml is None and item.quantity is None
+    return True
+
+
+def merge_target(
+    candidates: list[ShoppingItem], ingredient_id: int | None, name: str, kind: str, unit
+) -> ShoppingItem | None:
+    """The row an incoming line should join, or None for a new row: one
+    whose amount it can add to, else one for the same thing with no amount
+    yet, which the line's amount then fills in."""
+    same = [row for row in candidates if _same_thing(row, ingredient_id, name)]
+    return next((row for row in same if _mergeable(row, kind, unit)), None) or next(
+        (row for row in same if not _has_amount(row)), None
+    )
+
+
+def absorb(
+    target: ShoppingItem,
+    kind: str,
+    *,
+    grams: float | None = None,
+    millilitres: float | None = None,
+    quantity: float | None = None,
+    unit=None,
+    ingredient_id: int | None = None,
+) -> None:
+    """Add an incoming line's amount to `target` (see `merge_target`): sum
+    it into the matching amount, or fill in a row that had none. A bare
+    line adds nothing. An unlinked row picks up the line's pantry link, so
+    a typed "olive oil" that a recipe's linked line joins gets a shop and
+    a price."""
+    if kind == "weight":
+        target.weight_grams = (target.weight_grams or 0) + grams
+    elif kind == "volume":
+        target.volume_ml = (target.volume_ml or 0) + millilitres
+    elif kind == "quantity":
+        target.quantity = (target.quantity or 0) + quantity
+        target.unit = unit
+    if kind in ("weight", "volume") and target.quantity is None:
+        # A filled-in row's leftover unit ("to taste") would otherwise
+        # sit beside its new weight or volume.
+        target.unit = None
+    if target.ingredient_id is None and ingredient_id is not None:
+        target.ingredient_id = ingredient_id
 
 
 def add_lines(
@@ -409,22 +471,18 @@ def add_lines(
 
         # Prefer a row already added in this pass over one from the query,
         # so three recipes wanting onion produce one line, not two.
-        target = next(
-            (
-                candidate
-                for candidate in [*new_items, *existing]
-                if _mergeable(candidate, line.ingredient_id, kind, line.unit)
-            ),
-            None,
-        )
+        target = merge_target([*new_items, *existing], line.ingredient_id, name, kind, line.unit)
 
         if target is not None:
-            if kind == "weight":
-                target.weight_grams = (target.weight_grams or 0) + grams
-            elif kind == "volume":
-                target.volume_ml = (target.volume_ml or 0) + millilitres
-            elif kind == "quantity":
-                target.quantity = (target.quantity or 0) + quantity
+            absorb(
+                target,
+                kind,
+                grams=grams,
+                millilitres=millilitres,
+                quantity=quantity,
+                unit=line.unit,
+                ingredient_id=line.ingredient_id,
+            )
             target.contributions = [*(target.contributions or []), contribution]
             if cook_list_id is not None and target.cook_list_id is None:
                 target.cook_list_id = cook_list_id

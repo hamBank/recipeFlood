@@ -422,11 +422,19 @@ the end.
 
 A wrong merge is worse than no merge: coming home with 100g of onion when
 the lasagne needed 400g is a failure of the list, while two onion lines are
-a mild annoyance. So lines combine only on real arithmetic — same pantry
-ingredient, and either both in grams, both in millilitres, or both in the
-same count unit. An unmatched line never merges with another, and a
-weightless "1 bunch" is never folded into a weighed 250g, because that
-would mean inventing a bunch weight nobody supplied.
+a mild annoyance. So amounts combine only on real arithmetic: both in
+grams, both in millilitres, or both in the same count unit.
+
+Two lines are the same thing when they share a pantry ingredient **or the
+same name** (ignoring case and spacing), so "extra virgin olive oil" from
+two recipes is one row whether or not either was ever linked to the pantry.
+A line with **no amount** ("olive oil", for frying) folds into the row
+already there, and a measured line fills in a row that had no amount:
+"some olive oil" plus 90 ml is one row of 90 ml, with both recipes in its
+breakdown. Typing a name that's already on the list adds nothing new. A
+weightless "1 bunch" is still never folded into a weighed 250g, because
+that would mean inventing a bunch weight nobody supplied; those stay two
+rows. Ticked rows are never joined, since they're already in the trolley.
 
 Volume merging is exact regardless of which volume unit either line used
 — "2 cups" and "500ml" of the same liquid both merge to a millilitre

@@ -137,16 +137,16 @@ class TestMerging:
         contributions = client.get("/shopping").json()["items"][0]["contributions"]
         assert [c["recipe"] for c in contributions] == ["Soup", "Stew"]
 
-    def test_unlinked_lines_never_merge_even_with_identical_text(self, client):
+    def test_unlinked_lines_with_the_same_name_merge(self, client):
         """Deleting a pantry row leaves its recipe lines linked to nothing
-        (see ingredients.delete_ingredient). Two such lines look identical
-        and are still not evidence of the same purchase — nothing has
-        confirmed they are one item rather than two similarly named ones."""
+        (see ingredients.delete_ingredient). The same name is still the same
+        purchase: two "mystery spice blend" rows was a duplicate, not
+        caution."""
         a = make_recipe(
             client, "One", [{"name": "mystery spice blend", "quantity": 1, "unit": "tsp"}]
         )
         b = make_recipe(
-            client, "Two", [{"name": "mystery spice blend", "quantity": 2, "unit": "tsp"}]
+            client, "Two", [{"name": "Mystery  Spice Blend", "quantity": 2, "unit": "tsp"}]
         )
         assert client.delete("/ingredients/mystery-spice-blend").status_code == 204
 
@@ -154,8 +154,49 @@ class TestMerging:
         client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping")
 
         items = client.get("/shopping").json()["items"]
-        assert len(items) == 2
-        assert all(i["ingredient_id"] is None for i in items)
+        assert len(items) == 1
+        assert items[0]["amount_text"] == "15 ml"  # 1 tsp + 2 tsp, as volume
+
+    def test_unlinked_lines_with_different_names_stay_apart(self, client):
+        """Different wording is no evidence of the same purchase."""
+        a = make_recipe(client, "One", [{"name": "mystery spice blend", "quantity": 1, "unit": "tsp"}])
+        b = make_recipe(client, "Two", [{"name": "secret spice blend", "quantity": 1, "unit": "tsp"}])
+        for slug in ("mystery-spice-blend", "secret-spice-blend"):
+            client.delete(f"/ingredients/{slug}")
+
+        cook_list = make_list(client, [a, b])
+        client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping")
+
+        assert len(client.get("/shopping").json()["items"]) == 2
+
+    def test_a_line_with_no_amount_folds_into_a_measured_one(self, client):
+        """The duplicate a shopper reported: "extra virgin olive oil - 90 ml"
+        and a bare "extra virgin olive oil" from a recipe that just says
+        "for frying". One trip to the oil shelf, one row."""
+        a = make_recipe(
+            client, "Dressing", [{"name": "extra virgin olive oil", "quantity": 90, "unit": "ml"}]
+        )
+        b = make_recipe(client, "Fritters", [{"name": "extra virgin olive oil"}])
+        cook_list = make_list(client, [a, b])
+        client.post(f"/cook-lists/{cook_list['id']}/add-to-shopping")
+
+        items = client.get("/shopping").json()["items"]
+        assert len(items) == 1
+        assert items[0]["amount_text"] == "90 ml"
+        assert {c["recipe"] for c in items[0]["contributions"]} == {"Dressing", "Fritters"}
+
+    def test_a_measured_line_fills_in_a_row_that_had_no_amount(self, client):
+        """The other order: the bare line arrived first."""
+        a = make_recipe(client, "Fritters", [{"name": "extra virgin olive oil"}])
+        b = make_recipe(
+            client, "Dressing", [{"name": "extra virgin olive oil", "quantity": 90, "unit": "ml"}]
+        )
+        client.post(f"/cook-lists/{make_list(client, [a])['id']}/add-to-shopping")
+        client.post(f"/cook-lists/{make_list(client, [b])['id']}/add-to-shopping")
+
+        items = client.get("/shopping").json()["items"]
+        assert len(items) == 1
+        assert items[0]["amount_text"] == "90 ml"
 
     def test_the_same_ingredient_in_the_same_unit_adds_up(self, client, parsley):
         """No weight either side, but "1 bunch" plus "2 bunch" is still
@@ -630,6 +671,38 @@ class TestManualItems:
         item = client.post("/shopping", json={"name": "garlic"}).json()
         assert item["ingredient_id"] == jar_garlic["id"]
         assert item["shop"] == "supermarket"
+
+    def test_typing_a_name_already_on_the_list_adds_no_duplicate(self, client):
+        first = client.post("/shopping", json={"name": "extra virgin olive oil", "volume_ml": 90}).json()
+        again = client.post("/shopping", json={"name": "Extra Virgin Olive Oil"}).json()
+
+        assert again["id"] == first["id"]
+        items = client.get("/shopping").json()["items"]
+        assert len(items) == 1
+        assert items[0]["amount_text"] == "90 ml"
+
+    def test_a_typed_amount_adds_to_a_matching_row(self, client):
+        client.post("/shopping", json={"name": "milk", "volume_ml": 500}).json()
+        client.post("/shopping", json={"name": "milk", "volume_ml": 250}).json()
+
+        items = client.get("/shopping").json()["items"]
+        assert len(items) == 1
+        assert items[0]["amount_text"] == "750 ml"
+
+    def test_a_ticked_row_is_not_joined(self, client):
+        """It's already in the trolley; a new "milk" means buy more."""
+        first = client.post("/shopping", json={"name": "milk"}).json()
+        client.patch(f"/shopping/{first['id']}", json={"is_checked": True})
+
+        second = client.post("/shopping", json={"name": "milk"}).json()
+        assert second["id"] != first["id"]
+
+    def test_amounts_of_different_kinds_stay_two_rows(self, client):
+        """1 bunch plus 250g would need a bunch weight nobody has stated."""
+        client.post("/shopping", json={"name": "parsley", "quantity": 1, "unit": "bunch"})
+        client.post("/shopping", json={"name": "parsley", "weight_grams": 250})
+
+        assert len(client.get("/shopping").json()["items"]) == 2
 
     def test_editing_an_amount_by_hand_drops_the_now_stale_breakdown(
         self, client, onion
