@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '../api'
 import { loadQueue, saveCachedList, saveQueue } from '../offlineQueue'
-import ShoppingListPage from './ShoppingListPage'
+import ShoppingListPage, { printGroups } from './ShoppingListPage'
 
 vi.mock('../api', () => ({
   getShoppingList: vi.fn(),
@@ -438,6 +438,96 @@ describe('ShoppingListPage printing', () => {
 
     fireEvent(window, new Event('afterprint'))
     expect(screen.queryByText('Shopping list')).toBeNull()
+  })
+})
+
+describe('printGroups', () => {
+  const walking = [
+    'markets', 'supermarket', 'asian_grocery', 'butcher', 'fishmonger', 'deli', 'nut_shop', 'other',
+  ]
+
+  it('leaves the walking order alone', () => {
+    expect(printGroups(walking, 'walking')).toEqual([walking, []])
+  })
+
+  it('puts the named shops first in their order, other specialist shops after, and the supermarket after the break', () => {
+    expect(printGroups(walking, 'shops_first')).toEqual([
+      ['markets', 'asian_grocery', 'deli', 'nut_shop', 'butcher', 'fishmonger'],
+      ['supermarket', 'other'],
+    ])
+  })
+
+  it('skips shops that have nothing on the list', () => {
+    expect(printGroups(['deli', 'markets'], 'shops_first')).toEqual([['markets', 'deli'], []])
+  })
+
+  it('falls back to the walking order for an unknown choice', () => {
+    expect(printGroups(walking, 'nonsense')).toEqual([walking, []])
+  })
+})
+
+describe('ShoppingListPage print order', () => {
+  beforeEach(() => {
+    window.print = vi.fn()
+    api.getShoppingList.mockResolvedValue(
+      baseList([
+        item({ id: 1, name: 'Milk', shop: 'supermarket' }),
+        item({ id: 2, name: 'Salmon', shop: 'butcher' }),
+        item({ id: 3, name: 'Tomatoes', shop: 'markets' }),
+      ]),
+    )
+  })
+
+  // "Shopping list" is a span inside the printed header line, whose parent
+  // is the whole printable list.
+  const printedList = () => screen.getByText('Shopping list').parentElement.parentElement
+
+  const printedHeadings = () =>
+    screen
+      .getAllByRole('heading', { level: 2 })
+      .map((h) => h.textContent)
+      .filter((text) => ['Markets', 'Butcher', 'Supermarket'].includes(text))
+
+  it('starts the supermarket on a new page when shops first is chosen', async () => {
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Print order' }), {
+      target: { value: 'shops_first' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Print' }))
+
+    const printed = printedList()
+    const breakBox = printed.querySelector('.break-before-page')
+    expect(breakBox).not.toBeNull()
+    expect(breakBox.textContent).toContain('Supermarket')
+    expect(breakBox.textContent).toContain('Milk')
+    expect(breakBox.textContent).not.toContain('Butcher')
+    // Before the break: markets, then butcher, as the user listed them.
+    const beforeBreak = printed.textContent.split('Supermarket')[0]
+    expect(beforeBreak.indexOf('Markets')).toBeLessThan(beforeBreak.indexOf('Butcher'))
+  })
+
+  it('has no page break in walking order', async () => {
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+    fireEvent.click(screen.getByRole('button', { name: 'Print' }))
+
+    const printed = printedList()
+    expect(printed.querySelector('.break-before-page')).toBeNull()
+    expect(printedHeadings().length).toBeGreaterThan(0)
+  })
+
+  it('remembers the choice on this device', async () => {
+    const { unmount } = render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Print order' }), {
+      target: { value: 'shops_first' },
+    })
+    unmount()
+
+    render(<ShoppingListPage />)
+    await screen.findByText('Milk')
+    expect(screen.getByRole('combobox', { name: 'Print order' }).value).toBe('shops_first')
   })
 })
 

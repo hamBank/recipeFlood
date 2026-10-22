@@ -418,6 +418,13 @@ order, not alphabetical: fresh food first while there's room in the bags,
 cold things last. Anything not linked to a pantry row lands in "other", at
 the end.
 
+The printed list can use a second order, picked next to the Print button
+and remembered per device: **shops first, supermarket on a new page** —
+Markets, Asian grocery, Deli, Nut shop, Butcher, then any other specialist
+shop in walking order, then the supermarket starting a fresh page (with
+"other" after it). The specialist run fits on the first sheet, which can
+stay behind once it's done.
+
 ### What merges, and what deliberately doesn't
 
 A wrong merge is worse than no merge: coming home with 100g of onion when
