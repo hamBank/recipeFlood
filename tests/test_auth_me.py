@@ -23,3 +23,11 @@ class TestMe:
     def test_requires_auth(self, guest_client):
         assert guest_client.get("/auth/me").status_code == 401
         assert guest_client.patch("/auth/me", json={"shopping_show_ticked": False}).status_code == 401
+
+    def test_edit_default_shop_is_off_until_switched_on(self, client, admin):
+        assert client.get("/auth/me").json()["shopping_edit_default_shop"] is False
+        response = client.patch("/auth/me", json={"shopping_edit_default_shop": True})
+        assert response.json()["shopping_edit_default_shop"] is True
+        # Leaves the other preference alone.
+        assert response.json()["shopping_show_ticked"] is True
+        assert client.get("/auth/me").json()["shopping_edit_default_shop"] is True

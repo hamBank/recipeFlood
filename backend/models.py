@@ -50,6 +50,10 @@ class User(SQLModel, table=True):
     # Per-user UI preference, not a permission — self-editable via
     # PATCH /auth/me regardless of role (see UserSelfUpdate).
     shopping_show_ticked: bool = True
+    # Off by default: shows a shop picker on every shopping-list line that
+    # changes the pantry item's usual shop for good, for tidying up items
+    # that keep landing under the wrong shop.
+    shopping_edit_default_shop: bool = False
 
 
 class UserRead(SQLModel):
@@ -60,6 +64,7 @@ class UserRead(SQLModel):
     role: UserRole
     is_active: bool
     shopping_show_ticked: bool
+    shopping_edit_default_shop: bool
 
 
 class UserUpdate(SQLModel):
@@ -73,6 +78,7 @@ class UserSelfUpdate(SQLModel):
     of UserUpdate, since role/is_active/name stay admin-only."""
 
     shopping_show_ticked: bool | None = None
+    shopping_edit_default_shop: bool | None = None
 
 
 class UserInvite(SQLModel):

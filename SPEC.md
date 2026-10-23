@@ -425,6 +425,16 @@ shop in walking order, then the supermarket starting a fresh page (with
 "other" after it). The specialist run fits on the first sheet, which can
 stay behind once it's done.
 
+A line can be moved to another shop just once from its editor, which leaves
+the pantry alone. To fix an item that keeps landing under the wrong shop,
+turn on **Edit default shops** (a per-user setting next to "Show ticked",
+off by default). Each line linked to a pantry item then shows a shop picker.
+Picking a shop changes that ingredient's `source` in the pantry, so every
+line for it, now and later, follows; any one-off move on that line is
+cleared so the new default applies. Unlinked lines have no default to change.
+The sheet is untouched: it has no shop column the app writes (G is never
+written).
+
 ### What merges, and what deliberately doesn't
 
 A wrong merge is worse than no merge: coming home with 100g of onion when

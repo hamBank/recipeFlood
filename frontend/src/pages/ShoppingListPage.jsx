@@ -7,6 +7,7 @@ import {
   getShoppingList,
   listIngredients,
   syncSheet,
+  updateIngredient,
   uncheckAllShopping,
   updateMe,
   updateShoppingItem,
@@ -61,15 +62,27 @@ export default function ShoppingListPage() {
   // Persisted on the user's profile (see PATCH /auth/me) rather than just
   // local state, so it survives a reload instead of always starting shown.
   const [showChecked, setShowChecked] = useState(user?.shopping_show_ticked ?? true)
+  // Off by default: a shop picker on every line is clutter for walking the
+  // list, and only wanted while tidying up items filed under the wrong shop.
+  const [editDefaultShop, setEditDefaultShop] = useState(user?.shopping_edit_default_shop ?? false)
 
-  const toggleShowChecked = (value) => {
-    setShowChecked(value)
+  const savePreference = (field, value) => {
     if (!user) return
-    setUser({ ...user, shopping_show_ticked: value })
-    updateMe({ shopping_show_ticked: value }).catch(() => {
+    setUser({ ...user, [field]: value })
+    updateMe({ [field]: value }).catch(() => {
       // Best-effort — worst case the toggle just doesn't stick past this
       // session, which isn't worth surfacing an error banner for.
     })
+  }
+
+  const toggleShowChecked = (value) => {
+    setShowChecked(value)
+    savePreference('shopping_show_ticked', value)
+  }
+
+  const toggleEditDefaultShop = (value) => {
+    setEditDefaultShop(value)
+    savePreference('shopping_edit_default_shop', value)
   }
 
   // Pantry search-as-you-type, so a name already in the pantry (with a
@@ -375,6 +388,23 @@ export default function ShoppingListPage() {
     setBusy(false)
   }
 
+  /** Changes where the pantry ingredient is usually bought, so this line
+   * and every other line (and future one) for it lands under that shop.
+   * A one-off move on this line would otherwise keep winning over the
+   * new default, so it's cleared too. */
+  const setDefaultShop = async (item, source) => {
+    if (offline || item.ingredient_id == null) return
+    setBusy(true)
+    try {
+      await updateIngredient(item.ingredient_id, { source })
+      if (item.shop_override) await updateShoppingItem(item.id, { shop_override: null })
+      await load()
+    } catch (caught) {
+      setError(caught.message)
+    }
+    setBusy(false)
+  }
+
   const clear = async () => {
     if (offline) return
     if (!window.confirm(`Remove ${displayList.checked_count} ticked item(s) from the list?`)) return
@@ -594,6 +624,14 @@ export default function ShoppingListPage() {
               />
               Show ticked
             </label>
+            <label className="flex items-center gap-2 text-ink-muted">
+              <input
+                type="checkbox"
+                checked={editDefaultShop}
+                onChange={(event) => toggleEditDefaultShop(event.target.checked)}
+              />
+              Edit default shops
+            </label>
             {displayList.checked_count > 0 && (
               <>
                 <button
@@ -633,6 +671,9 @@ export default function ShoppingListPage() {
                         onToggle={() => toggle(item)}
                         onRemove={() => remove(item)}
                         onSave={(patch) => update(item, patch)}
+                        onSetDefaultShop={
+                          editDefaultShop ? (source) => setDefaultShop(item, source) : null
+                        }
                       />
                     ))}
                   </ul>
@@ -781,7 +822,7 @@ function ShopColumns({ shops, items, symbol }) {
   )
 }
 
-function Row({ item, symbol, offline, onToggle, onRemove, onSave }) {
+function Row({ item, symbol, offline, onToggle, onRemove, onSave, onSetDefaultShop }) {
   const [editing, setEditing] = useState(false)
 
   // "why is 400g of onion on my list" — answerable without re-running the
@@ -839,6 +880,24 @@ function Row({ item, symbol, offline, onToggle, onRemove, onSave }) {
           </span>
         )}
       </button>
+      {/* Only for lines linked to a pantry item: an unlinked line has no
+          default shop to change, just the one-off move in its editor. */}
+      {onSetDefaultShop && item.ingredient_id != null && (
+        <select
+          aria-label={`Default shop for ${item.name}`}
+          title="Where this is usually bought — changes it in the pantry"
+          value={item.shop}
+          disabled={offline}
+          onChange={(event) => onSetDefaultShop(event.target.value)}
+          className="w-28 shrink-0 rounded-lg border border-edge bg-card px-1 py-1 text-xs text-ink disabled:opacity-30"
+        >
+          {Object.entries(SOURCE_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      )}
       {item.cost_cents !== null && item.cost_cents !== undefined && (
         <span className="shrink-0 text-sm tabular-nums text-ink-muted">
           {formatCents(item.cost_cents, symbol)}
