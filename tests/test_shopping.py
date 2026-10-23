@@ -483,6 +483,18 @@ class TestShops:
         client.patch(f"/ingredients/{onion.slug}", json={"source": "supermarket"})
         assert client.get("/shopping").json()["items"][0]["shop"] == "supermarket"
 
+    def test_costco_is_a_shop_of_its_own_walked_after_the_supermarket(self, client, onion):
+        client.post("/shopping", json={"name": "onion"})
+        client.post("/shopping", json={"name": "birthday candles"})
+        client.patch(f"/ingredients/{onion.slug}", json={"source": "costco"})
+        body = client.get("/shopping").json()
+        assert body["shops"] == ["costco", "other"]
+        assert {i["name"]: i["shop"] for i in body["items"]}["onion"] == "costco"
+        # And a line can be moved there just once, too.
+        candles = next(i for i in body["items"] if i["name"] == "birthday candles")
+        moved = client.patch(f"/shopping/{candles['id']}", json={"shop_override": "costco"})
+        assert moved.json()["shop"] == "costco"
+
     def test_an_unlinked_item_lands_in_other(self, client):
         client.post("/shopping", json={"name": "birthday candles"})
         body = client.get("/shopping").json()

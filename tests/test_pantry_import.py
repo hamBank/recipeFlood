@@ -64,8 +64,8 @@ class TestMapSource:
         "raw,expected",
         [
             ("SM", IngredientSource.supermarket),
-            ("costco", IngredientSource.supermarket),
-            ("Costo", IngredientSource.supermarket),   # a typo in the export
+            ("costco", IngredientSource.costco),
+            ("Costo", IngredientSource.costco),   # a typo in the export
             ("Markets", IngredientSource.markets),
             ("markets", IngredientSource.markets),
             ("Nuts", IngredientSource.nut_shop),

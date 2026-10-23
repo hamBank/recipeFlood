@@ -183,7 +183,7 @@ One row per pantry item, referenced by every recipe that uses it.
 | Usual package size & cost, by volume | Millilitres, and integer **cents per litre** — the same idea, for the ingredients this repo lets be priced by volume instead. |
 | Usual package size & cost, by piece | A piece count, and integer **cents per piece** — the same idea again, for things sold and priced per item rather than by weight or volume at all. |
 | `cost_source` | Where the price came from and when — "manual", an AI estimate, or blank. Shared between all three cost bases. |
-| Source | Markets · Supermarket · Butcher · Nut shop · Deli · Asian grocery · Fishmonger · Bakery · Bottle shop · Cake supplies · Chemist · Hardware · Newsagent · Other |
+| Source | Markets · Supermarket · Butcher · Nut shop · Deli · Asian grocery · Fishmonger · Bakery · Bottle shop · Cake supplies · Chemist · Hardware · Newsagent · Costco · Other |
 | Is food | False for the things that come home from the shops but never go in a recipe — batteries, shampoo, cat litter. They stay in the pantry so it remains a complete shopping lookup, but they are kept out of the "needs a price" work queues. |
 | Density (g/ml) | Turns "1 cup" into grams. Worth setting even for a volume-priced ingredient — nutrition is always per 100g. |
 | Grams per piece | Turns "2 onions" into grams. |
@@ -422,7 +422,7 @@ The printed list can use a second order, picked next to the Print button
 and remembered per device: **shops first, supermarket on a new page** —
 Markets, Asian grocery, Deli, Nut shop, Butcher, then any other specialist
 shop in walking order, then the supermarket starting a fresh page (with
-"other" after it). The specialist run fits on the first sheet, which can
+Costco and then "other" after it). The specialist run fits on the first sheet, which can
 stay behind once it's done.
 
 A line can be moved to another shop just once from its editor, which leaves
