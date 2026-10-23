@@ -102,6 +102,8 @@ from .units import format_amount
 SHOP_ORDER: list[str] = [
     IngredientSource.markets.value,
     IngredientSource.supermarket.value,
+    # Next to the supermarket: the same kind of big trolley shop.
+    IngredientSource.costco.value,
     IngredientSource.asian_grocery.value,
     IngredientSource.butcher.value,
     IngredientSource.fishmonger.value,

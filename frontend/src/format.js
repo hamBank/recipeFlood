@@ -133,5 +133,6 @@ export const SOURCE_LABEL = {
   chemist: 'Chemist',
   hardware: 'Hardware',
   newsagent: 'Newsagent',
+  costco: 'Costco',
   other: 'Other',
 }

@@ -699,7 +699,9 @@ export const PRINT_ORDERS = {
   shops_first: {
     label: 'Shops first, supermarket on a new page',
     first: ['markets', 'asian_grocery', 'deli', 'nut_shop', 'butcher'],
-    newPage: 'supermarket',
+    // Costco is a big trolley shop like the supermarket, so it goes on
+    // that page rather than in with the specialist shops.
+    newPage: ['supermarket', 'costco'],
   },
 }
 
@@ -723,7 +725,7 @@ export function printGroups(shops, orderKey) {
   const order = PRINT_ORDERS[orderKey]
   if (!order?.first) return [shops, []]
   const named = order.first.filter((shop) => shops.includes(shop))
-  const after = [order.newPage, 'other'].filter((shop) => shops.includes(shop))
+  const after = [...order.newPage, 'other'].filter((shop) => shops.includes(shop))
   const rest = shops.filter((shop) => !named.includes(shop) && !after.includes(shop))
   return [[...named, ...rest], after]
 }

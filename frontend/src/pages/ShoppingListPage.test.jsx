@@ -458,6 +458,13 @@ describe('printGroups', () => {
     ])
   })
 
+  it('puts Costco on the supermarket page', () => {
+    expect(printGroups(['markets', 'supermarket', 'costco', 'deli', 'other'], 'shops_first')).toEqual([
+      ['markets', 'deli'],
+      ['supermarket', 'costco', 'other'],
+    ])
+  })
+
   it('skips shops that have nothing on the list', () => {
     expect(printGroups(['deli', 'markets'], 'shops_first')).toEqual([['markets', 'deli'], []])
   })

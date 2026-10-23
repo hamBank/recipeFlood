@@ -117,6 +117,7 @@ class IngredientSource(str, Enum):
     chemist = "chemist"
     hardware = "hardware"
     newsagent = "newsagent"
+    costco = "costco"
     other = "other"
 
 
