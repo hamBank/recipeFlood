@@ -13,6 +13,7 @@ vi.mock('../api', () => ({
   uncheckAllShopping: vi.fn(),
   listIngredients: vi.fn(),
   updateMe: vi.fn(),
+  updateIngredient: vi.fn(),
   syncSheet: vi.fn(),
 }))
 
@@ -802,5 +803,70 @@ describe('ShoppingListPage reconnecting', () => {
 
     await waitFor(() => expect(api.updateShoppingItem).toHaveBeenCalledWith(1, { is_checked: true }))
     await waitFor(() => expect(loadQueue()).toEqual([]))
+  })
+})
+
+describe('ShoppingListPage default shop editing', () => {
+  const lines = () =>
+    baseList([
+      item({ id: 1, name: 'Feta', ingredient_id: 7, shop: 'supermarket' }),
+      item({ id: 2, name: 'Something odd', ingredient_id: null, shop: 'other' }),
+    ])
+
+  it('is hidden until the user turns it on, and the choice is saved', async () => {
+    sessionUser = { id: 1, shopping_show_ticked: true }
+    api.getShoppingList.mockResolvedValue(lines())
+    api.updateMe.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    await screen.findByText('Feta')
+    expect(screen.queryByRole('combobox', { name: 'Default shop for Feta' })).toBeNull()
+
+    const toggle = screen.getByRole('checkbox', { name: 'Edit default shops' })
+    expect(toggle.checked).toBe(false)
+    fireEvent.click(toggle)
+
+    expect(screen.getByRole('combobox', { name: 'Default shop for Feta' }).value).toBe('supermarket')
+    // An unlinked line has no pantry default to change.
+    expect(screen.queryByRole('combobox', { name: 'Default shop for Something odd' })).toBeNull()
+    expect(api.updateMe).toHaveBeenCalledWith({ shopping_edit_default_shop: true })
+  })
+
+  it('starts on when the user saved it on', async () => {
+    sessionUser = { id: 1, shopping_edit_default_shop: true }
+    api.getShoppingList.mockResolvedValue(lines())
+    render(<ShoppingListPage />)
+    expect(await screen.findByRole('combobox', { name: 'Default shop for Feta' })).toBeDefined()
+  })
+
+  it("changes the pantry ingredient's shop and reloads the list", async () => {
+    sessionUser = { id: 1, shopping_edit_default_shop: true }
+    api.getShoppingList.mockResolvedValue(lines())
+    api.updateIngredient.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    const picker = await screen.findByRole('combobox', { name: 'Default shop for Feta' })
+    const loads = api.getShoppingList.mock.calls.length
+
+    fireEvent.change(picker, { target: { value: 'deli' } })
+
+    await waitFor(() => expect(api.getShoppingList.mock.calls.length).toBe(loads + 1))
+    expect(api.updateIngredient).toHaveBeenCalledWith(7, { source: 'deli' })
+    // No one-off move on this line, so nothing to clear.
+    expect(api.updateShoppingItem).not.toHaveBeenCalled()
+  })
+
+  it("clears a one-off move on the line so the new default applies to it", async () => {
+    sessionUser = { id: 1, shopping_edit_default_shop: true }
+    api.getShoppingList.mockResolvedValue(
+      baseList([item({ id: 1, name: 'Feta', ingredient_id: 7, shop: 'markets', shop_override: 'markets' })]),
+    )
+    api.updateIngredient.mockResolvedValue({})
+    api.updateShoppingItem.mockResolvedValue({})
+    render(<ShoppingListPage />)
+    const picker = await screen.findByRole('combobox', { name: 'Default shop for Feta' })
+
+    fireEvent.change(picker, { target: { value: 'deli' } })
+
+    await waitFor(() => expect(api.updateShoppingItem).toHaveBeenCalledWith(1, { shop_override: null }))
+    expect(api.updateIngredient).toHaveBeenCalledWith(7, { source: 'deli' })
   })
 })
