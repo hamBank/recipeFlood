@@ -966,10 +966,12 @@ class ShoppingItem(SQLModel, table=True):
 
 class SheetPendingDelete(SQLModel, table=True):
     """A shopping item removed in the app whose sheet row could not be
-    deleted yet (the Sheets API call failed) — retried on the next
+    emptied yet (the Sheets API call failed) — retried on the next
     on-demand sync. See the HARD SAFETY RULE in SPEC.md's "Google Sheet
-    sync": nothing deletes a sheet row without going through this path or
-    an immediate, successful, id-matched deletion."""
+    sync": nothing empties a sheet row's cells without going through this
+    path or an immediate, successful, id-matched clear. (Named for when
+    rows were deleted outright; the table name is kept to avoid a
+    migration.)"""
 
     item_id: int = Field(primary_key=True)
     created_at: datetime = Field(default_factory=utcnow)
@@ -1120,5 +1122,7 @@ class SheetSyncResult(SQLModel):
     linked: int = 0
     ticked: int = 0
     pushed: int = 0
-    deleted: int = 0
+    # Rows emptied (A, B, I) for items removed in the app whose earlier
+    # clearing failed. Rows themselves are never deleted.
+    cleared: int = 0
     errors: list[str] = Field(default_factory=list)

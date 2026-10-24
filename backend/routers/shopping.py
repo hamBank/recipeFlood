@@ -20,7 +20,7 @@ from ..models import (
 )
 from ..permissions import require_user_role
 from ..recipes_service import find_ingredient
-from ..sheet_sync import delete_items_from_sheet, reconcile, sync_item
+from ..sheet_sync import clear_items_from_sheet, reconcile, sync_item
 from ..shopping import absorb, item_read, merge_target, read_list, set_checked
 
 router = APIRouter(prefix="/shopping", tags=["shopping"])
@@ -178,7 +178,7 @@ def delete_item(
     item = _lookup(session, item_id)
     session.delete(item)
     session.commit()
-    background_tasks.add_task(delete_items_from_sheet, [item_id])
+    background_tasks.add_task(clear_items_from_sheet, [item_id])
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -201,7 +201,7 @@ def clear_checked(
         session.delete(item)
     session.commit()
     if checked_ids:
-        background_tasks.add_task(delete_items_from_sheet, checked_ids)
+        background_tasks.add_task(clear_items_from_sheet, checked_ids)
     return read_list(session, with_cost=True)
 
 
