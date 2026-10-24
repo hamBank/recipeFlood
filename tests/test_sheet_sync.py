@@ -2,7 +2,7 @@
 sync". Uses an in-memory FakeSheetClient (backend/sheet_client.py); nothing
 here touches the network.
 
-Background push tasks (`sync_item`, `delete_items_from_sheet`) run inside
+Background push tasks (`sync_item`, `clear_items_from_sheet`) run inside
 `TestClient`'s request/response cycle, so `client.post(...)` etc. have
 already completed their push by the time the call returns — see the
 `app` fixture's engine patch in conftest.py.
@@ -127,20 +127,54 @@ class TestPush:
         _row, entry = _row_for(sheet, item["id"])
         assert entry["a"] == "aluminium foil"
 
-    def test_row_deleted_on_remove(self, client, sheet):
+    def test_removing_an_item_empties_its_row_but_keeps_the_row(self, client, sheet):
         item = client.post("/shopping", json={"name": "bread"}).json()
-        assert _row_for(sheet, item["id"])[0] is not None
+        row, entry = _row_for(sheet, item["id"])
+        g = entry["g"]
+        client.patch(f"/shopping/{item['id']}", json={"is_checked": True})
         client.delete(f"/shopping/{item['id']}")
         assert _row_for(sheet, item["id"])[0] is None
-        assert len(sheet.rows) == 0
+        assert sheet.rows[row] == {"a": "", "b": "", "g": g, "i": "", "strike": False}
 
-    def test_row_deleted_on_clear_checked(self, client, sheet):
+    def test_clear_checked_empties_only_the_ticked_rows(self, client, sheet):
         keep = client.post("/shopping", json={"name": "milk"}).json()
         drop = client.post("/shopping", json={"name": "bread"}).json()
         client.patch(f"/shopping/{drop['id']}", json={"is_checked": True})
         client.post("/shopping/clear-checked")
         assert _row_for(sheet, drop["id"])[0] is None
-        assert _row_for(sheet, keep["id"])[0] is not None
+        assert _row_for(sheet, keep["id"])[0] == 1
+        assert sheet.rows[2]["a"] == "" and sheet.rows[2]["g"] == "=LOOKUP(row 2)"
+
+    def test_clearing_a_whole_shop_keeps_every_row(self, client, sheet):
+        """The end of a shop: everything ticked, then Clear ticked. The
+        spare rows (and their G formulas) must all still be there."""
+        for row in range(1, 6):
+            sheet._row(row)  # five spare rows set up in advance
+        ids = [client.post("/shopping", json={"name": n}).json()["id"] for n in ("milk", "eggs", "bread")]
+        for item_id in ids:
+            client.patch(f"/shopping/{item_id}", json={"is_checked": True})
+        client.post("/shopping/clear-checked")
+        assert sorted(sheet.rows) == [1, 2, 3, 4, 5]
+        assert all(e["a"] == "" and e["i"] == "" and not e["strike"] for e in sheet.rows.values())
+        assert [sheet.rows[r]["g"] for r in range(1, 6)] == [f"=LOOKUP(row {r})" for r in range(1, 6)]
+
+    def test_a_new_item_reuses_the_first_empty_row(self, client, sheet):
+        milk = client.post("/shopping", json={"name": "milk"}).json()
+        client.post("/shopping", json={"name": "bread"})
+        client.delete(f"/shopping/{milk['id']}")
+        sheet.rows[1]["strike"] = True  # left struck through by hand
+
+        eggs = client.post("/shopping", json={"name": "eggs"}).json()
+        row, entry = _row_for(sheet, eggs["id"])
+        assert row == 1
+        assert entry["a"] == "eggs" and entry["strike"] is False
+        assert len(sheet.rows) == 2
+
+    def test_a_row_with_only_b_filled_in_is_not_taken(self, client, sheet):
+        sheet.seed(1, b="a note someone left")
+        item = client.post("/shopping", json={"name": "milk"}).json()
+        assert _row_for(sheet, item["id"])[0] == 2
+        assert sheet.rows[1]["b"] == "a note someone left"
 
     def test_g_is_never_written(self, client, sheet):
         item = client.post("/shopping", json={"name": "flour", "weight_grams": 500}).json()
@@ -155,6 +189,26 @@ class TestPush:
         client.post("/shopping/uncheck-all")
         assert len(sheet.rows) == 1
         assert sheet.rows[1]["strike"] is False
+
+    def test_a_tick_that_failed_to_reach_the_sheet_lands_with_the_next_push(
+        self, client, sheet, monkeypatch
+    ):
+        milk = client.post("/shopping", json={"name": "milk"}).json()
+        row, _entry = _row_for(sheet, milk["id"])
+
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("429 from Google")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(sheet, "write_rows", boom)
+            client.patch(f"/shopping/{milk['id']}", json={"is_checked": True})
+        # All or nothing: neither the status nor the strike went through.
+        assert sheet.rows[row]["i"] == f"rf:{milk['id']} synced"
+        assert sheet.rows[row]["strike"] is False
+
+        client.post("/shopping", json={"name": "bread"})
+        assert sheet.rows[row]["i"] == f"rf:{milk['id']} ticked"
+        assert sheet.rows[row]["strike"] is True
 
     def test_a_sheets_error_during_a_request_does_not_fail_the_request(self, client, sheet, monkeypatch):
         def boom(*_args, **_kwargs):
@@ -188,7 +242,7 @@ class TestFailedSyncWrite:
         sheet.seed(1, a="bread", b="1")
 
         with monkeypatch.context() as patch:
-            patch.setattr(sheet, "write_cells", boom)
+            patch.setattr(sheet, "write_rows", boom)
             failed = client.post("/shopping/sheet-sync").json()
         assert failed["errors"] == ["503 from Google"]
         assert (failed["imported"], failed["pushed"]) == (0, 0)
@@ -202,7 +256,7 @@ class TestFailedSyncWrite:
         assert not items["milk"]["is_checked"]
         assert _row_for(sheet, milk["id"])[0] is not None
 
-    def test_a_failed_strikethrough_is_retried_on_the_next_sync(
+    def test_a_ticks_status_and_strikethrough_land_together(
         self, client, sheet, session, monkeypatch
     ):
         item = client.post("/shopping", json={"name": "milk"}).json()
@@ -217,19 +271,21 @@ class TestFailedSyncWrite:
             raise RuntimeError("503 from Google")
 
         with monkeypatch.context() as patch:
-            patch.setattr(sheet, "set_strikethrough", boom)
+            patch.setattr(sheet, "write_rows", boom)
             failed = client.post("/shopping/sheet-sync").json()
         assert failed["errors"] == ["503 from Google"]
-        assert "ticked" in sheet.rows[row]["i"]  # the cell write itself landed
+        assert sheet.rows[row]["i"] == f"rf:{item['id']} synced"
+        assert sheet.rows[row]["strike"] is False
 
         client.post("/shopping/sheet-sync")
+        assert sheet.rows[row]["i"] == f"rf:{item['id']} ticked"
         assert sheet.rows[row]["strike"] is True
 
 
-class TestDeletionSafety:
-    def test_deletion_matches_a_fresh_id_read_not_a_cached_row(self, client, sheet):
-        """If deletion trusted a remembered row number instead of re-reading
-        column I, a row that moved after being linked would delete
+class TestClearingSafety:
+    def test_clearing_matches_a_fresh_id_read_not_a_cached_row(self, client, sheet):
+        """If clearing trusted a remembered row number instead of re-reading
+        column I, a row that moved after being linked would empty
         whatever now happens to sit at the old position."""
         item = client.post("/shopping", json={"name": "milk"}).json()
         moved = dict(sheet.rows[1])
@@ -239,20 +295,21 @@ class TestDeletionSafety:
         client.delete(f"/shopping/{item['id']}")
 
         assert sheet.rows[1]["a"] == "unrelated item"  # untouched
-        assert _row_for(sheet, item["id"])[0] is None  # the real row is gone
+        assert _row_for(sheet, item["id"])[0] is None  # the real row is emptied
+        assert sheet.rows[2]["a"] == ""
 
-    def test_a_row_with_no_id_or_a_different_id_is_never_deleted(self, app, sheet):
+    def test_a_row_with_no_id_or_a_different_id_is_never_cleared(self, app, sheet):
         sheet.seed(1, a="blank status row", i="")
         sheet.seed(2, a="someone else's item", i="rf:999 synced")
-        sheet_sync.delete_items_from_sheet([42])
+        sheet_sync.clear_items_from_sheet([42])
         assert sheet.rows[1]["a"] == "blank status row"
         assert sheet.rows[2]["a"] == "someone else's item"
 
-    def test_pending_delete_retried_on_sync(self, client, sheet, session, monkeypatch):
+    def test_pending_clear_retried_on_sync(self, client, sheet, session, monkeypatch):
         item = client.post("/shopping", json={"name": "milk"}).json()
 
-        real_delete_rows = sheet.delete_rows
-        monkeypatch.setattr(sheet, "delete_rows", lambda rows: (_ for _ in ()).throw(RuntimeError("down")))
+        real_write_rows = sheet.write_rows
+        monkeypatch.setattr(sheet, "write_rows", lambda rows: (_ for _ in ()).throw(RuntimeError("down")))
         client.delete(f"/shopping/{item['id']}")
 
         pending = session.get(SheetPendingDelete, item["id"])
@@ -260,19 +317,20 @@ class TestDeletionSafety:
         # The row is still there — the failure didn't silently drop it.
         assert _row_for(sheet, item["id"])[0] is not None
 
-        monkeypatch.setattr(sheet, "delete_rows", real_delete_rows)
-        sheet_sync.reconcile(session)
+        monkeypatch.setattr(sheet, "write_rows", real_write_rows)
+        result = sheet_sync.reconcile(session)
 
+        assert result["cleared"] == 1
         assert _row_for(sheet, item["id"])[0] is None
+        assert sheet.rows[1]["a"] == "" and sheet.rows[1]["g"] == "=LOOKUP(row 1)"
         session.expire_all()
         assert session.get(SheetPendingDelete, item["id"]) is None
 
-    def test_a_retried_delete_does_not_shift_writes_onto_the_wrong_row(
+    def test_a_retried_clear_leaves_the_rows_below_where_they_are(
         self, client, sheet, session
     ):
-        """A pending delete above an unlinked row: the import's I-cell write
-        must land on that row, not on whatever slides into its old number
-        once the row above is gone."""
+        """A pending clear above two unlinked rows: the rows keep their
+        numbers, and each import's I-cell write lands on its own row."""
         session.add(SheetPendingDelete(item_id=424242))
         session.commit()
         sheet.seed(1, a="old thing", i="rf:424242 synced")
@@ -285,7 +343,8 @@ class TestDeletionSafety:
         assert bread["i"].startswith("rf:") and bread["i"].endswith(" synced")
         note = next(e for e in sheet.rows.values() if e["a"] == "someone else's note")
         assert note["i"].startswith("rf:")  # imported and linked in its own row
-        assert all(e["a"] != "old thing" for e in sheet.rows.values())
+        assert sheet.rows[1]["a"] == "" and sheet.rows[1]["i"] == ""
+        assert sheet.rows[2]["a"] == "bread" and sheet.rows[3]["a"] == "someone else's note"
         assert len({e["i"] for e in sheet.rows.values()}) == len(sheet.rows)
 
 
@@ -295,7 +354,7 @@ class TestReconcile:
         item = client.post("/shopping", json={"name": "milk"}).json()
         result = client.post("/shopping/sheet-sync").json()
         assert result == {
-            "imported": 0, "linked": 0, "ticked": 0, "pushed": 0, "deleted": 0, "errors": [],
+            "imported": 0, "linked": 0, "ticked": 0, "pushed": 0, "cleared": 0, "errors": [],
         }
         refreshed = session.get(ShoppingItem, item["id"])
         assert refreshed.sheet_linked is False

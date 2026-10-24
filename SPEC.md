@@ -512,10 +512,18 @@ row's A:B.
 
 **App → sheet**, pushed in the background right after the request's own
 commit (`FastAPI BackgroundTasks`, its own DB session, never blocking or
-failing the request): a new item appends a row (skipped while already
+failing the request): a new item goes in the first empty row — A, B and I
+all blank, whether a spare row set up in advance or one an earlier removal
+emptied — or after the last row if there is none (skipped while already
 checked); an amount change updates B; ticking/unticking toggles the
 strikethrough and I's status; a name edit updates A; removing an item or
-"Clear ticked" deletes its row. An item marked **detached** (its sheet row
+"Clear ticked" empties that row's A, B and I and drops its strikethrough.
+**No row is ever deleted, inserted or moved**: the row stays, with its G
+formula and anything else in it, ready for the next item. Each push is one
+API call carrying text, status and strikethrough together, so they land
+together or not at all; it is retried when Google answers with its
+per-minute quota error or a server error, and it also carries anything an
+earlier push failed to deliver. An item marked **detached** (its sheet row
 was found gone during a reconcile) is never pushed again.
 
 **Sheet → app**, only on demand — `POST /shopping/sheet-sync`, no cron, no
@@ -526,21 +534,21 @@ defaulting to quantity 1, same as `POST /shopping`); tick off and detach
 any linked app item whose row vanished from the sheet; mark a row whose id
 isn't a real app item `missing in app`; then push anything still owed
 (new unchecked items, dirty linked ones). Returns
-`{imported, linked, ticked, pushed, deleted, errors}`. If the sheet write
-fails, the whole reconcile is undone (nothing imported, linked or ticked)
-and the next sync starts over, since none of its `rf:` ids reached column
-I; if only the strikethrough or a retried delete fails, the rest stands
-and that part is retried next sync.
+`{imported, linked, ticked, pushed, cleared, errors}`. The reconcile's
+changes go to the sheet as one write; if it fails, the whole reconcile is
+undone (nothing imported, linked or ticked) and the next sync starts over,
+since none of its `rf:` ids reached column I.
 
-**The hard rule: the app never deletes a sheet row except by re-reading
-column I fresh and matching an item's id exactly**, never by a
-remembered row number, and never a row with an empty or unparseable I.
-Deletions happen bottom-up. If a deletion can't be performed (the Sheets
-API errors), it's recorded as a `SheetPendingDelete` and retried on the
-next on-demand sync rather than silently dropped or force-retried inline.
-Every path that removes a `ShoppingItem` — single delete, clear-checked —
-goes through this one function (`sheet_sync.delete_items_from_sheet`);
-nothing else in the codebase deletes a sheet row.
+**The hard rule: the app never deletes a sheet row, and never empties one
+except by re-reading column I fresh and matching an item's id exactly**,
+never by a remembered row number, and never a row with an empty or
+unparseable I. Emptying touches only A, B and I. If it can't be done (the
+Sheets API errors), it's recorded as a `SheetPendingDelete` and retried on
+the next on-demand sync rather than silently dropped or force-retried
+inline. Every path that removes a `ShoppingItem` — single delete,
+clear-checked — goes through this one function
+(`sheet_sync.clear_items_from_sheet`); nothing else empties a row the app
+wrote.
 
 ## Prepared log
 

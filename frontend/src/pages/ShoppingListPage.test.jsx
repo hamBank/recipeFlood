@@ -80,7 +80,7 @@ describe('ShoppingListPage Google Sheet sync', () => {
   it('calls the sync endpoint and shows a summary, then reloads the list', async () => {
     sessionConfig = { sheet_sync_enabled: true }
     api.getShoppingList.mockResolvedValue(baseList([item()]))
-    api.syncSheet.mockResolvedValue({ imported: 2, linked: 0, ticked: 1, pushed: 0, deleted: 0, errors: [] })
+    api.syncSheet.mockResolvedValue({ imported: 2, linked: 0, ticked: 1, pushed: 0, cleared: 0, errors: [] })
     render(<ShoppingListPage />)
     await screen.findByText('Milk')
 
@@ -95,7 +95,7 @@ describe('ShoppingListPage Google Sheet sync', () => {
     sessionConfig = { sheet_sync_enabled: true }
     api.getShoppingList.mockResolvedValue(baseList([item()]))
     api.syncSheet.mockResolvedValue({
-      imported: 0, linked: 0, ticked: 0, pushed: 0, deleted: 0, errors: ['Sheets API is down'],
+      imported: 0, linked: 0, ticked: 0, pushed: 0, cleared: 0, errors: ['Sheets API is down'],
     })
     render(<ShoppingListPage />)
     await screen.findByText('Milk')

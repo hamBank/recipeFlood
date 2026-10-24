@@ -466,7 +466,7 @@ export default function ShoppingListPage() {
         result.linked && `${result.linked} linked`,
         result.ticked && `${result.ticked} ticked`,
         result.pushed && `${result.pushed} pushed`,
-        result.deleted && `${result.deleted} deleted`,
+        result.cleared && `${result.cleared} cleared`,
       ].filter(Boolean)
       setSyncMessage(`Synced${parts.length ? ` — ${parts.join(', ')}` : ' — nothing to do'}`)
       await load()
