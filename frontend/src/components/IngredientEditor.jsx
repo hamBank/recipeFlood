@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SOURCE_LABEL } from '../format'
+import { SHOP_OPTIONS } from '../format'
 
 const NUTRIENTS = [
   ['energy_kj', 'Energy (kJ)'],
@@ -195,7 +195,7 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
 
           <Field label="Bought from">
             <select value={form.source} onChange={(e) => set('source', e.target.value)} className={inputClass}>
-              {Object.entries(SOURCE_LABEL).map(([value, label]) => (
+              {SHOP_OPTIONS.map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>
