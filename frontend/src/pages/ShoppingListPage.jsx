@@ -22,7 +22,7 @@ import {
   saveQueue,
 } from '../offlineQueue'
 import { useSession } from '../App'
-import { formatCents, formatPercent, SOURCE_LABEL } from '../format'
+import { formatCents, formatPercent, SHOP_OPTIONS, SOURCE_LABEL } from '../format'
 
 //: Units for the plain "quantity" line ("3 lemons", "1 bunch") — weight
 //: and volume have their own dedicated fields (weight_grams/volume_ml),
@@ -893,7 +893,7 @@ function Row({ item, symbol, offline, onToggle, onRemove, onSave, onSetDefaultSh
           onChange={(event) => onSetDefaultShop(event.target.value)}
           className="w-28 shrink-0 rounded-lg border border-edge bg-card px-1 py-1 text-xs text-ink disabled:opacity-30"
         >
-          {Object.entries(SOURCE_LABEL).map(([value, label]) => (
+          {SHOP_OPTIONS.map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
@@ -1064,7 +1064,7 @@ function EditRow({ item, onCancel, onSave }) {
               *is* the override, not the pantry's own default, so there's
               no value here that's safe to show without a second request. */}
           <option value="">Use pantry default</option>
-          {Object.entries(SOURCE_LABEL).map(([value, label]) => (
+          {SHOP_OPTIONS.map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>

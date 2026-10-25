@@ -8,6 +8,8 @@ import {
   formatPercent,
   formatQuantity,
   formatRelative,
+  SHOP_OPTIONS,
+  SOURCE_LABEL,
 } from './format'
 
 describe('formatMinutes', () => {
@@ -97,5 +99,16 @@ describe('formatPercent', () => {
     expect(formatPercent(0.756)).toBe('76%')
     expect(formatPercent(0)).toBe('0%')
     expect(formatPercent(null)).toBe('0%')
+  })
+})
+
+describe('SHOP_OPTIONS', () => {
+  it('lists every shop alphabetically by label, with Other last', () => {
+    const labels = SHOP_OPTIONS.map(([, label]) => label)
+    expect(labels.at(-1)).toBe('Other')
+    const rest = labels.slice(0, -1)
+    expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)))
+    expect(rest[0]).toBe('Asian grocery')
+    expect(SHOP_OPTIONS.map(([value]) => value).sort()).toEqual(Object.keys(SOURCE_LABEL).sort())
   })
 })

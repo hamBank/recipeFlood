@@ -136,3 +136,11 @@ export const SOURCE_LABEL = {
   costco: 'Costco',
   other: 'Other',
 }
+
+/** Shop choices for a dropdown: alphabetical by label, with "Other" kept
+ * last as the catch-all. (SOURCE_LABEL's own order means nothing; the list
+ * itself is grouped in walking order, see backend/shopping.py.) */
+export const SHOP_OPTIONS = Object.entries(SOURCE_LABEL)
+  .filter(([value]) => value !== 'other')
+  .sort(([, a], [, b]) => a.localeCompare(b))
+  .concat([['other', SOURCE_LABEL.other]])
