@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
-import { getAuthConfig, getMe, getToken, setToken } from './api'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { getAuthConfig, getMe, getToken, setSessionExpiredHandler, setToken } from './api'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import DesktopLoginPage from './pages/DesktopLoginPage'
@@ -20,6 +20,8 @@ const SessionContext = createContext({ config: null, user: null, setUser: () => 
 
 export const CONFIG_CACHE_KEY = 'rf_auth_config'
 export const USER_CACHE_KEY = 'rf_auth_user'
+
+const EXPIRED_NOTICE = 'Your session has expired. Please sign in again.'
 
 function cacheGet(key) {
   try {
@@ -54,7 +56,9 @@ function Centered({ children }) {
 
 /** Wraps routes that require a signed-in user. */
 function RequireAuth({ user, children }) {
-  if (!user) return <Navigate to="/sign-in" replace />
+  const location = useLocation()
+  // `from` brings the user back here once signed in (see the sign-in route).
+  if (!user) return <Navigate to="/sign-in" replace state={{ from: location }} />
   return children
 }
 
@@ -63,6 +67,30 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  // Set when a signed-in request came back 401, so the sign-in page can say
+  // why it's there; cleared by the next sign-in.
+  const [expired, setExpired] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+  // The handler below is registered once, so it reads these through refs.
+  const userRef = useRef(user)
+  const locationRef = useRef(location)
+  userRef.current = user
+  locationRef.current = location
+
+  useEffect(() => {
+    // api.js has already dropped the token. Only a session that was live
+    // ends here: the startup check below handles a token that was already
+    // dead on arrival by quietly browsing as a guest.
+    setSessionExpiredHandler(() => {
+      if (!userRef.current) return
+      cacheSet(USER_CACHE_KEY, null)
+      setUser(null)
+      setExpired(true)
+      navigate('/sign-in', { state: { from: locationRef.current }, replace: true })
+    })
+    return () => setSessionExpiredHandler(null)
+  }, [navigate])
 
   useEffect(() => {
     ;(async () => {
@@ -111,6 +139,17 @@ export default function App() {
     setUser(null)
   }
 
+  // Stable, since LoginPage re-renders Google's button whenever it changes.
+  const signedIn = useCallback((next) => {
+    setExpired(false)
+    setUser(next)
+  }, [])
+
+  // Back to the page the session expired on, once signed in again.
+  const from = location.state?.from
+  const afterSignIn = from ? `${from.pathname}${from.search || ''}` : '/'
+  const notice = expired ? EXPIRED_NOTICE : null
+
   // Wraps setUser so a preference update (see ShoppingListPage's "Show
   // ticked" toggle) also updates the offline cache, not just React state.
   const updateUser = (next) => {
@@ -139,10 +178,10 @@ export default function App() {
   // With PUBLIC_READ off the whole site is allowlist-only, so an anonymous
   // visitor gets the sign-in page instead of an empty recipe grid.
   if (!user && config && !config.public_read) {
-    if (!IS_DESKTOP) return <LoginPage config={config} onSignedIn={setUser} />
+    if (!IS_DESKTOP) return <LoginPage config={config} onSignedIn={signedIn} notice={notice} />
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-page p-4">
-        <LoginPage config={config} onSignedIn={setUser} embedded />
+        <LoginPage config={config} onSignedIn={signedIn} notice={notice} embedded />
         {changeServer}
       </div>
     )
@@ -229,7 +268,11 @@ export default function App() {
           <Route
             path="sign-in"
             element={
-              user ? <Navigate to="/" replace /> : <LoginPage config={config} onSignedIn={setUser} embedded />
+              user ? (
+                <Navigate to={afterSignIn} replace />
+              ) : (
+                <LoginPage config={config} onSignedIn={signedIn} notice={notice} embedded />
+              )
             }
           />
           {/* Not behind RequireAuth: it renders the sign-in itself, so the
