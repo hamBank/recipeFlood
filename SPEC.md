@@ -18,6 +18,23 @@ Cost is the only thing hidden from the public. Nutrition is not sensitive
 and is shown to everyone. Setting `PUBLIC_READ=false` puts the whole site
 behind the allowlist without any code change.
 
+### Staying signed in
+
+A sign-in token lasts 30 days, and the session slides: once a token is past
+halfway (15 days old), the next successful request made with it gets a fresh
+30-day token back in an `X-Refreshed-Token` response header, which the
+frontend stores in place of the old one. So anyone who uses the app at least
+every couple of weeks stays signed in, while a token left unused for the full
+30 days still expires. An error response never carries a fresh token, and an
+inactive account gets none.
+
+If a request made while signed in comes back **401** (the token expired, or
+the account was switched off), the app drops the token and the cached user
+and goes to the sign-in page with "Your session has expired"; signing in
+returns to the page you were on. A token that is already dead when the app
+starts just leaves you browsing as a guest, as before. A 401 with no token
+sent (a refused sign-in) is an ordinary error.
+
 ## Desktop app sign-in
 
 The desktop app can't use Google sign-in itself: Google only works from
@@ -49,8 +66,9 @@ Why each guard exists:
   state the app generated. Redeeming with the wrong state still burns the
   code, so it can't be guessed at.
 - **CORS** allows only the origins in `DESKTOP_ORIGINS`, never `*`, with
-  no cookies (auth is a bearer header). `X-Total-Count` is exposed so
-  paging works cross-origin.
+  no cookies (auth is a bearer header). `X-Total-Count` and
+  `X-Refreshed-Token` are exposed so paging and the sliding session work
+  cross-origin.
 
 ## A recipe
 

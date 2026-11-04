@@ -11,6 +11,7 @@ from sqlalchemy import text
 from starlette.datastructures import Headers
 from starlette.types import Receive, Scope, Send
 
+from .auth import REFRESH_HEADER, RefreshTokenMiddleware
 from .config import settings
 from .database import engine
 from .routers import (
@@ -155,6 +156,10 @@ def create_app() -> FastAPI:
     # acts on GET, so it would ignore OPTIONS anyway.) Only the desktop
     # app's origins are listed, never "*", and credentials stay off: auth
     # is a bearer header, not a cookie.
+    # Inside CORS (added before it), so CORS still wraps every response;
+    # the refreshed token is just one more header on the way out.
+    app.add_middleware(RefreshTokenMiddleware)
+
     desktop_origins = [
         origin.strip()
         for origin in settings.desktop_origins.split(",")
@@ -167,8 +172,9 @@ def create_app() -> FastAPI:
             allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
             allow_headers=["Authorization", "Content-Type"],
             # Cross-origin, a response hides every header but the basics;
-            # the frontend's paging reads X-Total-Count (api.js).
-            expose_headers=["X-Total-Count"],
+            # the frontend reads X-Total-Count (paging) and the refreshed
+            # sign-in token (api.js).
+            expose_headers=["X-Total-Count", REFRESH_HEADER],
             allow_credentials=False,
             max_age=600,
         )

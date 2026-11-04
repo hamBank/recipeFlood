@@ -11,11 +11,50 @@ export function setToken(token) {
   else localStorage.removeItem(TOKEN_KEY)
 }
 
+/** Header the backend sets on a response when the sign-in token it was sent
+ * is past halfway through its life (see backend/auth.py). */
+const REFRESH_HEADER = 'X-Refreshed-Token'
+
+let onSessionExpired = () => {}
+
+/** Called with no arguments when a request made while signed in comes back
+ * 401: the token expired or the account was switched off. The app uses it
+ * to drop the user and show the sign-in page (see App.jsx). */
+export function setSessionExpiredHandler(handler) {
+  onSessionExpired = handler || (() => {})
+}
+
 function authHeaders(extra = {}) {
   const headers = { ...extra }
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
   return headers
+}
+
+/** Every response goes through here first: picks up a refreshed token, and
+ * turns a 401 on a signed-in request into the end of the session. A 401
+ * with no token sent (a failed sign-in, say) is just an error. */
+function checkSession(response, sentToken) {
+  if (!sentToken) return
+  if (response.status === 401) {
+    // Only if nothing has replaced the token meanwhile (a fresh sign-in in
+    // another tab, or a refresh from a request that overtook this one).
+    if (getToken() === sentToken) {
+      setToken(null)
+      onSessionExpired()
+    }
+    return
+  }
+  const refreshed = response.headers.get(REFRESH_HEADER)
+  // Never resurrect a session that was signed out while this was in flight.
+  if (refreshed && getToken() === sentToken) setToken(refreshed)
+}
+
+async function request(path, init) {
+  const sentToken = getToken()
+  const response = await fetch(apiUrl(path), init)
+  checkSession(response, sentToken)
+  return response
 }
 
 async function toError(response) {
@@ -32,7 +71,7 @@ async function toError(response) {
 
 export async function apiFetch(path, { method = 'GET', body } = {}) {
   const headers = authHeaders(body !== undefined ? { 'Content-Type': 'application/json' } : {})
-  const response = await fetch(apiUrl(path), {
+  const response = await request(path, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -43,7 +82,7 @@ export async function apiFetch(path, { method = 'GET', body } = {}) {
 
 /** Paged GET: resolves to { items, total } using the X-Total-Count header. */
 export async function apiFetchPaged(path) {
-  const response = await fetch(apiUrl(path), { headers: authHeaders() })
+  const response = await request(path, { headers: authHeaders() })
   if (!response.ok) throw await toError(response)
   return {
     items: await response.json(),
@@ -52,7 +91,7 @@ export async function apiFetchPaged(path) {
 }
 
 async function apiUpload(path, formData) {
-  const response = await fetch(apiUrl(path), {
+  const response = await request(path, {
     method: 'POST',
     headers: authHeaders(), // no Content-Type: the browser sets the boundary
     body: formData,

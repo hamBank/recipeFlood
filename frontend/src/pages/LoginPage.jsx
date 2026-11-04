@@ -9,7 +9,7 @@ import { IS_DESKTOP } from '../platform'
  * visitors never sign in (the site is publicly readable), so there is no
  * reason to make every one of them fetch Google's script.
  */
-export default function LoginPage({ config, onSignedIn, embedded = false }) {
+export default function LoginPage({ config, onSignedIn, embedded = false, notice = null }) {
   const buttonRef = useRef(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -81,6 +81,12 @@ export default function LoginPage({ config, onSignedIn, embedded = false }) {
       <p className="mt-2 text-sm text-ink-muted">
         Sign in to add recipes, record what you cooked, and see ingredient costs.
       </p>
+
+      {notice && (
+        <p role="status" className="mt-4 rounded-lg bg-soft p-3 text-sm text-ink">
+          {notice}
+        </p>
+      )}
 
       {config?.auth_enabled === false && (
         <p className="mt-6 rounded-lg bg-soft p-3 text-sm text-ink-muted">

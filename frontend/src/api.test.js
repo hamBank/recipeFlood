@@ -4,6 +4,7 @@ import {
   apiFetchPaged,
   getToken,
   loginWithGoogle,
+  setSessionExpiredHandler,
   setToken,
   uploadRecipeImage,
 } from './api'
@@ -158,5 +159,82 @@ describe('desktop build', () => {
     global.fetch.mockResolvedValue(jsonResponse({}))
     await desktop.uploadRecipeImage('flax-bread', new File(['x'], 'p.jpg'))
     expect(global.fetch.mock.calls[0][0]).toBe('https://server.example/recipes/flax-bread/image')
+  })
+})
+
+describe('sliding sign-in session', () => {
+  afterEach(() => setSessionExpiredHandler(null))
+
+  it('stores a refreshed token the backend sends back', async () => {
+    setToken('old')
+    global.fetch.mockResolvedValue(jsonResponse({}, { headers: { 'X-Refreshed-Token': 'new' } }))
+    await apiFetch('/auth/me')
+    expect(getToken()).toBe('new')
+  })
+
+  it('picks one up from paged and upload calls too', async () => {
+    setToken('old')
+    global.fetch.mockResolvedValue(jsonResponse([], { headers: { 'X-Refreshed-Token': 'paged' } }))
+    await apiFetchPaged('/recipes')
+    expect(getToken()).toBe('paged')
+
+    global.fetch.mockResolvedValue(jsonResponse({}, { headers: { 'X-Refreshed-Token': 'upload' } }))
+    await uploadRecipeImage('soup', new File(['x'], 'soup.jpg', { type: 'image/jpeg' }))
+    expect(getToken()).toBe('upload')
+  })
+
+  it('does not bring back a token signed out of while the request was in flight', async () => {
+    setToken('old')
+    global.fetch.mockImplementation(async () => {
+      setToken(null)
+      return jsonResponse({}, { headers: { 'X-Refreshed-Token': 'new' } })
+    })
+    await apiFetch('/auth/me')
+    expect(getToken()).toBeNull()
+  })
+
+  it('ends the session on a 401 to a signed-in request', async () => {
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    setToken('old')
+    global.fetch.mockResolvedValue(
+      jsonResponse({ detail: 'Invalid token' }, { ok: false, status: 401 }),
+    )
+    await expect(apiFetch('/shopping')).rejects.toMatchObject({ status: 401 })
+    expect(getToken()).toBeNull()
+    expect(expired).toHaveBeenCalledOnce()
+  })
+
+  it('treats a 401 with no token sent as a plain error', async () => {
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    global.fetch.mockResolvedValue(
+      jsonResponse({ detail: 'Email not allowed' }, { ok: false, status: 401 }),
+    )
+    await expect(loginWithGoogle('credential')).rejects.toMatchObject({ status: 401 })
+    expect(expired).not.toHaveBeenCalled()
+  })
+
+  it('leaves a token alone that was replaced while the failing request was in flight', async () => {
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    setToken('old')
+    global.fetch.mockImplementation(async () => {
+      setToken('signed-in-again')
+      return jsonResponse({}, { ok: false, status: 401 })
+    })
+    await expect(apiFetch('/shopping')).rejects.toMatchObject({ status: 401 })
+    expect(getToken()).toBe('signed-in-again')
+    expect(expired).not.toHaveBeenCalled()
+  })
+
+  it('does not end the session on a 403', async () => {
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    setToken('old')
+    global.fetch.mockResolvedValue(jsonResponse({}, { ok: false, status: 403 }))
+    await expect(apiFetch('/users')).rejects.toMatchObject({ status: 403 })
+    expect(getToken()).toBe('old')
+    expect(expired).not.toHaveBeenCalled()
   })
 })
