@@ -7,6 +7,7 @@ vi.mock('./api', () => ({
   getMe: vi.fn().mockResolvedValue({ id: 1, email: 'dev@example.com' }),
   getToken: vi.fn(),
   setToken: vi.fn(),
+  getHealth: vi.fn().mockResolvedValue({}),
   setSessionExpiredHandler: vi.fn(),
 }))
 vi.mock('./pages/RecipeListPage', () => ({ default: () => <div>Recipe list</div> }))

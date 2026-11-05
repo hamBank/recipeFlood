@@ -1,6 +1,7 @@
 import { NavLink, Outlet, Link } from 'react-router-dom'
 import { IS_DESKTOP } from '../platform'
 import ThemePicker from './ThemePicker'
+import UpdateBanner from './UpdateBanner'
 
 function Tab({ to, children, end = false }) {
   return (
@@ -23,6 +24,7 @@ function Tab({ to, children, end = false }) {
 export default function Layout({ user, onSignOut }) {
   return (
     <div className="min-h-screen bg-page print:bg-white">
+      {!IS_DESKTOP && <UpdateBanner />}
       <header className="border-b border-edge bg-card print:hidden">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
           <Link to="/" className="text-lg font-bold tracking-tight text-ink">

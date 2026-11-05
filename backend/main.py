@@ -24,7 +24,7 @@ from .routers import (
     taxonomy,
     users,
 )
-from .version import backend_version, frontend_version
+from .version import STARTED_AT, backend_version, frontend_version
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -81,12 +81,17 @@ def create_app() -> FastAPI:
     def health():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+        # The fleet spec's /health contract (OBS-1); field meanings in
+        # backend/version.py. After a deploy, build_sha == backend_sha ==
+        # the deployed commit, which scripts/smoke_check.sh asserts.
         frontend = frontend_version()
         return {
             "status": "ok",
-            "backend_version": backend_version(),
-            "frontend_version": frontend["version"],
-            "frontend_built_at": frontend["built_at"],
+            "backend_sha": backend_version(),
+            "frontend_sha": frontend["frontend_sha"],
+            "build_sha": frontend["build_sha"],
+            "built_at": frontend["built_at"],
+            "started_at": STARTED_AT,
         }
 
     @app.post("/deploy")

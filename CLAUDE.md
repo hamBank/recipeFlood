@@ -41,11 +41,16 @@ or an enum-like column must be run by hand on Postgres: `upgrade head`, `downgra
 
 ## Frontend build
 `backend/static/` is build output: gitignored, never committed. `deploy.sh --update` builds it
-on every deploy after checking out the commit.
+on every deploy after checking out the commit. The build writes `version.json`
+(`frontend/scripts/write-version.js`, which fails rather than write `unknown`), and `/health`
+reports `backend_sha`, `build_sha` and `frontend_sha`. After a deploy `build_sha == backend_sha`
+== the deployed commit; `scripts/smoke_check.sh`, the deploy's last step, asserts it and makes
+the deploy exit non-zero if anything is off.
 
 ## Git workflow
 Branch from fresh `origin/main` → run both test suites → PR (non-draft) → auto-merge once CI
-is green → the push to `main` deploys through the `/deploy` webhook (`DEPLOYMENT.md`). After
+is green → the push to `main` deploys through the `/deploy` webhook (`DEPLOYMENT.md`) → check
+`/health`'s `backend_sha` is the merge commit. After
 each merge, reset your branch onto `origin/main` before the next change.
 
 ## Fleet spec — conformance is checked in CI
