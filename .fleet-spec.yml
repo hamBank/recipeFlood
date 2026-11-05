@@ -4,9 +4,5 @@
 # expired or is stale (the rule passes now, so delete the entry).
 spec: 0.2
 deviations:
-  - {rule: DEP-4, reason: "deploy verification is a manual curl /health", until: 2026-12-15}
   - {rule: DEP-5, reason: "backups are cron (/etc/cron.d/recipeflood)", until: 2027-01-31}
-  - {rule: BLD-2, reason: "version.json has version/built_at only", until: 2026-12-15}
-  - {rule: BLD-3, reason: "write-version.js falls back to 'unknown'", until: 2026-12-15}
-  - {rule: OBS-1, reason: "/health uses backend_version/frontend_version", until: 2026-12-15}
   - {rule: CFG-2, reason: "jwt_secret defaults to a public string", until: 2026-12-01}

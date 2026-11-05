@@ -1,4 +1,4 @@
-"""Version reporting for `/health` (see API.md).
+"""Build and release identity for `/health` (fleet spec BLD-2/OBS-1, see API.md).
 
 `backend_version()` is the git commit the running process was checked
 out at — cached, since the systemd service restarts on every deploy
@@ -6,19 +6,24 @@ out at — cached, since the systemd service restarts on every deploy
 
 `frontend_version()` reads `static/version.json`, written by
 `npm run build` (frontend/scripts/write-version.js) before Vite copies
-`public/` into that directory. Read fresh on every call rather than
-cached: if a deploy rebuilds the frontend without restarting the
-backend (or vice versa), the two versions in `/health` diverge
-immediately instead of only after the next restart.
+`public/` into that directory: `build_sha` (the commit that was built),
+`frontend_sha` (the last commit that changed the frontend) and
+`built_at`. Read fresh on every call rather than cached: the service can
+restart before the build finishes, and a rebuild without a restart (or
+the reverse) should show in `/health` immediately.
 """
 
 import json
 import subprocess
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = Path(__file__).parent / "static" / "version.json"
+
+#: When this process started, for `/health`'s `started_at`.
+STARTED_AT = datetime.now(timezone.utc).isoformat()
 
 
 @lru_cache
@@ -41,5 +46,7 @@ def frontend_version() -> dict:
     try:
         data = json.loads(VERSION_FILE.read_text())
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return {"version": None, "built_at": None}
-    return {"version": data.get("version"), "built_at": data.get("built_at")}
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    return {key: data.get(key) for key in ("build_sha", "frontend_sha", "built_at")}

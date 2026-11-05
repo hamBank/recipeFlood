@@ -110,6 +110,7 @@ const query = (params) => {
 }
 
 // Auth
+export const getHealth = () => apiFetch('/health')
 export const getAuthConfig = () => apiFetch('/auth/config')
 export const loginWithGoogle = (credential) =>
   apiFetch('/auth/google', { method: 'POST', body: { credential } })

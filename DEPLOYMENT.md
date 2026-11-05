@@ -245,15 +245,32 @@ sudo -u postgres pg_dump recipeflood > backup.sql
 
 ## Verifying a deploy
 
+Every `deploy.sh --update` ends with `scripts/smoke_check.sh` (fleet spec
+DEP-4), and the deploy exits non-zero, so `recipeflood-deploy.service`
+shows as failed, if it fails. It waits up to 60 s for the restarted
+service, then checks:
+
+- `/health` answers `status: ok`;
+- `backend_sha` **and** `build_sha` equal the commit just checked out. A
+  `build_sha` mismatch means the frontend build failed or was skipped and
+  the old bundle is still being served;
+- `GET /tags?section=true` returns data (the app can read its database);
+- every `recipeflood*.timer`'s last run succeeded;
+- the newest database backup is under 36 hours old (a warning, not a
+  failure).
+
+The result is in `/var/log/recipeFlood-deploy.log`. To check by hand:
+
 ```bash
 curl -s https://recipeflood.hups.club/health
-# {"status":"ok","backend_version":"…","frontend_version":"…","frontend_built_at":"…"}
+# {"status":"ok","backend_sha":"…","frontend_sha":"…","build_sha":"…","built_at":"…","started_at":"…"}
+sudo -u recipeFlood git -C /opt/recipeFlood rev-parse --short HEAD   # should equal backend_sha and build_sha
 ```
 
-`backend_version` and `frontend_version` are both git short SHAs and should
-match after a full `deploy.sh --update`. If they diverge, the frontend
-build step failed or was skipped — check the deploy log and rerun
-`sudo ./deploy.sh --update`.
+`frontend_sha` is the last commit that changed the frontend, so it lags
+behind after a backend-only deploy; that is expected. Open browser tabs
+compare it with the one baked into their bundle and offer a reload when
+it changes.
 
 ## Backups
 

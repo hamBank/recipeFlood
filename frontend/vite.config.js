@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { readFileSync } from 'node:fs'
 
 // API routes live at the top level (no /api prefix — see API.md), so the dev
 // server proxies each backend prefix to uvicorn on :8000. /media serves the
@@ -19,10 +20,26 @@ const apiPrefixes = [
   '/media',
 ]
 
-export default defineConfig(({ mode }) => {
+/** The frontend_sha that scripts/write-version.js just wrote, baked into the
+ * bundle so an open tab can tell when a newer frontend has been deployed
+ * (fleet spec BLD-5, see src/components/UpdateBanner.jsx). Empty in dev and
+ * tests, where nothing is built and the check stays off. */
+function frontendSha(command) {
+  if (command !== 'build') return ''
+  try {
+    return JSON.parse(readFileSync(new URL('./public/version.json', import.meta.url))).frontend_sha || ''
+  } catch {
+    return ''
+  }
+}
+
+export default defineConfig(({ command, mode }) => {
   // `vite build --mode desktop` bundles the same app for the Tauri shell.
   const desktop = mode === 'desktop'
   return {
+    define: {
+      'import.meta.env.VITE_FRONTEND_SHA': JSON.stringify(frontendSha(command)),
+    },
     plugins: [
       react(),
       tailwindcss(),

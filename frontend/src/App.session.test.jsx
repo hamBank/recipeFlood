@@ -10,6 +10,7 @@ vi.mock('./api', () => ({
   getMe: vi.fn(),
   getToken: vi.fn(),
   setToken: vi.fn(),
+  getHealth: vi.fn().mockResolvedValue({}),
   setSessionExpiredHandler: vi.fn((handler) => {
     expire = handler
   }),

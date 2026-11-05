@@ -103,7 +103,26 @@ update_code() {
 
     log "restarting $SERVICE"
     systemctl restart "$SERVICE"
-    log "update done"
+
+    # Fleet spec DEP-4: a deploy must not fail semi-silently. Waits for the
+    # restarted service, then checks /health's build_sha and backend_sha
+    # against the commit just checked out (a skipped or failed build shows
+    # up as a mismatch), that the app can read its database, that every
+    # recipeflood*.timer's last run succeeded, and that the newest backup is
+    # fresh. A failure makes this deploy exit non-zero, so the deploy unit
+    # shows as failed. git runs as the app user: root would refuse the repo
+    # as "dubious ownership".
+    log "smoke check"
+    local deployed
+    deployed="$(sudo -u "$APP_USER" git rev-parse --short HEAD)"
+    if SMOKE_UNIT_PREFIX=recipeflood SMOKE_DATA_PATH='/tags?section=true' \
+        SMOKE_BACKUP_GLOB='/var/backups/recipeflood/recipeflood-*.sql.gz' \
+        bash scripts/smoke_check.sh "http://127.0.0.1:8002" "$deployed" | tee -a "$LOG"; then
+        log "update done"
+    else
+        log "update done, BUT the smoke check FAILED (see above) — the new code is live; check it now"
+        exit 1
+    fi
 }
 
 provision() {

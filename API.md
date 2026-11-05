@@ -16,7 +16,7 @@ Auth is a bearer JWT: `Authorization: Bearer <token>` from `POST /auth/google`.
 
 | Method | Path | Access | Notes |
 |---|---|---|---|
-| GET | `/health` | public | `{status, backend_version, frontend_version, frontend_built_at}` |
+| GET | `/health` | public | `{status, backend_sha, frontend_sha, build_sha, built_at, started_at}`: the commit the backend runs, the last commit that changed the frontend, the commit the frontend was built from, when it was built, and when the process started (fleet spec OBS-1; see DEPLOYMENT.md "Verifying a deploy") |
 | POST | `/deploy` | HMAC | GitHub push webhook; `X-Hub-Signature-256`, only `refs/heads/main` acts |
 
 ## Auth
