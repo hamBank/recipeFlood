@@ -5,6 +5,8 @@ disabled, so the API tests exercise the real dependency graph (including
 `get_optional_user`) without needing Google tokens.
 """
 
+import os
+
 import pytest
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
@@ -19,18 +21,32 @@ from backend.main import create_app
 from backend.models import Ingredient, Tag, User, UserRole
 
 
+#: Set to a Postgres URL to run the whole suite against Postgres (fleet spec
+#: DB-4; CI's `backend-postgres` job). Unset: the fast in-memory SQLite run.
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+
+
 @pytest.fixture
 def engine():
-    # StaticPool keeps every connection pointed at the same in-memory DB,
-    # which the request-scoped sessions in the app otherwise wouldn't share.
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    if TEST_DATABASE_URL:
+        engine = create_engine(TEST_DATABASE_URL)
+        # A test that failed half-way may have left tables behind.
+        SQLModel.metadata.drop_all(engine)
+    else:
+        # StaticPool keeps every connection pointed at the same in-memory
+        # DB, which the request-scoped sessions in the app otherwise
+        # wouldn't share.
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
     SQLModel.metadata.create_all(engine)
     yield engine
     SQLModel.metadata.drop_all(engine)
+    # Pooled connections would otherwise outlive the tables they knew
+    # (fleet spec DB-6).
+    engine.dispose()
 
 
 @pytest.fixture

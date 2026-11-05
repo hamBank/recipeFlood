@@ -92,6 +92,39 @@ jobs:
       - run: alembic upgrade head
       - run: alembic check
 
+  backend-postgres:
+    # The whole backend suite again, on Postgres (fleet spec DB-4). SQLite
+    # passes things production won't: it doesn't enforce foreign keys by
+    # default, so the first run here found that a recipe still on a
+    # cooking list could not be deleted in production at all.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: recipeflood_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # tests/conftest.py builds each test's schema here instead of in
+      # in-memory SQLite. +psycopg2, as in migrations-postgres.
+      TEST_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/recipeflood_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pytest
+
   fleet-spec:
     # Static checks against the hamBank fleet spec (github.com/hamBank/fleetSpec),
     # pinned to the version .fleet-spec.yml declares so a spec change never
