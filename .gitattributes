@@ -1,0 +1,5 @@
+# A Windows checkout would otherwise turn these into CRLF, and a CRLF shebang
+# or `set -o pipefail\r` fails on the server (fleet spec, lessons from
+# travelCompantion).
+*.sh text eol=lf
+*.py text eol=lf

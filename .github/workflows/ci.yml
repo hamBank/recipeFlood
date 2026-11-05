@@ -91,3 +91,23 @@ jobs:
         run: alembic downgrade base
       - run: alembic upgrade head
       - run: alembic check
+
+  fleet-spec:
+    # Static checks against the hamBank fleet spec (github.com/hamBank/fleetSpec),
+    # pinned to the version .fleet-spec.yml declares so a spec change never
+    # breaks this CI unexpectedly. Recorded deviations live in that file.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: spec
+        run: echo "version=$(awk '/^spec:/ {print $2}' .fleet-spec.yml)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: hamBank/fleetSpec
+          ref: v${{ steps.spec.outputs.version }}
+          path: .fleetspec
+          # fleetSpec is private: a read-only fine-grained token for it
+          # (Contents: read), stored as this repo's FLEETSPEC_TOKEN secret.
+          token: ${{ secrets.FLEETSPEC_TOKEN || github.token }}
+      - run: pip install pyyaml
+      - run: python .fleetspec/conformance/check.py --app . --summary "$GITHUB_STEP_SUMMARY"
