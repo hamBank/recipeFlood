@@ -14,8 +14,8 @@
 - **DB:** Postgres, database `recipeflood`.
 - **Uploads:** `/opt/recipeFlood/uploads` — recipe photos. **Not in git and
   not in the database**; the only app state that needs its own backup.
-- **Cron:** nightly `pg_dump` (02:45) and a nightly uploads tarball (03:15),
-  both 7-day rotation, into `/var/backups/recipeflood`.
+- **Backups:** systemd timers run a nightly `pg_dump` (02:45) and a nightly
+  uploads tarball (03:15), both 7-day rotation, into `/var/backups/recipeflood`.
 
 ## Repo access
 
@@ -34,12 +34,13 @@ Idempotent script that:
 3. Clones/updates the repo, creates the venv, installs requirements
 4. Creates the uploads directory
 5. Creates the Postgres role and `recipeflood` database
-6. Installs/refreshes the systemd service, path unit, Apache vhost and cron
+6. Installs/refreshes the systemd service, path unit, backup timers and Apache vhost
 7. Runs `alembic upgrade head`, seeds the navigation sections, builds the
-   frontend, restarts the service
+   frontend, restarts the service, then runs the smoke check (see
+   "Verifying a deploy")
 
 `deploy.sh --update` runs the code-update part plus a refresh of the systemd
-units, Apache vhost and cron file — used by the webhook. Both modes must be
+units, backup timers and Apache vhost — used by the webhook. Both modes must be
 run as root; the script says so and exits rather than failing part-way.
 
 ### What `--update` does and does not touch
@@ -48,7 +49,7 @@ run as root; the script says so and exits rather than failing part-way.
 |---|---|---|
 | Packages, system user, Postgres role/db, `.env` | ✅ | — |
 | Code, deps, migrations, sections, frontend build | ✅ | ✅ |
-| systemd units, cron file | ✅ | ✅ (re-copied every run) |
+| systemd units and backup timers | ✅ | ✅ (re-copied and enabled every run) |
 | Apache vhost | ✅ if absent | ✅ if absent |
 
 The vhost is installed **only when it does not already exist**. Once it is
@@ -70,7 +71,7 @@ config can't take the site down during an unattended webhook deploy.
 ### When a deploy stops early
 
 `deploy.sh` runs under `set -Eeuo pipefail` and aborts at the first failure.
-The Apache and cron steps are near the end, so **an early failure means no
+The Apache and timer steps are near the end, so **an early failure means no
 vhost**. The log names the step it was in and the line it died on:
 
 ```bash
@@ -274,11 +275,30 @@ it changes.
 
 ## Backups
 
-Two things need backing up, and the cron file provisions both:
+Two things need backing up, and two systemd timers do both (fleet spec
+DEP-5), into `/var/backups/recipeflood` with a 7-day rotation by weekday:
+
+| unit | when | runs as | writes |
+|---|---|---|---|
+| `recipeflood-backup-db` | 02:45 | `postgres` | `recipeflood-<1-7>.sql.gz` |
+| `recipeflood-backup-uploads` | 03:15 | `recipeFlood` | `uploads-<1-7>.tar.gz` |
 
 - **Postgres** (`recipeflood`) — the recipes, the pantry, the prepared log.
 - **`/opt/recipeFlood/uploads`** — recipe photos. These exist nowhere else;
   losing them loses them.
+
+Each job writes to a temporary file and only replaces the day's backup when
+it succeeded, and runs with `pipefail`, so a failed `pg_dump` fails the unit
+instead of leaving an empty `.gz`. Every deploy's smoke check fails if
+either job's last run failed, and warns if the newest database backup is
+over 36 hours old.
+
+```bash
+systemctl list-timers 'recipeflood-*'                   # next and last runs
+systemctl show -p Result recipeflood-backup-db.service  # success / exit-code
+sudo systemctl start recipeflood-backup-db.service      # run one now
+journalctl -u recipeflood-backup-uploads -n 20
+```
 
 `data/` in the repo (the blog snapshots) is the third leg: it means the
 imported collection can always be rebuilt even if both of the above are

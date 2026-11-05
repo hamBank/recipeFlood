@@ -110,6 +110,11 @@ Each rule names what broke, when, and why it wasn't caught.
   `Expecting ',' delimiter` on a long recipe. Import now uses `output_config.format` with a JSON
   schema (keep it inside the API's limits on optional and union-typed fields; a test enforces
   the union count).
+- **Scheduled jobs are systemd timers, and a backup never replaces the last good one with a
+  failure.** Until 2026-11-05 the backups were cron lines: `pg_dump | gzip` exits 0 even when
+  `pg_dump` fails, writing an empty `.gz` over a good one, and a failed cron job was invisible.
+  The timers' services use `pipefail` and a temporary file, and the smoke check fails a deploy
+  when a timer's last `Result` isn't `success`. In unit files, `%%` and `$$` mean `%` and `$`.
 - **Weigh count units by the unit, never by matching the ingredient's name.** 2026-10-09:
   "6 sprigs lemon thyme" came out at 600 g because the count fell back to the piece weight of
   "lemon", found inside the name. A sprig is a fixed 4 g; a bunch or can uses the pantry item's

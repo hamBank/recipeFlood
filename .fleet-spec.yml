@@ -4,5 +4,4 @@
 # expired or is stale (the rule passes now, so delete the entry).
 spec: 0.2
 deviations:
-  - {rule: DEP-5, reason: "backups are cron (/etc/cron.d/recipeflood)", until: 2027-01-31}
   - {rule: CFG-2, reason: "jwt_secret defaults to a public string", until: 2026-12-01}
