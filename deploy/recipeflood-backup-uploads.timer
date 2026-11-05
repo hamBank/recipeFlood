@@ -1,0 +1,11 @@
+# 03:15, after the database dump.
+[Unit]
+Description=Run the recipeflood uploads backup nightly
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

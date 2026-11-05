@@ -35,13 +35,13 @@ SYSTEM_FILES_INSTALLED=0
 
 log() { echo "[$(date -Is)] $*" | tee -a "$LOG"; }
 
-# `set -e` aborts at the first failure, and the Apache and cron steps are near
+# `set -e` aborts at the first failure, and the Apache and timer steps are near
 # the end — so an early failure means no vhost, with nothing in the log saying
 # why. Name the failing line instead of stopping silently.
 trap 'rc=$?; log "ERROR: ${BASH_SOURCE[0]}:${LINENO} exited $rc — the step named above is where it stopped, and nothing after it ran. Fix and re-run."; exit $rc' ERR
 
-# Copy the systemd units, Apache vhost and cron file out of the repo into
-# their system locations. Called by BOTH provision and --update: a push that
+# Copy the systemd units (service, deploy watcher, backup timers) and the
+# Apache vhost out of the repo into their system locations. Called by BOTH provision and --update: a push that
 # changes deploy/ has to actually reach the server, or you get a "successful"
 # deploy that silently left the old unit file running.
 install_system_files() {
@@ -49,6 +49,9 @@ install_system_files() {
     cp "$APP_DIR"/deploy/recipeflood.service /etc/systemd/system/"$SERVICE".service
     cp "$APP_DIR"/deploy/recipeflood-deploy.service /etc/systemd/system/recipeflood-deploy.service
     cp "$APP_DIR"/deploy/recipeflood-deploy.path /etc/systemd/system/recipeflood-deploy.path
+    for unit in recipeflood-backup-db recipeflood-backup-uploads; do
+        cp "$APP_DIR/deploy/$unit.service" "$APP_DIR/deploy/$unit.timer" /etc/systemd/system/
+    done
     systemctl daemon-reload
 
     log "apache vhost"
@@ -72,9 +75,16 @@ install_system_files() {
         log "  WARNING: apache configtest failed, not reloading. Run: apache2ctl configtest"
     fi
 
-    log "cron jobs"
-    cp "$APP_DIR"/deploy/recipeflood.cron /etc/cron.d/recipeflood
-    chmod 644 /etc/cron.d/recipeflood
+    # Scheduled jobs are systemd timers (fleet spec DEP-5): each run leaves
+    # a Result that the smoke check reads, where a failed cron job only
+    # reached a log. The uploads backup runs as the app user, so the backup
+    # directory is group-writable for it; the database dump runs as
+    # postgres. Not fatal: a timer problem must never block a code deploy,
+    # and the smoke check reports a timer that isn't enabled.
+    log "backup timers"
+    install -d -m 775 -o postgres -g "$APP_USER" /var/backups/recipeflood
+    systemctl enable --now recipeflood-backup-db.timer recipeflood-backup-uploads.timer ||
+        log "  WARNING: could not enable the backup timers; run: systemctl enable --now recipeflood-backup-db.timer recipeflood-backup-uploads.timer"
 }
 
 update_code() {
@@ -83,7 +93,7 @@ update_code() {
     sudo -u "$APP_USER" git fetch origin main
     sudo -u "$APP_USER" git reset --hard origin/main
 
-    # Before the build, not after: the units, vhost and cron are independent
+    # Before the build, not after: the units, vhost and timers are independent
     # of whether pip or npm succeed, and a failed build must not be the
     # reason a corrected unit file never reaches the server. provision()
     # has already done this, hence the guard.
@@ -142,9 +152,8 @@ provision() {
         useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER" 2>/dev/null ||
             useradd --badname --system --create-home --shell /usr/sbin/nologin "$APP_USER"
     fi
-    mkdir -p "$APP_DIR" /var/backups/recipeflood
+    mkdir -p "$APP_DIR"
     chown "$APP_USER":"$APP_USER" "$APP_DIR"
-    chown postgres:postgres /var/backups/recipeflood
     touch "$LOG" && chown "$APP_USER" "$LOG"
 
     log "clone/update repo"

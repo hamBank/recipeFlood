@@ -1,0 +1,10 @@
+# Nightly uploads backup: recipe photos are the only app data that isn't in
+# Postgres or git, so they need their own copy. Same rotation and
+# temporary-file rule as recipeflood-backup-db.service.
+[Unit]
+Description=recipeflood nightly uploads backup
+
+[Service]
+Type=oneshot
+User=recipeFlood
+ExecStart=/bin/bash -o pipefail -c 'out=/var/backups/recipeflood/uploads-$$(date +%%u).tar.gz; tar czf "$$out.tmp" -C /opt/recipeFlood uploads && mv "$$out.tmp" "$$out"'

@@ -1,0 +1,13 @@
+# 02:45, staggered off pocketMoney's 02:30 dump; the random delay stays well
+# inside that 15-minute gap. Persistent: a night missed while the box was
+# down runs at the next boot.
+[Unit]
+Description=Run the recipeflood database backup nightly
+
+[Timer]
+OnCalendar=*-*-* 02:45:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

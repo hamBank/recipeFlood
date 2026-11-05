@@ -1,0 +1,15 @@
+# Nightly database backup (fleet spec DEP-5: a timer, not cron). A oneshot
+# unit has a queryable Result, which scripts/smoke_check.sh reads on every
+# deploy; a failed cron job only ever reached a log nobody read.
+#
+# 7-day rotation by weekday number. pipefail so a failed pg_dump fails the
+# unit (with a plain pipe, gzip's exit 0 would hide it), and written to a
+# temporary file first so a failure never replaces the last good backup
+# with an empty one. `%%` and `$$` are systemd's escapes for % and $.
+[Unit]
+Description=recipeflood nightly database backup
+
+[Service]
+Type=oneshot
+User=postgres
+ExecStart=/bin/bash -o pipefail -c 'out=/var/backups/recipeflood/recipeflood-$$(date +%%u).sql.gz; pg_dump recipeflood | gzip > "$$out.tmp" && mv "$$out.tmp" "$$out"'
