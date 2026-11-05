@@ -17,6 +17,10 @@ fi
 source .venv/bin/activate
 pip install -r requirements.txt
 
+# For this hook's own alembic and seed runs below, not only for the session:
+# with auth on, the app refuses to start on the default JWT_SECRET.
+export AUTH_ENABLED=false
+
 # Local dev bypass (see DEVELOPMENT.md "Running") — no Google OAuth secret
 # is available in this environment, so sign-in has to be bypassed for the
 # app to be usable at all. AI import and image generation are unaffected:

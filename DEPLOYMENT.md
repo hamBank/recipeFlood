@@ -88,10 +88,10 @@ is **not** committed.
 ## First deploy — the whole sequence
 
 ```bash
-sudo ./deploy.sh
-# fill in /opt/recipeFlood/.env  (see .env.example)
+sudo ./deploy.sh            # stops at "config check FAILED": .env is still the example
+# fill in /opt/recipeFlood/.env  (see .env.example; JWT_SECRET is required)
+sudo ./deploy.sh            # now runs to the end
 sudo certbot --apache -d recipeflood.hups.club
-sudo systemctl restart recipeflood
 
 # load the recipe collection
 sudo -u recipeFlood bash -c 'cd /opt/recipeFlood && set -a && source .env && \
@@ -234,6 +234,12 @@ Two-way sync between the shopping list and a Google Sheet — see SPEC.md
 
 Environment lives in `/opt/recipeFlood/.env` (loaded by the systemd unit;
 not in the repo). See `.env.example` for the full list.
+
+With `AUTH_ENABLED=true` (the default), the app **refuses to start** if
+`JWT_SECRET` is missing, empty or the public default from the source (fleet
+spec CFG-2): anyone could otherwise sign their own login tokens. Every
+deploy checks this first (`scripts/check_config.py`, reading `.env` the way
+systemd does) and stops, leaving the running service alone, if it fails.
 
 ## Logs & operations
 

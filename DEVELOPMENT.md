@@ -15,6 +15,8 @@ cd recipeFlood
 # Backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+export AUTH_ENABLED=false                # local dev: no Google sign-in, and no
+                                         # JWT_SECRET needed (see below)
 alembic upgrade head                     # creates local SQLite DB
 python scripts/seed_sections.py          # the 20 navigation sections
 
@@ -49,7 +51,7 @@ admin — never set in production.
 | `AUTH_ENABLED` | `true` | `false` = local dev bypass |
 | `PUBLIC_READ` | `true` | `false` = whole site behind the allowlist |
 | `GOOGLE_CLIENT_ID` | — | OAuth client |
-| `JWT_SECRET` | — | app token signing |
+| `JWT_SECRET` | — | app token signing. **Required** when `AUTH_ENABLED=true`: the app refuses to start with it unset or left at the source's default |
 | `ALLOWED_EMAILS` | — | comma-separated bootstrap allowlist (first admin) |
 | `DEPLOY_SECRET` | — | HMAC key for the `/deploy` webhook |
 | `DESKTOP_ORIGINS` | `tauri://localhost,http://tauri.localhost,https://tauri.localhost` | CORS origins for the desktop app; empty = CORS off |
