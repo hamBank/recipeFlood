@@ -1,16 +1,25 @@
 import re
 
-from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+#: The secret in the source, so public: a token signed with it can be forged
+#: by anyone. Fine for local dev with auth off; refused with auth on.
+DEFAULT_JWT_SECRET = "dev-secret-change-me"
 
 
 class Settings(BaseSettings):
     """App configuration from environment variables (see DEVELOPMENT.md)."""
 
+    # A validation error otherwise quotes every input value, secrets
+    # included, into the deploy log or the journal.
+    model_config = SettingsConfigDict(hide_input_in_errors=True)
+
     database_url: str = "sqlite:///./recipeflood.db"
     auth_enabled: bool = True
     google_client_id: str = ""
-    jwt_secret: str = "dev-secret-change-me"
+    jwt_secret: str = DEFAULT_JWT_SECRET
     allowed_emails: str = ""  # comma-separated bootstrap allowlist
     deploy_secret: str = ""
     deploy_trigger_path: str = ".deploy-trigger"
@@ -80,6 +89,18 @@ class Settings(BaseSettings):
     # rather than a hardcoded literal so swapping it is a one-line change.
     openai_api_key: str = ""
     openai_image_model: str = "gpt-image-1"
+
+    @model_validator(mode="after")
+    def _auth_needs_a_private_secret(self):
+        # Fleet spec CFG-2: with auth on, a missing or default JWT_SECRET
+        # means anyone could mint a login token. Refuse to start (deploy.sh's
+        # config preflight runs this before restarting the service).
+        if self.auth_enabled and (not self.jwt_secret.strip() or self.jwt_secret == DEFAULT_JWT_SECRET):
+            raise ValueError(
+                "JWT_SECRET is unset or still the public default; set it to a long random "
+                "string, e.g. `openssl rand -hex 32` (or AUTH_ENABLED=false for local dev)"
+            )
+        return self
 
 
 settings = Settings()

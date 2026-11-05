@@ -115,6 +115,11 @@ Each rule names what broke, when, and why it wasn't caught.
   `pg_dump` fails, writing an empty `.gz` over a good one, and a failed cron job was invisible.
   The timers' services use `pipefail` and a temporary file, and the smoke check fails a deploy
   when a timer's last `Result` isn't `success`. In unit files, `%%` and `$$` mean `%` and `$`.
+- **Auth fails closed on a public secret.** Until 2026-11-05 `JWT_SECRET` defaulted to a string in
+  the source, so a `.env` without it ran with forgeable tokens. `Settings` now refuses auth with a
+  missing or default secret, and `deploy.sh` runs `scripts/check_config.py` before migrating and
+  restarting. `Settings` hides input values in its errors: pydantic would otherwise quote the
+  whole `.env`, API keys included, into the deploy log.
 - **Weigh count units by the unit, never by matching the ingredient's name.** 2026-10-09:
   "6 sprigs lemon thyme" came out at 600 g because the count fell back to the piece weight of
   "lemon", found inside the name. A sprig is a fixed 4 g; a bunch or can uses the pantry item's

@@ -104,6 +104,14 @@ update_code() {
 
     log "python deps + migrations"
     sudo -u "$APP_USER" .venv/bin/pip install -q -r requirements.txt
+
+    # Fleet spec CFG-2: the app refuses to start with auth on and a missing
+    # or default JWT_SECRET. Check .env the way systemd will read it, before
+    # the migrations and the restart, so a bad config stops the deploy here
+    # with its reason instead of restarting into a crash loop.
+    log "config check"
+    sudo -u "$APP_USER" env PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/check_config.py .env ||
+        { log "config check FAILED (see above) — the running service is untouched; fix .env and re-run"; exit 1; }
     sudo -u "$APP_USER" bash -c "set -a && source .env 2>/dev/null; .venv/bin/alembic upgrade head"
 
     log "seeding navigation sections"

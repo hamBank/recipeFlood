@@ -3,5 +3,4 @@
 # fails with no deviation here fails CI, and so does a deviation that has
 # expired or is stale (the rule passes now, so delete the entry).
 spec: 0.2
-deviations:
-  - {rule: CFG-2, reason: "jwt_secret defaults to a public string", until: 2026-12-01}
+deviations: []

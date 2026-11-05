@@ -7,6 +7,11 @@ disabled, so the API tests exercise the real dependency graph (including
 
 import os
 
+# Before anything imports backend.config: its Settings() refuses to start with
+# auth on and the default JWT_SECRET (fleet spec CFG-2). Tests that need auth
+# turn it on per test with monkeypatch, with a secret of their own.
+os.environ.setdefault("AUTH_ENABLED", "false")
+
 import pytest
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient

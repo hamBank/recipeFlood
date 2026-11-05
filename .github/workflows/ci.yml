@@ -5,6 +5,13 @@ on:
   push:
     branches: [main]
 
+# Every job that imports backend.config (pytest, alembic, the snapshot
+# load) runs with auth off: with auth on, the app refuses to start on the
+# default JWT_SECRET (fleet spec CFG-2). Tests that need auth turn it on
+# themselves, with a secret of their own.
+env:
+  AUTH_ENABLED: "false"
+
 jobs:
   backend:
     runs-on: ubuntu-latest
