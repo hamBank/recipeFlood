@@ -4,7 +4,6 @@
 # expired or is stale (the rule passes now, so delete the entry).
 spec: 0.2
 deviations:
-  - {rule: PRC-1, reason: "no CLAUDE.md yet (the equivalent notes are in DEVELOPMENT.md)", until: 2026-12-15}
   - {rule: DEP-4, reason: "deploy verification is a manual curl /health", until: 2026-12-15}
   - {rule: DEP-5, reason: "backups are cron (/etc/cron.d/recipeflood)", until: 2027-01-31}
   - {rule: BLD-2, reason: "version.json has version/built_at only", until: 2026-12-15}
