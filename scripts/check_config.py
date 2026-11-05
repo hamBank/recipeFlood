@@ -39,6 +39,24 @@ def load_env_file(path: str) -> dict:
     return values
 
 
+def describe(error: Exception) -> str:
+    """The reason, never the values. str() of a pydantic ValidationError
+    quotes its input, which for a model validator on Settings is the whole
+    env file (secrets included), and this output lands in the deploy log.
+    Apps should also set `hide_input_in_errors=True` on Settings, so the
+    service's own crash in the journal is clean too."""
+    errors = getattr(error, "errors", None)
+    if callable(errors):
+        try:
+            return "; ".join(
+                ".".join(str(p) for p in err.get("loc", ())) + (": " if err.get("loc") else "") + err.get("msg", "")
+                for err in errors(include_input=False)
+            )
+        except TypeError:  # not pydantic's signature
+            pass
+    return str(error)
+
+
 def main(argv) -> int:
     if len(argv) not in (2, 3):
         print("usage: check_config.py ENV_FILE [module]", file=sys.stderr)
@@ -49,7 +67,7 @@ def main(argv) -> int:
     try:
         importlib.import_module(argv[2] if len(argv) == 3 else "backend.config")
     except Exception as e:  # anything that would stop the service starting
-        print(f"{type(e).__name__}: {e}", file=sys.stderr)
+        print(f"{type(e).__name__}: {describe(e)}", file=sys.stderr)
         return 1
     print("configuration OK")
     return 0
