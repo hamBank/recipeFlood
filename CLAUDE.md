@@ -22,9 +22,10 @@ migrations and exports `AUTH_ENABLED=false`.
 ## Tests (run both before every push)
 ```bash
 .venv/bin/python -m pytest -q                         # backend, in-memory SQLite
+TEST_DATABASE_URL=postgresql+psycopg2://…/db .venv/bin/python -m pytest -q   # the same suite on Postgres
 cd frontend && npm run lint && npx vitest run         # eslint + vitest
 ```
-CI also runs `alembic check`, a snapshot load (`scripts.load_snapshot --heuristic`), a
+CI also runs the suite on Postgres (`backend-postgres`), `alembic check`, a snapshot load (`scripts.load_snapshot --heuristic`), a
 Postgres migration round trip, the desktop build (`desktop.yml`) and the fleet-spec check.
 
 ## Database & schema migrations
@@ -66,6 +67,11 @@ Each rule names what broke, when, and why it wasn't caught.
   a full teardown left five orphaned types and the next `CREATE TYPE` collided. Migrations
   had only been checked one step at a time, which never reached the baseline. CI's
   `migrations-postgres` job now runs the full round trip.
+- **Run the whole suite on Postgres, not only the migrations.** 2026-11-05: deleting a recipe
+  that was on a cooking list failed in production with a foreign-key violation, because SQLite
+  (the fast tests) doesn't enforce foreign keys by default. Found by the first run of CI's
+  `backend-postgres` job. Deleting a row means deleting or re-pointing everything that
+  references it.
 - **Enum-like columns are `native_enum=False`.** Widening a native enum needs
   `ALTER TYPE ... ADD VALUE` on Postgres but a table rebuild on SQLite, so the two dialects'
   migrations diverged. A plain string column plus a Python enum makes adding a value a

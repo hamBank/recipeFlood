@@ -567,6 +567,9 @@ it was still running when the timeout killed it).
 
 ```bash
 pytest                       # backend — tests/ — runs against in-memory SQLite
+TEST_DATABASE_URL=postgresql+psycopg2://user:pass@localhost/scratch_db pytest
+                             # the same suite on Postgres (CI's backend-postgres job);
+                             # it drops and recreates every table, so use a scratch DB
 cd frontend && npm run lint  # eslint — flags hook/JSX bug patterns statically
 cd frontend && npm test      # vitest
 ```

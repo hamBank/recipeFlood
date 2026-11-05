@@ -30,6 +30,7 @@ from ..image_generation import (
     generate_image,
 )
 from ..models import (
+    CookListRecipe,
     PreparedEvent,
     PreparedEventCreate,
     PreparedEventRead,
@@ -303,10 +304,17 @@ def delete_recipe(
     apply_ingredients(session, recipe, [])
     apply_steps(session, recipe, [])
     apply_tags(session, recipe, [])
-    for event in session.exec(
-        select(PreparedEvent).where(PreparedEvent.recipe_id == recipe.id)
-    ).all():
-        session.delete(event)
+    # Everything that points at the recipe goes with it. Postgres enforces
+    # these foreign keys (SQLite, which the fast tests use, doesn't), so a
+    # recipe still on a cooking list could not be deleted at all. Lists
+    # already skip a recipe that's gone, so dropping the membership changes
+    # nothing they show.
+    for row in (
+        *session.exec(select(PreparedEvent).where(PreparedEvent.recipe_id == recipe.id)).all(),
+        *session.exec(select(CookListRecipe).where(CookListRecipe.recipe_id == recipe.id)).all(),
+    ):
+        session.delete(row)
+    session.flush()
     session.delete(recipe)
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

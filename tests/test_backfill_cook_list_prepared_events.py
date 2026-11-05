@@ -6,7 +6,7 @@ from datetime import date
 
 from sqlmodel import select
 
-from backend.models import CookList, CookListRecipe, PreparedEvent, Recipe
+from backend.models import CookList, CookListRecipe, PreparedEvent, Recipe, User
 from scripts.backfill_cook_list_prepared_events import backfill
 
 
@@ -45,12 +45,16 @@ class TestBackfill:
 
     def test_the_event_is_attributed_to_whoever_created_the_list(self, session):
         recipe = make_recipe(session)
-        make_cook_list(session, recipe, created_by=42)
+        # A real user: Postgres enforces cooklist.created_by's foreign key.
+        cook = User(email="cook@example.com")
+        session.add(cook)
+        session.commit()
+        make_cook_list(session, recipe, created_by=cook.id)
 
         backfill(session)
         session.commit()
 
-        assert session.exec(select(PreparedEvent)).first().user_id == 42
+        assert session.exec(select(PreparedEvent)).first().user_id == cook.id
 
     def test_rerunning_does_not_duplicate_events(self, session):
         recipe = make_recipe(session)
