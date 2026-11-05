@@ -41,9 +41,10 @@ log() { echo "[$(date -Is)] $*" | tee -a "$LOG"; }
 trap 'rc=$?; log "ERROR: ${BASH_SOURCE[0]}:${LINENO} exited $rc — the step named above is where it stopped, and nothing after it ran. Fix and re-run."; exit $rc' ERR
 
 # Copy the systemd units (service, deploy watcher, backup timers) and the
-# Apache vhost out of the repo into their system locations. Called by BOTH provision and --update: a push that
-# changes deploy/ has to actually reach the server, or you get a "successful"
-# deploy that silently left the old unit file running.
+# Apache vhost out of the repo into their system locations. Called by BOTH
+# provision and --update: a push that changes deploy/ has to actually reach
+# the server, or you get a "successful" deploy that silently left the old
+# unit file running.
 install_system_files() {
     log "systemd units"
     cp "$APP_DIR"/deploy/recipeflood.service /etc/systemd/system/"$SERVICE".service
