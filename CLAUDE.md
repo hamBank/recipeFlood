@@ -22,7 +22,7 @@ migrations and exports `AUTH_ENABLED=false`.
 ## Tests (run both before every push)
 ```bash
 .venv/bin/python -m pytest -q                         # backend, in-memory SQLite
-TEST_DATABASE_URL=postgresql+psycopg2://…/db .venv/bin/python -m pytest -q   # the same suite on Postgres
+TEST_DATABASE_URL=postgresql+psycopg://…/db .venv/bin/python -m pytest -q   # the same suite on Postgres
 cd frontend && npm run lint && npx vitest run         # eslint + vitest
 ```
 CI also runs the suite on Postgres (`backend-postgres`), `alembic check`, a snapshot load (`scripts.load_snapshot --heuristic`), a

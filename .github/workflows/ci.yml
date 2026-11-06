@@ -80,11 +80,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      # +psycopg2, matching requirements.txt (psycopg2-binary) and
-      # .env.example's production URL — not +psycopg (v3), which isn't
-      # installed by requirements.txt at all and would only "work" here
-      # by accident if a dev machine happened to have it lying around.
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/recipeflood_ci
+      # +psycopg (psycopg3), the fleet's driver (fleet spec STK-6).
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/recipeflood_ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -121,8 +118,8 @@ jobs:
           --health-retries 5
     env:
       # tests/conftest.py builds each test's schema here instead of in
-      # in-memory SQLite. +psycopg2, as in migrations-postgres.
-      TEST_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/recipeflood_test
+      # in-memory SQLite. +psycopg, as in migrations-postgres.
+      TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/recipeflood_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
