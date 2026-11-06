@@ -65,3 +65,25 @@ class TestConfigPreflight:
         assert result.returncode == 1
         assert "hook-secret-value" not in result.stderr
         assert "sk-ant-private" not in result.stderr
+
+    def test_a_url_naming_a_missing_driver_fails_before_the_restart(self, tmp_path):
+        # Fleet spec STK-6 / lesson 17: `pip install -r` never uninstalls, so a
+        # stale `+driver` in .env only breaks once the venv is rebuilt, after
+        # the restart. The preflight loads the driver the URL names.
+        result = self._run(
+            tmp_path,
+            "AUTH_ENABLED=true\nJWT_SECRET=" + "a" * 64
+            + "\nDATABASE_URL=postgresql+nosuchdriver://u@/db?host=/var/run/postgresql\n",
+        )
+        assert result.returncode == 1
+        assert "DATABASE_URL" in result.stderr
+
+    def test_the_driver_check_never_connects(self, tmp_path):
+        # An unreachable server must not fail the preflight: it only proves the
+        # driver loads, so it can run before the database is up.
+        result = self._run(
+            tmp_path,
+            "AUTH_ENABLED=true\nJWT_SECRET=" + "a" * 64
+            + "\nDATABASE_URL=postgresql+psycopg://u:p@127.0.0.1:1/nothing_here\n",
+        )
+        assert result.returncode == 0, result.stderr

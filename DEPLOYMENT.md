@@ -241,6 +241,24 @@ spec CFG-2): anyone could otherwise sign their own login tokens. Every
 deploy checks this first (`scripts/check_config.py`, reading `.env` the way
 systemd does) and stops, leaving the running service alone, if it fails.
 
+`DATABASE_URL`'s `+driver` must name a driver installed in the venv; the
+same preflight loads it (without connecting) and stops the deploy if it
+can't. The app uses **psycopg3** (fleet spec STK-6):
+`postgresql+psycopg://recipeFlood@/recipeflood?host=/var/run/postgresql`.
+
+**Switching an existing server from psycopg2** (one time; psycopg2 stays
+installed in the venv, so this is reversible):
+
+```bash
+sudoedit /opt/recipeFlood/.env      # DATABASE_URL: +psycopg2  ->  +psycopg  (nothing else changes)
+sudo -u recipeFlood /opt/recipeFlood/.venv/bin/python /opt/recipeFlood/scripts/check_config.py /opt/recipeFlood/.env
+                                    # must print "configuration OK"
+sudo systemctl restart recipeflood
+curl -s localhost:8002/health       # status ok
+```
+
+To roll back, put `+psycopg2` back and restart.
+
 ## Logs & operations
 
 ```bash
