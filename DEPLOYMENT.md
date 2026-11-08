@@ -371,7 +371,7 @@ it) in your password manager.
 sudo deploy/backup-server/install.sh
 ```
 
-Creates user `rfpull`, an ed25519 key, `/etc/recipeflood-pull-backup.conf`, the service and the
+Creates user `rfpull`, an ed25519 key, `/etc/recipeflood-pull-backup.conf`, the backup directory `/lklBackup/sites_apps/recipeFlood`, the service and the
 timer (enabled). It prints the next steps with your public key filled in.
 
 **2. App server** (as root): authorise that key. `--from` restricts it to the backup server's IP.
@@ -404,10 +404,14 @@ journalctl -u recipeflood-pull-backup.service -n 20   # expect "✓ ok: N dump(s
 systemctl list-timers recipeflood-pull-backup.timer
 ```
 
-To keep the copies on another disk, set `DEST` in the config **and** add a drop-in
-(`systemctl edit recipeflood-pull-backup.service`) with `RequiresMountsFor=` and
-`ReadWritePaths=` for that path. Without them the sandbox makes it read-only; travelCompantion
-hit exactly this on its first run.
+The copies go to **`/lklBackup/sites_apps/recipeFlood`** on the backup disk. The unit sets
+that path once as `Environment=DEST=`, next to the two lines that make it work under the
+sandbox: `ReadWritePaths=` (without it `ProtectSystem=strict` makes the disk read-only, so a
+pull that works by hand fails under systemd, which is travelCompantion's first-run trap) and
+`RequiresMountsFor=` (if the disk isn't mounted the pull fails instead of filling the root
+filesystem). `install.sh` creates the directory, owned by `rfpull` with mode 0700, and refuses
+if `/lklBackup/sites_apps` doesn't exist. To move the copies, change all three lines
+together.
 
 ### What a failed run means
 
@@ -423,14 +427,14 @@ The unit exits non-zero (and shows in `systemctl --failed`) when:
 
 For an alert, point `OnFailure=` in the service at a unit that mails or pushes you (there is a
 commented line for it). Without one, check `systemctl --failed` now and then, or look at
-`/var/lib/recipeflood-backup/data/last-success`, which holds the time of the last good pull.
+`/lklBackup/sites_apps/recipeFlood/last-success`, which holds the time of the last good pull.
 
 ### Restore drill (do this once, then yearly)
 
 A backup you haven't restored is only a hope. On any machine with Postgres client tools:
 
 ```bash
-B=/var/lib/recipeflood-backup/data
+B=/lklBackup/sites_apps/recipeFlood
 gunzip -c "$B"/dumps/recipeflood-<newest>.sql.gz | head -20          # readable?
 createuser recipeflood          # the dump's OWNER TO lines need it; skip if it exists
 createdb rf_restore_test

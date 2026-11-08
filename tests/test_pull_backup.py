@@ -428,6 +428,12 @@ def test_the_installer_and_units_agree():
     assert "ExecStart=/usr/local/sbin/recipeflood-pull-backup.sh" in service
     assert "Type=oneshot" in service and "User=rfpull" in service
     assert "StateDirectory=recipeflood-backup" in service and "/var/lib/recipeflood-backup" in installer
+    # The destination is opened in the sandbox and tied to its disk, at the same path.
+    dest = [l.split("=", 2)[2] for l in service.splitlines() if l.startswith("Environment=DEST=")]
+    assert dest == ["/lklBackup/sites_apps/recipeFlood"]
+    assert f"ReadWritePaths={dest[0]}" in service.splitlines()
+    assert f"RequiresMountsFor={dest[0]}" in service.splitlines()
+    assert "Environment=DEST=" in installer                  # install.sh reads it from the unit
     timer = (d / "recipeflood-pull-backup.timer").read_text()
     assert "Persistent=true" in timer and "OnCalendar=" in timer
     for script in (SCRIPT, d / "install.sh", ADD_READER):

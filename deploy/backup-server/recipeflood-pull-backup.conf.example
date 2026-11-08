@@ -4,9 +4,9 @@
 # The app server and the restricted user scripts/add_backup_reader.sh created there.
 SRC_HOST=rfbackup@camelidcastle.hups.club
 
-# Where the copies go (default /var/lib/recipeflood-backup/data). A different path also
-# needs ReadWritePaths= and RequiresMountsFor= in a systemd drop-in (see the .service).
-#DEST=/var/lib/recipeflood-backup/data
+# Where the copies go is set in the unit (Environment=DEST=/lklBackup/sites_apps/recipeFlood),
+# next to the ReadWritePaths= and RequiresMountsFor= that let the sandboxed service write
+# there. Don't set DEST here: a path the unit doesn't open is read-only to it.
 
 # Our history. The app server keeps 7 days; we keep longer, but never fewer than
 # MIN_KEEP of each kind (so a broken source can't make us prune everything).

@@ -6,25 +6,27 @@
 Description=Pull Recipe Flood backups from the app server
 After=network-online.target
 Wants=network-online.target
+# The copies live on the backup disk. If it isn't mounted the pull fails (and shows
+# in `systemctl --failed`) instead of filling the root filesystem.
+RequiresMountsFor=/lklBackup/sites_apps/recipeFlood
 # Alert on failure, e.g. point this at a unit that mails you:
 # OnFailure=notify-failure@%n.service
 
 [Service]
 Type=oneshot
 User=rfpull
-# /var/lib/recipeflood-backup: the ssh key, known_hosts and the backups (data/) live here.
+# /var/lib/recipeflood-backup: the ssh key and known_hosts live here.
 StateDirectory=recipeflood-backup
 StateDirectoryMode=0700
+# Where the copies go. This line, ReadWritePaths= and RequiresMountsFor= name the same
+# path: change all three together (install.sh creates the directory from this line).
+Environment=DEST=/lklBackup/sites_apps/recipeFlood
 ExecStart=/usr/local/sbin/recipeflood-pull-backup.sh
 TimeoutStartSec=2h
-# Hardening: it only needs the network and its own state directory. ProtectSystem=strict
-# makes everything else read-only, so if you point DEST at another disk the pull works
-# by hand and fails here ("Read-only file system"). Add a drop-in
-# (systemctl edit recipeflood-pull-backup.service) with both of:
-#   [Unit]
-#   RequiresMountsFor=/mnt/backups        # an unmounted disk fails the pull, not fills /
-#   [Service]
-#   ReadWritePaths=/mnt/backups
+# Hardening: it only needs the network, its state directory and DEST. ProtectSystem=strict
+# makes everything else read-only; without ReadWritePaths= the pull would work by hand
+# and fail here with "Read-only file system" (travelCompantion's first-run trap).
+ReadWritePaths=/lklBackup/sites_apps/recipeFlood
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
