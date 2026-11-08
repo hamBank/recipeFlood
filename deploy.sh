@@ -135,7 +135,7 @@ update_code() {
     local deployed
     deployed="$(sudo -u "$APP_USER" git rev-parse --short HEAD)"
     if SMOKE_UNIT_PREFIX=recipeflood SMOKE_DATA_PATH='/tags?section=true' \
-        SMOKE_BACKUP_GLOB='/var/backups/recipeflood/recipeflood-*.sql.gz' \
+        SMOKE_BACKUP_GLOB='/var/backups/recipeflood/recipeflood-*.sql.gz /var/backups/recipeflood/uploads-*.tar.gz' \
         bash scripts/smoke_check.sh "http://127.0.0.1:8002" "$deployed" | tee -a "$LOG"; then
         log "update done"
     else

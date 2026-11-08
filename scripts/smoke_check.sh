@@ -21,7 +21,10 @@
 #   SMOKE_DATA_PATH     a path (e.g. /chores/) that must answer HTTP 200 with a non-empty
 #                       JSON body, i.e. the app can actually read its database.
 #   SMOKE_BACKUP_GLOB   e.g. '/var/backups/app/*.sql.gz'; WARN if the newest match is
-#                       older than SMOKE_BACKUP_MAX_HOURS (default 36). Skipped if unset.
+#                       older than SMOKE_BACKUP_MAX_HOURS (default 36). Several globs,
+#                       space-separated, are checked one by one (one per backup job, so a
+#                       fresh database dump can't hide a stale uploads tarball). Skipped
+#                       if unset.
 #   SMOKE_CHECK_WAIT    seconds to wait for /health after a restart (default 60)
 #   SMOKE_CHECK_TIMEOUT per-request timeout (default 10)
 #
@@ -147,11 +150,15 @@ else
 fi
 
 # ── 5. backup freshness ──────────────────────────────────────────────────────
-if [[ -n "$BACKUP_GLOB" ]]; then
+# Split on spaces without expanding the globs yet (set -f), then check each.
+set -f
+read -r -a BACKUP_GLOBS <<< "$BACKUP_GLOB"
+set +f
+for GLOB in "${BACKUP_GLOBS[@]}"; do
   # shellcheck disable=SC2086
-  NEWEST="$(ls -1t $BACKUP_GLOB 2>/dev/null | head -1 || true)"
+  NEWEST="$(ls -1t $GLOB 2>/dev/null | head -1 || true)"
   if [[ -z "$NEWEST" ]]; then
-    warn "no backup found matching $BACKUP_GLOB — has the backup job ever run?"
+    warn "no backup found matching $GLOB — has the backup job ever run?"
   else
     AGE_H=$(( ( $(date +%s) - $(date -r "$NEWEST" +%s 2>/dev/null || echo 0) ) / 3600 ))
     if [[ "$AGE_H" -gt "$BACKUP_MAX_HOURS" ]]; then
@@ -160,7 +167,7 @@ if [[ -n "$BACKUP_GLOB" ]]; then
       pass "newest backup: $NEWEST (${AGE_H}h old)"
     fi
   fi
-fi
+done
 
 echo "──────────────────────────────────────────────────────────"
 if [[ "$FAIL" -eq 0 ]]; then pass "Smoke check passed"; exit 0; else fail "Smoke check FAILED"; exit 1; fi

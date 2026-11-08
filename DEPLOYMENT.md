@@ -281,8 +281,8 @@ service, then checks:
   the old bundle is still being served;
 - `GET /tags?section=true` returns data (the app can read its database);
 - every `recipeflood*.timer`'s last run succeeded;
-- the newest database backup is under 36 hours old (a warning, not a
-  failure).
+- the newest database dump **and** the newest uploads tarball are each
+  under 36 hours old (a warning, not a failure).
 
 The result is in `/var/log/recipeFlood-deploy.log`. To check by hand:
 
@@ -314,8 +314,10 @@ DEP-5), into `/var/backups/recipeflood` with a 7-day rotation by weekday:
 Each job writes to a temporary file and only replaces the day's backup when
 it succeeded, and runs with `pipefail`, so a failed `pg_dump` fails the unit
 instead of leaving an empty `.gz`. Every deploy's smoke check fails if
-either job's last run failed, and warns if the newest database backup is
-over 36 hours old.
+either job's last run failed, and warns if the newest database dump or the
+newest uploads tarball is over 36 hours old. (The cron job this replaced never
+wrote a single uploads tarball: it ran as `recipeFlood` into a directory only
+`postgres` could write, and nothing reported it.)
 
 ```bash
 systemctl list-timers 'recipeflood-*'                   # next and last runs
