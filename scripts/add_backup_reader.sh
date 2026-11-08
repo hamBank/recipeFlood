@@ -1,27 +1,30 @@
 #!/usr/bin/env bash
-# add_backup_reader.sh — run as root on the APP server (once). Lets the backup server
-# PULL backups, with a key that can do exactly one thing: read-only rsync of the backup dir.
+# add_backup_reader.sh — run as root on the APP server (once per key). Lets the backup
+# server PULL backups, with keys that can each do exactly one thing: read-only rsync of
+# one directory.
 #
-#   sudo scripts/add_backup_reader.sh [--from ADDR] [--backup-dir DIR] [--app-dir DIR] [--user NAME] PUBKEY_FILE|-
-#   scripts/add_backup_reader.sh --print-line [--from ADDR] PUBKEY_FILE|-      # no changes, no root
+#   sudo scripts/add_backup_reader.sh [--photos] [--from ADDR] [--backup-dir DIR] [--app-dir DIR] [--user NAME] PUBKEY_FILE|-
+#   scripts/add_backup_reader.sh --print-line [--photos] [--from ADDR] PUBKEY_FILE|-      # no changes, no root
 #
-# It creates a login-less system user (default rfbackup) whose only authorized key is
+# It creates a login-less system user (default rfbackup) and installs the key as
 #     restrict,from="ADDR",command="rrsync -ro /var/backups/recipeflood" ssh-ed25519 AAAA… rf-offsite-backup
-# `restrict` turns off forwarding, ptys and agent use; the forced command means the key
-# cannot run a shell or write anything, and cannot read outside the backup dir, so the
-# app's .env is out of its reach by path. The user is also unprivileged, and this script
-# checks that it cannot read .env anyway, and that it can read every backup file.
+# or, with --photos, the backup server's second key as
+#     restrict,from="ADDR",command="rrsync -ro /opt/recipeFlood/uploads" ssh-ed25519 AAAA… rf-offsite-photos
+# `restrict` turns off forwarding, ptys and agent use; the forced command means a key
+# cannot run a shell or write anything, and cannot read outside its directory, so the
+# app's .env is out of reach of both by path. The user is also unprivileged, and this
+# script checks that it cannot read .env anyway, and that it can read everything it must.
 set -Eeuo pipefail
 
-BACKUP_DIR="/var/backups/recipeflood"; APP_DIR="/opt/recipeFlood"; BACKUP_USER="rfbackup"
-FROM=""; PRINT=0; KEYSRC=""
-MARK="rf-offsite-backup"
+BACKUP_DIR=""; APP_DIR="/opt/recipeFlood"; BACKUP_USER="rfbackup"
+FROM=""; PRINT=0; KEYSRC=""; PHOTOS=0
 
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
 die()   { echo "✗ $*" >&2; exit 1; }
 
 while (( $# )); do
   case "$1" in
+    --photos)     PHOTOS=1; shift;;
     --from)       FROM="${2:?--from needs an address}"; shift 2;;
     --backup-dir) BACKUP_DIR="${2:?}"; shift 2;;
     --app-dir)    APP_DIR="${2:?}"; shift 2;;
@@ -34,6 +37,11 @@ while (( $# )); do
   esac
 done
 [[ -n "$KEYSRC" ]] || usage
+if (( PHOTOS )); then
+  BACKUP_DIR="${BACKUP_DIR:-$APP_DIR/uploads}"; MARK="rf-offsite-photos"
+else
+  BACKUP_DIR="${BACKUP_DIR:-/var/backups/recipeflood}"; MARK="rf-offsite-backup"
+fi
 
 if [[ "$KEYSRC" == "-" ]]; then KEY_LINE="$(grep -v '^#' | grep -v '^[[:space:]]*$' | head -1 || true)"
 else [[ -r "$KEYSRC" ]] || die "cannot read $KEYSRC"; KEY_LINE="$(grep -v '^#' "$KEYSRC" | grep -v '^[[:space:]]*$' | head -1 || true)"; fi
@@ -75,7 +83,12 @@ HOME_DIR="$(getent passwd "$BACKUP_USER" | cut -d: -f6)"
 install -d -m 700 -o "$BACKUP_USER" -g "$(id -gn "$BACKUP_USER")" "$HOME_DIR/.ssh"
 AK="$HOME_DIR/.ssh/authorized_keys"
 touch "$AK"
-grep -vF " $MARK" "$AK" > "$AK.new" || true       # replace any earlier key of ours
+# One key per directory: sshd uses the first line that matches a key, so the same key
+# under both markers would quietly send one of the two pulls to the wrong directory.
+if grep -v " $MARK\$" "$AK" | grep -qF " $KEY_BLOB "; then
+  die "this key is already installed for the other directory: the backup server needs a separate key for each (install.sh makes both)"
+fi
+grep -vF " $MARK" "$AK" > "$AK.new" || true       # replace any earlier key with this marker (the other key stays)
 echo "$LINE" >> "$AK.new"
 install -m 600 -o "$BACKUP_USER" -g "$(id -gn "$BACKUP_USER")" "$AK.new" "$AK"; rm -f "$AK.new"
 echo "✓ installed key in $AK"
@@ -87,7 +100,13 @@ if [[ -e "$APP_DIR/.env" ]] && as_reader test -r "$APP_DIR/.env"; then
   echo "✗ $BACKUP_USER can read $APP_DIR/.env: tighten it (chmod 600, owned by the app user)" >&2; ok=0
 fi
 if ! as_reader test -r "$BACKUP_DIR" -a -x "$BACKUP_DIR"; then
-  echo "✗ $BACKUP_USER cannot list $BACKUP_DIR: the pull would fail. Fix with: chmod o+rx $BACKUP_DIR" >&2; ok=0
+  echo "✗ $BACKUP_USER cannot list $BACKUP_DIR: the pull would fail. Fix with: chmod o+rx $BACKUP_DIR (and o+x on each parent)" >&2; ok=0
+elif (( PHOTOS )); then
+  # Every photo and folder, not just the top: one unreadable file fails the pull.
+  blocked="$(as_reader find "$BACKUP_DIR" \( \( -type f ! -readable \) -o \( -type d ! -executable \) \) -print -quit 2>/dev/null || true)"
+  if [[ -n "$blocked" ]]; then
+    echo "✗ $BACKUP_USER cannot read $blocked: the pull would fail. Fix with: chmod -R o+rX $BACKUP_DIR" >&2; ok=0
+  fi
 else
   shopt -s nullglob
   n=0
@@ -98,4 +117,4 @@ else
   (( n )) || echo "! no backups in $BACKUP_DIR yet: the first pull will fail until the backup timers have run" >&2
 fi
 (( ok )) || exit 1
-echo "✓ $BACKUP_USER can read the backups in $BACKUP_DIR and cannot read $APP_DIR/.env"
+echo "✓ $BACKUP_USER can read $BACKUP_DIR and cannot read $APP_DIR/.env"
