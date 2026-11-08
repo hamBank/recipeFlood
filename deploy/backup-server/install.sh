@@ -33,11 +33,16 @@ if [[ ! -e /etc/recipeflood-pull-backup.conf ]]; then
   echo "✓ wrote /etc/recipeflood-pull-backup.conf: check SRC_HOST"
 fi
 
+# Two keys, because the app server confines each to one directory: the database dumps,
+# and the photos. Neither can read the other's directory, or the app's .env.
 KEY="$STATE/.ssh/id_ed25519"
-if [[ ! -e "$KEY" ]]; then
-  runuser -u rfpull -- ssh-keygen -q -t ed25519 -N '' -C "rf-pull@$(hostname)" -f "$KEY"
-  echo "✓ generated $KEY"
-fi
+PHOTOS_KEY="$STATE/.ssh/id_ed25519_photos"
+for k in "$KEY:rf-pull" "$PHOTOS_KEY:rf-pull-photos"; do
+  if [[ ! -e "${k%%:*}" ]]; then
+    runuser -u rfpull -- ssh-keygen -q -t ed25519 -N '' -C "${k#*:}@$(hostname)" -f "${k%%:*}"
+    echo "✓ generated ${k%%:*}"
+  fi
+done
 touch "$STATE/.ssh/known_hosts"; chown rfpull:rfpull "$STATE/.ssh/known_hosts"
 
 systemctl daemon-reload
@@ -48,8 +53,11 @@ cat <<MSG
 
 Installed. Remaining steps:
 
- 1. On the APP server, authorise this key (read-only rsync of /var/backups/recipeflood, nothing else):
+ 1. On the APP server, authorise both keys. Each can only read-only rsync one directory:
+        # the database dumps (/var/backups/recipeflood)
         echo '$(cat "$KEY.pub")' | sudo scripts/add_backup_reader.sh --from <this server's IP> -
+        # the photos (/opt/recipeFlood/uploads)
+        echo '$(cat "$PHOTOS_KEY.pub")' | sudo scripts/add_backup_reader.sh --photos --from <this server's IP> -
 
  2. Check SRC_HOST in /etc/recipeflood-pull-backup.conf (rfbackup@<app host>).
 

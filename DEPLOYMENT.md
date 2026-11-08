@@ -338,25 +338,35 @@ server (fleet spec DEP-6). A separate, locked-down **backup server** *pulls* a c
 rsync/ssh, the same design as travelCompantion's.
 
 ```
- app server (camelidcastle)                    backup server
+ app server (camelidcastle)                    backup server (copies in /lklBackup/sites_apps/recipeFlood)
  ──────────────────────────                    ─────────────
  02:45 recipeflood-backup-db                   every 6 h  recipeflood-pull-backup.timer
- 03:15 recipeflood-backup-uploads                         └ recipeflood-pull-backup.sh
-   └ /var/backups/recipeflood/*-<1-7>.gz
- user rfbackup (read-only key)  ◄──────────── rsync over ssh (key + pinned host key)
- forced: rrsync -ro /var/backups/recipeflood          └ verify · file dated copies · freshness · prune
+   └ /var/backups/recipeflood/*-<1-7>.sql.gz              └ recipeflood-pull-backup.sh
+ /opt/recipeFlood/uploads (the photos)
+ user rfbackup, two read-only keys  ◄──────── rsync over ssh (two keys + pinned host key)
+   rf-offsite-backup: rrsync -ro /var/backups/recipeflood   └ dumps: verify · dated copies · freshness
+   rf-offsite-photos: rrsync -ro /opt/recipeFlood/uploads   └ photos: dated snapshot (--link-dest)
+                                                            └ prune both
 ```
 
 **Pull, not push**: the app server holds no credentials for the backup server, so a compromised
-app can't reach or delete the copies. The app-side key can only run a read-only rsync inside
-`/var/backups/recipeflood` (`rrsync -ro`): no shell, no writes, no other paths. That puts `.env`
-out of its reach by path, and `add_backup_reader.sh` also checks the user can't read it.
+app can't reach or delete the copies. Each of the two keys can only run a read-only rsync inside
+its one directory (`rrsync -ro`): no shell, no writes, no other paths. Neither directory holds
+`.env`, so it is out of both keys' reach by path, and `add_backup_reader.sh` also checks the user
+can't read it. Two keys rather than one wider one because `rrsync` confines a key to a single
+directory, and the only directory holding both would be `/opt/recipeFlood`, `.env` and all.
 
-**What it keeps.** The app's backups are named by weekday and overwritten a week later, so the
-pull files every new one under a dated name (`dumps/recipeflood-YYYYMMDD-HHMMSS.sql.gz`,
-`uploads/uploads-YYYYMMDD-HHMMSS.tar.gz`) and keeps 90 days of them, never fewer than 7 of each.
-An uploads tarball identical to the previous one (no photo changed) is hard-linked to it, so
-the photos cost space only when they change.
+**What it keeps.**
+- **Database:** the app's dumps are named by weekday and overwritten a week later, so the pull
+  files every new one under a dated name (`dumps/recipeflood-YYYYMMDD-HHMMSS.sql.gz`).
+- **Photos:** a dated snapshot of the uploads directory (`photos/YYYYMMDD-HHMMSS/`) made with
+  `rsync --link-dest` against the previous one. An unchanged photo is a hard link, so the
+  history costs about one copy (~1 GB) plus the photos that changed. A pull that finds nothing
+  changed keeps no new snapshot. A photo deleted in the app stays in the older snapshots.
+- Both are kept 90 days, never fewer than 7 of each.
+
+The app's own nightly `uploads-<1-7>.tar.gz` stay its local copy and are not pulled: a full
+tarball per changed night would have grown to ~85 GB here.
 
 **Not copied, on purpose: `.env`.** A restored database works without it, but the server
 doesn't: it holds `JWT_SECRET`, the Google OAuth client, the Anthropic key and the Sheet
@@ -371,18 +381,23 @@ it) in your password manager.
 sudo deploy/backup-server/install.sh
 ```
 
-Creates user `rfpull`, an ed25519 key, `/etc/recipeflood-pull-backup.conf`, the backup directory `/lklBackup/sites_apps/recipeFlood`, the service and the
-timer (enabled). It prints the next steps with your public key filled in.
+Creates user `rfpull`, two ed25519 keys (`id_ed25519` for the dumps, `id_ed25519_photos` for
+the photos), `/etc/recipeflood-pull-backup.conf`, the backup directory
+`/lklBackup/sites_apps/recipeFlood`, the service and the timer (enabled). It prints the next
+steps with both public keys filled in. Re-running it is safe: it keeps existing keys.
 
-**2. App server** (as root): authorise that key. `--from` restricts it to the backup server's IP.
+**2. App server** (as root): authorise both keys. `--from` restricts them to the backup server's IP.
 
 ```bash
-echo '<the public key install.sh printed>' | sudo scripts/add_backup_reader.sh --from <backup-server-ip> -
+echo '<the first public key install.sh printed>'  | sudo scripts/add_backup_reader.sh --from <backup-server-ip> -
+echo '<the photos public key install.sh printed>' | sudo scripts/add_backup_reader.sh --photos --from <backup-server-ip> -
 ```
 
-This creates the login-less `rfbackup` user, installs the key as
-`restrict,from="…",command="rrsync -ro /var/backups/recipeflood"`, then checks that `rfbackup`
-**can** read every backup file and **cannot** read `/opt/recipeFlood/.env`. Needs the `rsync`
+This creates the login-less `rfbackup` user and installs the keys as
+`restrict,from="…",command="rrsync -ro /var/backups/recipeflood"` and
+`…command="rrsync -ro /opt/recipeFlood/uploads"`. It then checks that `rfbackup` **can** read every
+backup file (and, for `--photos`, every photo and folder) and **cannot** read
+`/opt/recipeFlood/.env`, and it refuses the same key for both directories. Needs the `rsync`
 package (it provides `rrsync`), and sshd must allow the user (`AllowUsers`, if you use it).
 
 **3. Backup server**: check `SRC_HOST=rfbackup@<app-host>` in `/etc/recipeflood-pull-backup.conf`
@@ -400,7 +415,7 @@ by hand can be read-only under it):
 
 ```bash
 sudo systemctl start recipeflood-pull-backup.service
-journalctl -u recipeflood-pull-backup.service -n 20   # expect "✓ ok: N dump(s), newest Xh old; M uploads tarball(s)…"
+journalctl -u recipeflood-pull-backup.service -n 20   # expect "✓ ok: N dump(s), newest Xh old, …; 1 photo snapshot(s), new photo snapshot …"
 systemctl list-timers recipeflood-pull-backup.timer
 ```
 
@@ -419,11 +434,13 @@ The unit exits non-zero (and shows in `systemctl --failed`) when:
 
 | Message | Cause |
 |---|---|
-| `rsync of the backups failed (exit …)` | ssh/key/host-key/permission problem; the line above it says which |
-| `not a complete backup: …` | A file failed `gzip -t`, has no `dump complete` marker, or isn't a readable tar. It's moved to `quarantine/` and fetched again next run |
+| `rsync of the backups failed (exit …)` / `rsync of the photos failed` | ssh/key/host-key/permission problem; the line above it says which. A failed photo pull leaves no half snapshot |
+| `ssh key … (photos) is missing` | The second key isn't there: re-run `install.sh`, then authorise it with `--photos` |
+| `not a complete backup: …` | A dump failed `gzip -t` or has no `dump complete` marker. It's moved to `quarantine/` and fetched again next run |
 | `… differs from the copy already filed …` | A file changed without its timestamp changing. Look before trusting either copy |
-| `newest database dump is Nh old` / `newest uploads tarball is Nh old` | **The app server's own backup stopped.** Check `systemctl status recipeflood-backup-db` (or `-uploads`) there |
-| `… has never run` | The app server has no backup of that kind at all |
+| `newest database dump is Nh old` | **The app server's own backup stopped.** Check `systemctl status recipeflood-backup-db` there |
+| `… has never run` | The app server has no database dump at all |
+| `photo count fell from N to M` | The new snapshot has under half the photos of the last one: photos were deleted in bulk, or the wrong directory is mounted. Every run then fails, and nothing is pruned, until you've looked and run the `rm …/PHOTOS-DROPPED` the message gives. The older snapshots hold the missing photos |
 
 For an alert, point `OnFailure=` in the service at a unit that mails or pushes you (there is a
 commented line for it). Without one, check `systemctl --failed` now and then, or look at
@@ -442,25 +459,42 @@ gunzip -c "$B"/dumps/recipeflood-<newest>.sql.gz | psql -q -v ON_ERROR_STOP=1 rf
 psql rf_restore_test -c 'select count(*) from recipe'
 psql rf_restore_test -c 'select version_num from alembic_version'   # the schema revision
 dropdb rf_restore_test
-tar -tzf "$B"/uploads/uploads-<newest>.tar.gz | head                 # the photos are there
+ls "$B"/photos/                                                      # the snapshots
+ls "$B"/photos/<newest>/recipes | head                                # the photos are there
 ```
+
+To restore the photos, copy a snapshot back (`rsync -a "$B"/photos/<snapshot>/ /opt/recipeFlood/uploads/`
+on the app server, then `chown -R recipeFlood:recipeFlood` it).
 
 Without the `recipeflood` role, `ON_ERROR_STOP` stops at the first `OWNER TO` line and
 restores nothing. That was checked against a real dump of this schema.
 
 Also confirm you can find `.env` in your password manager.
 
-### Rotating the key / removing access
+### Rotating the keys / removing access
 
-Re-run `add_backup_reader.sh` with the new public key (it replaces the old `rf-offsite-backup`
-line), or delete that line from `/var/lib/rfbackup/.ssh/authorized_keys` to cut access at once.
+Re-run `add_backup_reader.sh` (with `--photos` for the photos key) with the new public key: it
+replaces the old `rf-offsite-backup` or `rf-offsite-photos` line and leaves the other. Or delete
+the lines from `/var/lib/rfbackup/.ssh/authorized_keys` to cut access at once.
+
+### Moving from the tarball pull (first version)
+
+The first version also pulled the uploads tarballs. After the first good photo snapshot, the
+tarball copies on the backup server can go:
+`sudo rm -rf /lklBackup/sites_apps/recipeFlood/uploads /lklBackup/sites_apps/recipeFlood/incoming/uploads-*.tar.gz`.
 
 ### Tests
 
-`tests/test_pull_backup.py` runs the real script and rsync against a local stand-in for the
-backup directory: the pull, the dated history (including a weekday file overwritten at the
-source), verification and recovery after a quarantined file, the freshness checks for both
-kinds, retention, the hard-linked unchanged tarball, and the key builder's refusal of injected
-options. Two tests route the pull through the real `rrsync -ro` forced command, which allows
-reads under the root and refuses a path outside it, a push and a shell. Not covered: ssh
-itself and running under systemd. The first run in step 4 is that check.
+`tests/test_pull_backup.py` runs the real script and rsync against local stand-ins for the
+backup and uploads directories. It covers:
+- the dumps: the dated history (including a weekday file overwritten at the source),
+  verification and recovery after a quarantined file, and the freshness check;
+- the photos: snapshots sharing unchanged photos (same inode), a replaced or deleted photo
+  surviving in the older snapshot, no snapshot when nothing changed, a dropped connection
+  leaving no half snapshot, and the half-count guard;
+- retention of both, including that pruning an old snapshot keeps the photos newer ones share;
+- the key builder's refusal of injected options.
+
+Tests route the pull through the real `rrsync -ro` forced command for each key: reads under its
+own root work, while the other key's directory, `.env`, an absolute path, a push and a shell are
+all refused. Not covered: ssh itself and running under systemd. The first run in step 4 is that check.
