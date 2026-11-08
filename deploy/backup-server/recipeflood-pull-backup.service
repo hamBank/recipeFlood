@@ -1,0 +1,34 @@
+# /etc/systemd/system/recipeflood-pull-backup.service   (on the BACKUP server)
+# Oneshot, so `systemctl status` / `systemctl show -p Result` say whether the last pull
+# worked (fleet spec DEP-5). The script exits non-zero if the pull fails, a backup is
+# unsound, or the newest one is stale: a failed run stays visible in `systemctl --failed`.
+[Unit]
+Description=Pull Recipe Flood backups from the app server
+After=network-online.target
+Wants=network-online.target
+# Alert on failure, e.g. point this at a unit that mails you:
+# OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+User=rfpull
+# /var/lib/recipeflood-backup: the ssh key, known_hosts and the backups (data/) live here.
+StateDirectory=recipeflood-backup
+StateDirectoryMode=0700
+ExecStart=/usr/local/sbin/recipeflood-pull-backup.sh
+TimeoutStartSec=2h
+# Hardening: it only needs the network and its own state directory. ProtectSystem=strict
+# makes everything else read-only, so if you point DEST at another disk the pull works
+# by hand and fails here ("Read-only file system"). Add a drop-in
+# (systemctl edit recipeflood-pull-backup.service) with both of:
+#   [Unit]
+#   RequiresMountsFor=/mnt/backups        # an unmounted disk fails the pull, not fills /
+#   [Service]
+#   ReadWritePaths=/mnt/backups
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true

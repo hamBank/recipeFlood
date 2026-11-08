@@ -1,0 +1,15 @@
+# /etc/systemd/system/recipeflood-pull-backup.timer   (on the BACKUP server)
+# The app server dumps the database at 02:45 and tars the uploads at 03:15, in ITS local
+# time. Pulling every six hours means a pull lands within six hours of those whatever
+# zone either server is in; a pull with nothing new copies nothing. Persistent=true runs
+# a pull missed while this server was off.
+[Unit]
+Description=Pull Recipe Flood backups every six hours
+
+[Timer]
+OnCalendar=*-*-* 00/6:20:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

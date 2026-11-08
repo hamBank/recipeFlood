@@ -1,0 +1,21 @@
+# /etc/recipeflood-pull-backup.conf   (on the BACKUP server; root:rfpull, mode 0640)
+# Shell KEY=VALUE, read by recipeflood-pull-backup.sh. Only SRC_HOST is required.
+
+# The app server and the restricted user scripts/add_backup_reader.sh created there.
+SRC_HOST=rfbackup@camelidcastle.hups.club
+
+# Where the copies go (default /var/lib/recipeflood-backup/data). A different path also
+# needs ReadWritePaths= and RequiresMountsFor= in a systemd drop-in (see the .service).
+#DEST=/var/lib/recipeflood-backup/data
+
+# Our history. The app server keeps 7 days; we keep longer, but never fewer than
+# MIN_KEEP of each kind (so a broken source can't make us prune everything).
+#KEEP_DAYS=90
+#MIN_KEEP=7
+
+# Fail if the newest dump or uploads tarball is older than this: the app server's
+# backup job has stopped.
+#MAX_AGE_HOURS=30
+
+#SSH_KEY=/var/lib/recipeflood-backup/.ssh/id_ed25519
+#KNOWN_HOSTS=/var/lib/recipeflood-backup/.ssh/known_hosts
