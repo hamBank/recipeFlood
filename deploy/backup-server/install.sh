@@ -15,6 +15,16 @@ fi
 usermod -p '*' rfpull 2>/dev/null || true
 install -d -m 700 -o rfpull -g rfpull "$STATE" "$STATE/.ssh"
 
+# Where the copies go: the unit's Environment=DEST= line, the one place it is set.
+DEST="$(sed -n 's/^Environment=DEST=//p' recipeflood-pull-backup.service)"
+[[ -n "$DEST" ]] || { echo "✗ no Environment=DEST= in recipeflood-pull-backup.service" >&2; exit 1; }
+# The parent must already exist: creating it here would put the backups on the root
+# filesystem if the backup disk isn't mounted.
+[[ -d "$(dirname "$DEST")" ]] || { echo "✗ $(dirname "$DEST") does not exist: is the backup disk mounted?" >&2; exit 1; }
+install -d -m 700 -o rfpull -g rfpull "$DEST"
+runuser -u rfpull -- test -w "$DEST" || { echo "✗ rfpull cannot write $DEST: a parent directory blocks it (it needs o+x on each)" >&2; exit 1; }
+echo "✓ backups go to $DEST"
+
 install -m 755 recipeflood-pull-backup.sh /usr/local/sbin/recipeflood-pull-backup.sh
 install -m 644 recipeflood-pull-backup.service /etc/systemd/system/recipeflood-pull-backup.service
 install -m 644 recipeflood-pull-backup.timer   /etc/systemd/system/recipeflood-pull-backup.timer
