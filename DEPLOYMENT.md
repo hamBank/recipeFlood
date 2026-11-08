@@ -16,6 +16,7 @@
   not in the database**; the only app state that needs its own backup.
 - **Backups:** systemd timers run a nightly `pg_dump` (02:45) and a nightly
   uploads tarball (03:15), both 7-day rotation, into `/var/backups/recipeflood`.
+  A separate backup server pulls them off-box (see "Off-box backups").
 
 ## Repo access
 
@@ -329,3 +330,133 @@ journalctl -u recipeflood-backup-uploads -n 20
 `data/` in the repo (the blog snapshots) is the third leg: it means the
 imported collection can always be rebuilt even if both of the above are
 lost.
+
+## Off-box backups
+
+`/var/backups/recipeflood` is on the same disk as the app, so it doesn't survive losing the
+server (fleet spec DEP-6). A separate, locked-down **backup server** *pulls* a copy over
+rsync/ssh, the same design as travelCompantion's.
+
+```
+ app server (camelidcastle)                    backup server
+ ──────────────────────────                    ─────────────
+ 02:45 recipeflood-backup-db                   every 6 h  recipeflood-pull-backup.timer
+ 03:15 recipeflood-backup-uploads                         └ recipeflood-pull-backup.sh
+   └ /var/backups/recipeflood/*-<1-7>.gz
+ user rfbackup (read-only key)  ◄──────────── rsync over ssh (key + pinned host key)
+ forced: rrsync -ro /var/backups/recipeflood          └ verify · file dated copies · freshness · prune
+```
+
+**Pull, not push**: the app server holds no credentials for the backup server, so a compromised
+app can't reach or delete the copies. The app-side key can only run a read-only rsync inside
+`/var/backups/recipeflood` (`rrsync -ro`): no shell, no writes, no other paths. That puts `.env`
+out of its reach by path, and `add_backup_reader.sh` also checks the user can't read it.
+
+**What it keeps.** The app's backups are named by weekday and overwritten a week later, so the
+pull files every new one under a dated name (`dumps/recipeflood-YYYYMMDD-HHMMSS.sql.gz`,
+`uploads/uploads-YYYYMMDD-HHMMSS.tar.gz`) and keeps 90 days of them, never fewer than 7 of each.
+An uploads tarball identical to the previous one (no photo changed) is hard-linked to it, so
+the photos cost space only when they change.
+
+**Not copied, on purpose: `.env`.** A restored database works without it, but the server
+doesn't: it holds `JWT_SECRET`, the Google OAuth client, the Anthropic key and the Sheet
+credentials. Keep a copy of `.env` (and the Sheet service-account key file, if it lives outside
+it) in your password manager.
+
+### Setup
+
+**1. Backup server** (as root, from a checkout of this repo):
+
+```bash
+sudo deploy/backup-server/install.sh
+```
+
+Creates user `rfpull`, an ed25519 key, `/etc/recipeflood-pull-backup.conf`, the service and the
+timer (enabled). It prints the next steps with your public key filled in.
+
+**2. App server** (as root): authorise that key. `--from` restricts it to the backup server's IP.
+
+```bash
+echo '<the public key install.sh printed>' | sudo scripts/add_backup_reader.sh --from <backup-server-ip> -
+```
+
+This creates the login-less `rfbackup` user, installs the key as
+`restrict,from="…",command="rrsync -ro /var/backups/recipeflood"`, then checks that `rfbackup`
+**can** read every backup file and **cannot** read `/opt/recipeFlood/.env`. Needs the `rsync`
+package (it provides `rrsync`), and sshd must allow the user (`AllowUsers`, if you use it).
+
+**3. Backup server**: check `SRC_HOST=rfbackup@<app-host>` in `/etc/recipeflood-pull-backup.conf`
+and pin the app server's host key. The script uses `StrictHostKeyChecking=yes`, so an unknown or
+changed key fails the run instead of prompting. Compare the fingerprint from
+`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the app server with what you scan here:
+
+```bash
+sudo -u rfpull ssh-keyscan -t ed25519 <app-host> | sudo -u rfpull tee -a /var/lib/recipeflood-backup/.ssh/known_hosts
+sudo -u rfpull ssh-keygen -lf /var/lib/recipeflood-backup/.ssh/known_hosts
+```
+
+**4. First run, through systemd** (not only by hand: the unit is sandboxed, and a path that works
+by hand can be read-only under it):
+
+```bash
+sudo systemctl start recipeflood-pull-backup.service
+journalctl -u recipeflood-pull-backup.service -n 20   # expect "✓ ok: N dump(s), newest Xh old; M uploads tarball(s)…"
+systemctl list-timers recipeflood-pull-backup.timer
+```
+
+To keep the copies on another disk, set `DEST` in the config **and** add a drop-in
+(`systemctl edit recipeflood-pull-backup.service`) with `RequiresMountsFor=` and
+`ReadWritePaths=` for that path. Without them the sandbox makes it read-only; travelCompantion
+hit exactly this on its first run.
+
+### What a failed run means
+
+The unit exits non-zero (and shows in `systemctl --failed`) when:
+
+| Message | Cause |
+|---|---|
+| `rsync of the backups failed (exit …)` | ssh/key/host-key/permission problem; the line above it says which |
+| `not a complete backup: …` | A file failed `gzip -t`, has no `dump complete` marker, or isn't a readable tar. It's moved to `quarantine/` and fetched again next run |
+| `… differs from the copy already filed …` | A file changed without its timestamp changing. Look before trusting either copy |
+| `newest database dump is Nh old` / `newest uploads tarball is Nh old` | **The app server's own backup stopped.** Check `systemctl status recipeflood-backup-db` (or `-uploads`) there |
+| `… has never run` | The app server has no backup of that kind at all |
+
+For an alert, point `OnFailure=` in the service at a unit that mails or pushes you (there is a
+commented line for it). Without one, check `systemctl --failed` now and then, or look at
+`/var/lib/recipeflood-backup/data/last-success`, which holds the time of the last good pull.
+
+### Restore drill (do this once, then yearly)
+
+A backup you haven't restored is only a hope. On any machine with Postgres client tools:
+
+```bash
+B=/var/lib/recipeflood-backup/data
+gunzip -c "$B"/dumps/recipeflood-<newest>.sql.gz | head -20          # readable?
+createuser recipeflood          # the dump's OWNER TO lines need it; skip if it exists
+createdb rf_restore_test
+gunzip -c "$B"/dumps/recipeflood-<newest>.sql.gz | psql -q -v ON_ERROR_STOP=1 rf_restore_test
+psql rf_restore_test -c 'select count(*) from recipe'
+psql rf_restore_test -c 'select version_num from alembic_version'   # the schema revision
+dropdb rf_restore_test
+tar -tzf "$B"/uploads/uploads-<newest>.tar.gz | head                 # the photos are there
+```
+
+Without the `recipeflood` role, `ON_ERROR_STOP` stops at the first `OWNER TO` line and
+restores nothing. That was checked against a real dump of this schema.
+
+Also confirm you can find `.env` in your password manager.
+
+### Rotating the key / removing access
+
+Re-run `add_backup_reader.sh` with the new public key (it replaces the old `rf-offsite-backup`
+line), or delete that line from `/var/lib/rfbackup/.ssh/authorized_keys` to cut access at once.
+
+### Tests
+
+`tests/test_pull_backup.py` runs the real script and rsync against a local stand-in for the
+backup directory: the pull, the dated history (including a weekday file overwritten at the
+source), verification and recovery after a quarantined file, the freshness checks for both
+kinds, retention, the hard-linked unchanged tarball, and the key builder's refusal of injected
+options. Two tests route the pull through the real `rrsync -ro` forced command, which allows
+reads under the root and refuses a path outside it, a push and a shell. Not covered: ssh
+itself and running under systemd. The first run in step 4 is that check.
