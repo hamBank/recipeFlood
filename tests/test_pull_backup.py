@@ -556,3 +556,4 @@ def test_the_installer_and_units_agree():
     assert "Persistent=true" in timer and "OnCalendar=" in timer
     for script in (SCRIPT, d / "install.sh", ADD_READER):
         assert subprocess.run(["bash", "-n", str(script)]).returncode == 0
+    assert "trap " in installer and " ERR" in installer      # a failure says where (CLAUDE.md: stop loudly)
