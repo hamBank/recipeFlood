@@ -3,6 +3,9 @@
 # its systemd service + timer, a config template and a dedicated key, and enables the
 # timer. It does not start a pull: finish the steps it prints first.
 set -Eeuo pipefail
+# Stop loudly: without this, a failing command under set -e ends the script with no word
+# of where, and the "Remaining steps" below (with the keys to authorise) never appear.
+trap 'echo "✗ install.sh failed at line $LINENO: $BASH_COMMAND (exit $?)" >&2' ERR
 cd "$(dirname "$0")"
 [[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
 for c in rsync ssh ssh-keygen flock systemctl gzip tar cmp; do command -v "$c" >/dev/null || { echo "✗ missing: $c" >&2; exit 1; }; done
