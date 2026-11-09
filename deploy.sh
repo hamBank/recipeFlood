@@ -134,7 +134,11 @@ update_code() {
     log "smoke check"
     local deployed
     deployed="$(sudo -u "$APP_USER" git rev-parse --short HEAD)"
+    # SMOKE_CRON_PATTERN: the old /etc/cron.d/recipeflood ran both backups from
+    # cron, which a deploy can't remove, so a line coming back would run them a
+    # second time next to their timers. Both of its lines wrote under this path.
     if SMOKE_UNIT_PREFIX=recipeflood SMOKE_DATA_PATH='/tags?section=true' \
+        SMOKE_CRON_PATTERN='/var/backups/recipeflood' SMOKE_APP_USER="$APP_USER" \
         SMOKE_BACKUP_GLOB='/var/backups/recipeflood/recipeflood-*.sql.gz /var/backups/recipeflood/uploads-*.tar.gz' \
         bash scripts/smoke_check.sh "http://127.0.0.1:8002" "$deployed" | tee -a "$LOG"; then
         log "update done"
