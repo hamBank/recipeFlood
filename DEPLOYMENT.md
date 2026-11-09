@@ -282,6 +282,9 @@ service, then checks:
   the old bundle is still being served;
 - `GET /tags?section=true` returns data (the app can read its database);
 - every `recipeflood*.timer`'s last run succeeded;
+- no cron entry (the app user's crontab, `/etc/crontab`, `/etc/cron.d/*`) writes under
+  `/var/backups/recipeflood`. A deploy can't remove a crontab line, and one that came back
+  would run a backup a second time next to its timer. This one **fails** the deploy;
 - the newest database dump **and** the newest uploads tarball are each
   under 36 hours old (a warning, not a failure).
 

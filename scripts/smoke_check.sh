@@ -18,6 +18,15 @@
 #   SMOKE_UNIT_PREFIX   systemd timers named "<prefix>*.timer" must be enabled and their
 #                       paired .service's last Result must be "success". Skipped if unset
 #                       or if systemctl isn't available.
+#   SMOKE_CRON_PATTERN  extended regex naming the scripts that now run from systemd timers,
+#                       e.g. 'pg_backup\.sh|send_digest\.py'. A non-comment line in
+#                       `crontab -l -u $SMOKE_APP_USER`, /etc/crontab or /etc/cron.d/* that
+#                       matches it is a FAIL: a deploy cannot remove a crontab line, and the
+#                       leftover runs the job a second time next to its timer (TC found two
+#                       backups a night, and a notifications job running with a partial
+#                       environment, for weeks). Skipped if unset.
+#   SMOKE_APP_USER      the app's unix user, for `crontab -l -u` (needs root; skipped if unset)
+#   SMOKE_CRON_FILES    files to scan too (default "/etc/crontab /etc/cron.d/*")
 #   SMOKE_DATA_PATH     a path (e.g. /chores/) that must answer HTTP 200 with a non-empty
 #                       JSON body, i.e. the app can actually read its database.
 #   SMOKE_BACKUP_GLOB   e.g. '/var/backups/app/*.sql.gz'; WARN if the newest match is
@@ -29,7 +38,7 @@
 #   SMOKE_CHECK_TIMEOUT per-request timeout (default 10)
 #
 # Hard FAIL (exit 1): /health not 200/status ok after the wait; SHA or build mismatch;
-# data path not OK; a scheduled job's last run failed. WARN only: a disabled timer, a
+# data path not OK; a scheduled job's last run failed; a cron line duplicates a timer. WARN only: a disabled timer, a
 # stale backup. Needs only curl + python3 (+ systemctl when present).
 
 set -euo pipefail
@@ -147,6 +156,31 @@ else
     fi
   done < <(systemctl list-unit-files "${UNIT_PREFIX}*.timer" --no-legend 2>/dev/null || true)
   [[ "$FOUND" -eq 0 ]] && warn "no systemd timers match '${UNIT_PREFIX}*.timer' — are scheduled jobs installed?"
+fi
+
+# ── 4b. legacy cron entries that duplicate a timer ───────────────────────────
+CRON_RE="${SMOKE_CRON_PATTERN:-}"
+if [[ -z "$CRON_RE" ]]; then
+  echo "  (SMOKE_CRON_PATTERN not set — skipping the legacy-cron check)"
+else
+  CRON_USER="${SMOKE_APP_USER:-}"
+  CRON_FILES="${SMOKE_CRON_FILES-/etc/crontab /etc/cron.d/*}"
+  LEGACY=""
+  if [[ -n "$CRON_USER" ]] && command -v crontab &>/dev/null; then
+    LEGACY+="$(crontab -l -u "$CRON_USER" 2>/dev/null | grep -Ev '^[[:space:]]*(#|$)' | grep -E "$CRON_RE" | sed "s|^|  [crontab -u $CRON_USER] |" || true)"
+  fi
+  for f in $CRON_FILES; do
+    [[ -f "$f" ]] || continue
+    LEGACY+=$'\n'"$(grep -Ev '^[[:space:]]*(#|$)' "$f" 2>/dev/null | grep -E "$CRON_RE" | sed "s|^|  [$f] |" || true)"
+  done
+  LEGACY="$(echo "$LEGACY" | sed '/^[[:space:]]*$/d')"
+  if [[ -n "$LEGACY" ]]; then
+    fail "A cron entry runs a job that already has a systemd timer, so it runs twice:"
+    echo "$LEGACY"
+    echo "    Remove it (sudo crontab -u ${CRON_USER:-<app user>} -e, or the /etc/cron.d file) and keep the timer."
+  else
+    pass "No legacy cron entries duplicate the systemd timers"
+  fi
 fi
 
 # ── 5. backup freshness ──────────────────────────────────────────────────────
