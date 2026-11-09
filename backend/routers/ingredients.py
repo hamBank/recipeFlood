@@ -49,6 +49,16 @@ def _read(session: Session, ingredient: Ingredient, recipe_count: int = 0) -> In
     )
 
 
+def _clean_terms(terms: list[str] | None) -> list[str]:
+    """Lowercased, trimmed, without blanks or repeats, in the order given."""
+    seen: list[str] = []
+    for term in terms or []:
+        term = " ".join(term.lower().split())
+        if term and term not in seen:
+            seen.append(term)
+    return seen
+
+
 def _usage_counts(session: Session) -> dict[int, int]:
     return dict(
         session.exec(
@@ -169,7 +179,13 @@ def create_ingredient(
         is not None,
     )
     ingredient = Ingredient(
-        slug=slug, **body.model_dump() | {"name": name, "aliases": [a.lower() for a in body.aliases]}
+        slug=slug,
+        **body.model_dump()
+        | {
+            "name": name,
+            "aliases": [a.lower() for a in body.aliases],
+            "prep_terms": _clean_terms(body.prep_terms),
+        },
     )
     session.add(ingredient)
     session.commit()
@@ -191,12 +207,16 @@ def update_ingredient(
     a place data goes to sit rather than a lookup the recipes actually use.
     Adding an alias works the same way: recipes and shopping items already
     sitting there unlinked (saved before this alias existed to match them)
-    get matched against it too, not just ones saved from now on.
+    get matched against it too, not just ones saved from now on. So does
+    adding a prep term ("juice" on lemon): "juice 1 lemon" lines left
+    unlinked join lemon.
     """
     ingredient = _lookup(session, key)
     fields = body.model_dump(exclude_unset=True)
     if "aliases" in fields and fields["aliases"] is not None:
         fields["aliases"] = [a.strip().lower() for a in fields["aliases"] if a.strip()]
+    if "prep_terms" in fields:
+        fields["prep_terms"] = _clean_terms(fields["prep_terms"])
     if any(field in fields for field in NUTRIENT_FIELDS):
         ingredient.nutrition_updated_at = utcnow()
     # A human editing the price in the Pantry page is itself a source: it
@@ -225,7 +245,7 @@ def update_ingredient(
     )
     matching_changed = any(
         field in fields and fields[field] != getattr(ingredient, field)
-        for field in ("name", "aliases")
+        for field in ("name", "aliases", "prep_terms")
     )
     for name, value in fields.items():
         setattr(ingredient, name, value)
@@ -343,6 +363,7 @@ def _merge_into(session: Session, target: Ingredient, other: Ingredient) -> None
     aliases.update(a.lower() for a in (other.aliases or []))
     aliases.discard(target.name.lower())
     target.aliases = sorted(aliases)
+    target.prep_terms = _clean_terms([*(target.prep_terms or []), *(other.prep_terms or [])])
 
     # Inherit anything the absorbed row knew and the survivor doesn't.
     for field in (

@@ -112,6 +112,7 @@ identity worth preserving across an edit.
 |---|---|
 | `slug` (unique), `name` | |
 | `aliases` | JSON list, lowercased; matched against recipe lines |
+| `prep_terms` | JSON list, lowercased; words that are *preparation* for this ingredient rather than part of its name ("juice", "zest" for a lemon; "boneless", "fillet" for a chicken thigh). Default `[]`. See below |
 | `measure_kind` | `weight` (default), `volume`, or `piece` — which unit family this ingredient is bought and priced in. Plain VARCHAR, same reasoning as `source` below |
 | `package_size_grams` | float? |
 | `cost_per_kg_cents` | **int?** — see below |
@@ -154,6 +155,21 @@ every spelling it saw on the row it resolved to, so a re-import is a no-op
 and a recipe line reading "capcicum" finds the capsicum row. `find_ingredient`
 normalises both sides when comparing, so the alias "pinenuts" also matches a
 line reading "pinenut".
+
+`prep_terms` is how the pantry says what a line's extra words mean. A recipe
+line belongs to the ingredient when every word it has beyond the ingredient's
+own name (or an alias) is listed there, so with `prep_terms = ["boneless",
+"skinless", "fillet"]` on "chicken thigh", the line "boneless skinless chicken
+thigh fillets" finds it. One word the row does not list ("smoked") and it
+does not match. That is deliberate: whether "boneless" is preparation or part
+of the name is a fact about the ingredient, not about English, and the words
+that change what you buy ("shredded cheese", "jar garlic") must not be
+stripped globally. The most specific row wins, and two equally specific rows
+are a tie, not a guess. Adding a term re-matches lines left unlinked, like
+adding an alias. Words that name a different *purchase* are the user's call:
+"juice" on lemon is right for "juice of 2 lemons" and wrong for "1/4 cup lemon
+juice" (a volume of juice), so the starter data leaves it out. The matching
+lives in `backend/ingredient_names.py`.
 
 Every nutrition column is nullable and independently so: a recipe's panel
 reports which fields it actually has rather than filling gaps with zeros.

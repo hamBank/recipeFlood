@@ -125,7 +125,7 @@ filename.
 |---|---|---|---|
 | GET | `/ingredients` | user | `q`, `source`, `is_food`, `missing_cost`, `missing_nutrition`, `sort` (`name`/`cost`/`usage`/`updated`), `limit`, `offset`; sets `X-Total-Count` |
 | GET | `/ingredients/{slug\|id}` | user | |
-| POST | `/ingredients` | user | 409 if the name already matches an existing row |
+| POST | `/ingredients` | user | 409 if the name already matches an existing row. Body takes `aliases` and `prep_terms` (lists; lowercased, trimmed and de-duplicated on write) |
 | PATCH | `/ingredients/{key}` | user | Changing density or grams-per-piece **re-derives the weight of every recipe line using it**, except `explicit` ones |
 | POST | `/ingredients/{keep}/merge/{other}` | admin | Repoints recipe lines, inherits missing data, keeps the old name as an alias, deletes `other` |
 | DELETE | `/ingredients/{key}` | admin | Unlinks recipe lines rather than damaging them |

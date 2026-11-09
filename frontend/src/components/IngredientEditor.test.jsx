@@ -11,6 +11,7 @@ const ingredient = (overrides = {}) => ({
   id: 1,
   name: 'Onion',
   aliases: ['brown onion'],
+  prep_terms: ['peeled', 'halved'],
   measure_kind: 'weight',
   package_size_grams: 150,
   package_size_ml: null,
@@ -144,6 +145,30 @@ describe('IngredientEditor', () => {
       cost_per_kg_cents: 310,
       grams_per_piece: 150,
     })
+  })
+
+  it('shows the preparation words and submits them as a list', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    renderEditor({ onSave })
+
+    const field = inputForLabel('Preparation words')
+    expect(field.value).toBe('peeled, halved')
+    fireEvent.change(field, { target: { value: 'peeled, halved,  , Quartered ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    // Blanks are dropped here; the backend lowercases and de-duplicates.
+    expect(onSave.mock.calls[0][0].prep_terms).toEqual(['peeled', 'halved', 'Quartered'])
+  })
+
+  it('treats a pantry row with no preparation words as an empty field', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    renderEditor({ onSave, ingredient: ingredient({ prep_terms: undefined }) })
+
+    expect(inputForLabel('Preparation words').value).toBe('')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(onSave.mock.calls[0][0].prep_terms).toEqual([])
   })
 
   it('sends null for numeric fields left blank', async () => {

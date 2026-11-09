@@ -461,8 +461,25 @@ a mild annoyance. So amounts combine only on real arithmetic: both in
 grams, both in millilitres, or both in the same count unit.
 
 Two lines are the same thing when they share a pantry ingredient **or the
-same name** (ignoring case and spacing), so "extra virgin olive oil" from
-two recipes is one row whether or not either was ever linked to the pantry.
+same name** (ignoring case, spacing, punctuation, plurals and anything in
+brackets or after a comma), so "extra virgin olive oil" from two recipes is
+one row whether or not either was ever linked to the pantry. "Frozen peas"
+and "peas" stay apart unless the pantry files both under one ingredient.
+
+**What is in a name.** A recipe line's name often carries more than the name:
+"red onion (finely chopped)", "kecap manis (or dark chinese soy)", "sugar 250
+mL", "x 7 g tin anchovies – drained", "juice 2 lemons". The list shows the
+name as "red onion" and keeps the rest as the row's **note**, shown under it
+(for example "finely chopped"). A quantity written inside a name is used only
+when the line states no amount of its own ("water 500 mL" is 500 ml; "juice 2
+lemons" is 2 lemons, but only for a line linked to a pantry ingredient and
+only where the number is not part of that ingredient's name, so "chinese 5
+spice" keeps its 5). A line that states an amount is never changed by its
+name. Lines saved before the pantry knew a word are matched again when they
+reach the list. Each pantry ingredient can list its own **preparation
+words** (see "The master ingredient list"): a line whose only extra words are
+those counts as that ingredient, shows the pantry name, and keeps the words
+in the note.
 A line with **no amount** ("olive oil", for frying) folds into the row
 already there, and a measured line fills in a row that had no amount:
 "some olive oil" plus 90 ml is one row of 90 ml, with both recipes in its

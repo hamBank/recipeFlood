@@ -341,6 +341,13 @@ get it.
 
 ## Finding duplicate pantry rows
 
+> **After upgrading to name cleaning** (brackets, instructions and quantities
+> are no longer part of a name's match key), rows minted earlier from such
+> names, like "sugar 250 ml" next to "sugar", now count as exact duplicates.
+> Run the report below, read it, then `--merge-exact`. On the 321-recipe blog
+> snapshot it found 70 groups and merged 101 rows with every recipe line
+> still linked.
+
 Importing the blog, a shopping-list CSV and years of cooking history each
 mint one pantry row per distinct phrase they saw, so the same real
 ingredient routinely ends up split across several rows — "egg" / "eggs" /

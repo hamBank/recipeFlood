@@ -68,6 +68,23 @@ beforeEach(() => {
   sessionConfig = null
 })
 
+describe('ShoppingListPage notes', () => {
+  it('shows what was taken out of an item\'s name, so cleaning the name loses nothing', async () => {
+    api.getShoppingList.mockResolvedValue(
+      baseList([
+        item({ id: 1, name: 'red onion', amount_text: '2', note: 'finely chopped' }),
+        item({ id: 2, name: 'Milk' }),
+      ]),
+    )
+    render(<ShoppingListPage />)
+
+    expect(await screen.findByText('finely chopped')).toBeDefined()
+    expect(screen.getByText('red onion')).toBeDefined()
+    // An item with no note gets no extra line.
+    expect(screen.getAllByText('Milk')).toHaveLength(1)
+  })
+})
+
 describe('ShoppingListPage Google Sheet sync', () => {
   it('has no Sync now button when sync is not configured', async () => {
     sessionConfig = { sheet_sync_enabled: false }

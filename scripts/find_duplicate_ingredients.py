@@ -91,38 +91,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlmodel import Session, func, select  # noqa: E402
 
 from backend.database import engine  # noqa: E402
+from backend.ingredient_names import PREP_WORDS, SIZE_WORDS, UNIT_WORDS  # noqa: E402
 from backend.models import Ingredient, RecipeIngredient  # noqa: E402
 from backend.recipes_service import normalise_ingredient_name  # noqa: E402
 from backend.routers.ingredients import _merge_into  # noqa: E402
 
 
-#: Preparation-method words, on top of the app's own matcher noise words
-#: (backend.recipes_service._MATCH_NOISE already covers "chopped",
-#: "sliced", "diced" and the like) — words that turned up often enough in
-#: real pantry names, minted straight from scraped recipe text, to be
-#: worth their own tier below.
-_PREP_WORDS = {
-    "shredded", "julienned", "julienne", "cubed", "cube", "cubes",
-    "quartered", "quarters", "halved", "halves", "wedged", "wedges",
-    "mashed", "pureed", "puree", "zested", "zest", "seeded", "deseeded",
-    "hulled", "pitted", "stemmed", "shelled", "boned", "skinned",
-    "diagonally", "lengthwise", "crosswise", "cut", "strips", "chunks",
-    "pieces", "slivered", "slivers", "into",
-}
-
-#: Qualitative size/amount words — "1 Big Onion", "Generous Pinch Salt".
-_SIZE_WORDS = {"big", "generous", "heaped", "heaping", "level", "scant", "pinch"}
-
-#: Units that show up attached to a bare number right in a pantry name,
-#: rather than as a properly parsed quantity — "2.5 Oz Chocolate", "500g
-#: Flour", "1 Inch Cubes".
-_UNIT_WORDS = {
-    "oz", "ounce", "ounces", "g", "gram", "grams", "kg", "kilogram",
-    "kilograms", "lb", "lbs", "pound", "pounds", "ml", "l", "litre",
-    "liter", "litres", "liters", "mg", "inch", "inches", "cm", "mm",
-}
-
-_PREP_SIZE_NOISE = _PREP_WORDS | _SIZE_WORDS | _UNIT_WORDS
+# The word lists live in backend/ingredient_names.py, shared with the matcher
+# and the shopping list, so there is one vocabulary and not two that drift.
+_PREP_SIZE_NOISE = PREP_WORDS | SIZE_WORDS | UNIT_WORDS
 _NUMBER_RE = re.compile(r"^\d+(\.\d+)?$")
 #: A number fused straight onto its unit with no space — "500g", "2.5oz".
 _NUMBER_UNIT_RE = re.compile(r"^\d+(\.\d+)?(g|kg|mg|oz|lb|lbs|ml|l|cm|mm)$")

@@ -876,6 +876,11 @@ function Row({ item, symbol, offline, onToggle, onRemove, onSave, onSetDefaultSh
         {item.pendingSync && (
           <span className="ml-2 text-xs italic text-ink-muted">not yet synced</span>
         )}
+        {item.note && (
+          <span className="block truncate text-xs text-ink-muted" title={item.note}>
+            {item.note}
+          </span>
+        )}
         {why && (
           <span className="block truncate text-xs text-ink-muted" title={why}>
             {why}

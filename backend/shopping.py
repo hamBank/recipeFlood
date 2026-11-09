@@ -39,10 +39,19 @@ or came from a real linked density (`explicit`/`converted`); an estimated
 weight defers to the exact millilitre figure when one is available.
 
 "The same thing" means the same pantry ingredient **or the same name**
-(ignoring case and spacing): "extra virgin olive oil" from two recipes is
-one purchase whether or not either line was ever linked to the pantry.
-Different wording still stays apart, since nothing says "1 bunch coriander"
-and "coriander leaves" are the same purchase.
+(ignoring case, spacing, punctuation, plurals, and anything in brackets or
+after a comma): "extra virgin olive oil" from two recipes is one purchase
+whether or not either line was ever linked to the pantry, and so are "red
+onion (finely chopped)" and "red onion". Different wording still stays apart,
+since nothing says "1 bunch coriander" and "coriander leaves" are the same
+purchase, and "frozen peas" is not "peas" unless the pantry files both under
+one ingredient. A pantry ingredient can say which extra words are mere
+preparation (`Ingredient.prep_terms`), which is how "coriander leaves" can be
+told it is coriander.
+
+What a name carried beyond the name goes to the row's note, not away: see
+`ingredient_names.clean_name` for what is taken out and `add_lines` for what
+is done with it.
 
 A line that states **no amount at all** ("olive oil", for frying) folds
 into any row for the same thing, and a measured line fills in a row that
@@ -82,6 +91,7 @@ from __future__ import annotations
 from sqlmodel import Session, select
 
 from .costing import amount_cost_cents, cost_per_gram  # noqa: F401  (cost_per_gram re-exported)
+from .ingredient_names import clean_name, explain, join_notes, merge_key
 from .models import (
     Ingredient,
     IngredientSource,
@@ -95,7 +105,8 @@ from .models import (
     WeightSource,
     utcnow,
 )
-from .units import format_amount
+from .recipes_service import Pantry, find_ingredient
+from .units import MASS_G, format_amount, to_grams, to_ml
 
 #: Shops in the order they get walked, not alphabetical. Anything not
 #: listed sorts after these, before "other".
@@ -285,16 +296,21 @@ def _same_thing(item: ShoppingItem, ingredient_id: int | None, name: str) -> boo
     """Whether a list row is the same purchase as an incoming line: the
     same pantry ingredient, or failing that the same name. Checked rows
     never count — adding to something already in the trolley would
-    silently reopen it and the shopper would walk past."""
+    silently reopen it and the shopper would walk past.
+
+    Two different pantry links settle it: the name only decides when at least
+    one side is unlinked. "Onions (sliced)" linked to the red onion is not the
+    brown onion's row however alike the names read."""
     if item.is_checked:
         return False
-    if ingredient_id is not None and item.ingredient_id == ingredient_id:
-        return True
+    if ingredient_id is not None and item.ingredient_id is not None:
+        return item.ingredient_id == ingredient_id
     return _name_key(item.name) == _name_key(name)
 
 
 def _name_key(name: str | None) -> str:
-    return " ".join((name or "").split()).casefold()
+    """What two unlinked rows are compared on: see `ingredient_names.merge_key`."""
+    return merge_key(name)
 
 
 def _has_amount(item: ShoppingItem) -> bool:
@@ -376,6 +392,46 @@ def absorb(
         target.ingredient_id = ingredient_id
 
 
+def _harvest_amount(cleaned, ingredient, recipe: Recipe, factor: float):
+    """An amount that was written inside the name, for a line that states none.
+
+    "Water 500 mL" is 500 ml of water; "Zest and juice 2 lemons" is 2 lemons.
+    Returns ``(grams, weight_source, millilitres, quantity, unit, used_measure)``,
+    all None when there is nothing safe to take. A line that already has an
+    amount never gets here, so the name can't override what the recipe stated.
+
+    A count gets the same weight conversion a counted line gets when its
+    recipe is saved (`recipes_service.build_ingredient_row`), so "juice 2
+    lemons" and "1 lemon" end up in the same kind of row and can merge.
+
+    A bare number is only taken when the line is linked to a pantry row and
+    the number is not part of that row's own name: "chinese 5 spice" keeps its
+    5, and an unlinked "juice 2 lemons" keeps its 2 in the name (a wrong
+    quantity on the list is worse than none).
+    """
+    if len(cleaned.measures) == 1:
+        measure = cleaned.measures[0]
+        if measure.unit in MASS_G:
+            return measure.quantity * MASS_G[measure.unit] * factor, WeightSource.explicit, None, None, None, measure
+        millilitres = to_ml(measure.quantity, measure.unit, system=recipe.units_system)
+        if millilitres is not None:
+            return None, None, millilitres * factor, None, None, measure
+    if len(cleaned.counts) == 1 and ingredient is not None:
+        count = cleaned.counts[0]
+        own_words = {w for n in (ingredient.name, *(ingredient.aliases or [])) for w in n.lower().split()}
+        if f"{count:g}" not in own_words:
+            grams, source = to_grams(
+                count * factor,
+                MeasureUnit.piece,
+                ingredient.name,
+                density_g_per_ml=ingredient.density_g_per_ml,
+                grams_per_piece=ingredient.grams_per_piece,
+                system=recipe.units_system,
+            )
+            return grams, source, None, count * factor, MeasureUnit.piece, None
+    return None, None, None, None, None, None
+
+
 def add_lines(
     session: Session,
     lines: list[tuple[RecipeIngredient, Recipe, float]],
@@ -393,6 +449,12 @@ def add_lines(
     one failure a shopping list must not have. Such items appear with no
     amount rather than with a guessed one.
 
+    The name that reaches the list is the cleaned one (see
+    `ingredient_names.clean_name`): brackets, instructions and measured
+    quantities come out of the name and go into the item's note, and a line the
+    importer left unlinked is matched against the pantry again, so
+    "onion (finely chopped)" and "onions, peeled" are one row.
+
     Returns (touched items, added, merged, skipped descriptions). Existing
     rows are mutated in place; new ones are added to the session. The
     caller commits.
@@ -405,6 +467,7 @@ def add_lines(
             select(Ingredient).where(Ingredient.id.in_(ingredient_ids))
         ).all():
             ingredients[row.id] = row
+    pantry: Pantry | None = None  # read once, and only if a line needs matching
 
     touched: dict[int, ShoppingItem] = {}
     new_items: list[ShoppingItem] = []
@@ -412,15 +475,49 @@ def add_lines(
     skipped: list[str] = []
 
     for line, recipe, factor in lines:
-        name = (line.name or "").strip()
-        if not name:
+        raw_name = (line.name or "").strip()
+        if not raw_name:
             skipped.append(f"{recipe.title}: {line.raw_text}")
             continue
+        cleaned = clean_name(raw_name)
 
-        ingredient = ingredients.get(line.ingredient_id) if line.ingredient_id else None
+        ingredient_id = line.ingredient_id
+        ingredient = ingredients.get(ingredient_id) if ingredient_id else None
+        if ingredient is None and ingredient_id is None:
+            # Matching only ever ran when the line was first saved, so a line
+            # saved before the pantry knew its words is still unlinked.
+            pantry = pantry or Pantry.load(session)
+            ingredient = find_ingredient(session, raw_name, pantry=pantry)
+            ingredient_id = ingredient.id if ingredient else None
+
         grams = line.weight_grams * factor if line.weight_grams else None
         millilitres = line.volume_ml * factor if line.volume_ml else None
         quantity = line.quantity * factor if line.quantity is not None else None
+        unit = line.unit
+        harvested_measure = None
+        counted = False  # the amount is a bare count that was written inside the name
+        weight_source = line.weight_source
+        if grams is None and millilitres is None and quantity is None:
+            g, source, ml, q, u, harvested_measure = _harvest_amount(cleaned, ingredient, recipe, factor)
+            if q is not None:
+                quantity, unit, counted = q, u, True
+            if g is not None:
+                grams, weight_source = g, source
+            if ml is not None:
+                millilitres = ml
+
+        # The name shown: the pantry's own when its prep terms explain
+        # everything the line says beyond it, otherwise the cleaned wording.
+        extras = explain(cleaned, ingredient) if ingredient is not None else None
+        if extras is not None:
+            name = ingredient.name
+        else:
+            name = (cleaned.display_no_counts if counted else cleaned.display) or raw_name
+        note_parts = [line.note, *cleaned.notes, *(extras or [])]
+        if harvested_measure is not None:
+            note_parts = [p for p in note_parts if p != harvested_measure.text]
+        note = join_notes(*note_parts)
+
         # A weight this codebase actually stands behind — stated outright,
         # or converted via a real linked density — as opposed to a keyword
         # guess from units.DENSITIES (WeightSource.estimated). That guess
@@ -429,7 +526,7 @@ def add_lines(
         # "weight is available so prefer weight" would otherwise do for
         # any liquid whose name happens to match a density keyword (most
         # of them: "milk", "stock", "honey", ...).
-        confident_weight = grams is not None and line.weight_source in (
+        confident_weight = grams is not None and weight_source in (
             WeightSource.explicit,
             WeightSource.converted,
         )
@@ -465,7 +562,7 @@ def add_lines(
                 if kind == "weight"
                 else _render_ml(millilitres)
                 if kind == "volume"
-                else format_amount(quantity, None, line.unit)
+                else format_amount(quantity, None, unit)
                 if kind == "quantity"
                 else ""
             ),
@@ -473,7 +570,7 @@ def add_lines(
 
         # Prefer a row already added in this pass over one from the query,
         # so three recipes wanting onion produce one line, not two.
-        target = merge_target([*new_items, *existing], line.ingredient_id, name, kind, line.unit)
+        target = merge_target([*new_items, *existing], ingredient_id, name, kind, unit)
 
         if target is not None:
             absorb(
@@ -482,9 +579,10 @@ def add_lines(
                 grams=grams,
                 millilitres=millilitres,
                 quantity=quantity,
-                unit=line.unit,
-                ingredient_id=line.ingredient_id,
+                unit=unit,
+                ingredient_id=ingredient_id,
             )
+            target.note = join_notes(target.note, note)
             target.contributions = [*(target.contributions or []), contribution]
             if cook_list_id is not None and target.cook_list_id is None:
                 target.cook_list_id = cook_list_id
@@ -498,13 +596,13 @@ def add_lines(
         # onions. The unit survives only for quantity/bare, so an
         # amount-less "salt, to taste" can still say so.
         item = ShoppingItem(
-            ingredient_id=line.ingredient_id,
+            ingredient_id=ingredient_id,
             name=name,
             weight_grams=grams if kind == "weight" else None,
             volume_ml=millilitres if kind == "volume" else None,
             quantity=quantity if kind == "quantity" else None,
-            unit=line.unit if kind in ("quantity", "bare") else None,
-            note=line.note,
+            unit=unit if kind in ("quantity", "bare") else None,
+            note=note,
             source=_source_for(cook_list_id),
             cook_list_id=cook_list_id,
             contributions=[contribution],
