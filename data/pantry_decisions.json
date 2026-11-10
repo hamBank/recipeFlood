@@ -1,0 +1,13 @@
+{
+  "_about": "Decisions a person made reading scripts/find_duplicate_ingredients.py's REVIEW list. Each 'merge' pair (names or old names, any case) is one ingredient, whatever the rule says; the finder lists it under CONFIDENT and --merge merges it. Add pairs here as you work through REVIEW.",
+  "merge": [
+    ["aleppo pepper", "black aleppo pepper"],
+    ["almond milk", "unsweetened almond milk"],
+    ["baguette", "costco baguette"],
+    ["banana", "depending on liquid content your banana"],
+    ["beef", "beef preferably wagyu but any braising beef"],
+    ["black pepper", "cracked black pepper"],
+    ["black pepper", "few turns cracked black pepper"],
+    ["scallion /shallot", "shallots / scallion"]
+  ]
+}

@@ -466,3 +466,24 @@ class TestAustralianNames:
     def test_steamed_buns_are_chinese_steamed_buns(self):
         assert normalise_ingredient_name("steamed buns") == "chinese steamed bun"
         assert normalise_ingredient_name("chinese steamed buns") == "chinese steamed bun"
+
+
+class TestAlternativesAndAsides:
+    def test_the_alternative_another_country_names_wins(self):
+        assert normalise_ingredient_name("scallion /shallot") == "spring onion"
+        assert normalise_ingredient_name("shallots / scallion") == "spring onion"
+        assert "or shallots" in clean_name("shallots / scallion").notes
+
+    def test_otherwise_the_first_alternative(self):
+        assert normalise_ingredient_name("butter / margarine") == "butter"
+
+    def test_not_a_slash_between_amounts_or_and_or(self):
+        assert normalise_ingredient_name("salt and/or pepper") == "salt and/or pepper"
+
+    def test_commentary_is_a_note(self):
+        cleaned = clean_name("beef preferably wagyu but any braising beef")
+        assert cleaned.display == "beef"
+        assert cleaned.notes == ("preferably wagyu but any braising beef",)
+
+    def test_where_it_was_bought_is_not_what_it_is(self):
+        assert normalise_ingredient_name("costco baguette") == "baguette"

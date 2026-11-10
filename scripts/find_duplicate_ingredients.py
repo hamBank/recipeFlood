@@ -53,6 +53,7 @@ and shopping items through `_merge_into`, the same function the
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from collections import defaultdict
@@ -101,7 +102,7 @@ _NOT_SURE = frozenset({
 SAME_WORDS: frozenset[str] = frozenset(
     fold_word(w)
     for w in (MATCH_NOISE | PREP_WORDS | SIZE_WORDS | UNIT_WORDS | AMOUNT_WORDS | {
-        "divided", "ripe", "best", "note", "approx", "roughly", "packed", "torn",
+        "divided", "ripe", "cracked", "few", "turns", "unsweetened", "best", "note", "approx", "roughly", "packed", "torn",
         # temperature and serving
         "cold", "warm", "chilled", "iced", "serving", "dusting", "frying", "garnish", "garnishing",
         "broken", "required", "needed", "such", "as", "well", "shaken", "other",
@@ -270,7 +271,12 @@ class Report:
     untouched: int
 
 
-def classify(ingredients: list[Ingredient]) -> Report:
+def classify(
+    ingredients: list[Ingredient], decisions: list[tuple[str, str]] | None = None
+) -> Report:
+    """Sort the pantry into the report's lists. `decisions` are pairs of names
+    a person has said are one ingredient (`data/pantry_decisions.json`): they
+    join CONFIDENT whatever the rule says."""
     rows = [row_for(i) for i in ingredients]
     single_names = frozenset(r.core[0] for r in rows if len(r.core) == 1)
 
@@ -319,6 +325,13 @@ def classify(ingredients: list[Ingredient]) -> Report:
         grouped.update(r.id for r in by_core[frozenset(other.core)])
         grouped.update(r.id for r in by_core[keeper_key])
 
+    # A person's decisions: join the two rows' groups.
+    if decisions:
+        groups, review = _apply_decisions(rows, groups, review, decisions)
+        together = {r.id: k for k, g in groups.items() for r in g}
+        apart = [v for v in apart if together.get(v.keep.id, "a") != together.get(v.other.id, "b")]
+        grouped = {r.id for members in groups.values() for r in members}
+
     # Aliases: never confident, always shown with the alias that links them.
     by_core_id = {r.id: frozenset(r.core) for r in rows}
     alias_links: list[tuple[Row, str, Row]] = []
@@ -341,6 +354,50 @@ def classify(ingredients: list[Ingredient]) -> Report:
         no_core=no_core,
         untouched=len([r for r in rows if r.id not in mentioned]),
     )
+
+
+DECISIONS = Path(__file__).resolve().parent.parent / "data" / "pantry_decisions.json"
+
+
+def load_decisions(path: Path) -> list[tuple[str, str]]:
+    """The "merge" pairs from the decisions file, or none if it is missing."""
+    if not path.exists():
+        return []
+    data = json.loads(path.read_text())
+    return [(a, b) for a, b in data.get("merge", [])]
+
+
+def _apply_decisions(rows, groups, review, decisions):
+    """Join groups for each decided pair. A name matches a row by its name or
+    any alias (renames keep the old name as an alias), ignoring case."""
+    by_name: dict[str, list[Row]] = defaultdict(list)
+    for r in rows:
+        for n in (r.name, *(r.ingredient.aliases or [])):
+            by_name[n.strip().lower()].append(r)
+    parent: dict[int, int] = {}
+
+    def find(x: int) -> int:
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    members: dict[int, Row] = {r.id: r for r in rows}
+    for group in groups.values():
+        for r in group[1:]:
+            parent[find(r.id)] = find(group[0].id)
+    for a, b in decisions:
+        for x in by_name.get(a.strip().lower(), []):
+            for y in by_name.get(b.strip().lower(), []):
+                parent[find(y.id)] = find(x.id)
+    components: dict[int, list[Row]] = defaultdict(list)
+    for rid in list(parent):
+        components[find(rid)].append(members[rid])
+    # Keyed by the component's root id: only the groups themselves are used.
+    joined = {root: g for root, g in components.items() if len(g) > 1}
+    still = [v for v in review if find(v.keep.id) != find(v.other.id)]
+    return joined, still
 
 
 # --------------------------------------------------------------------------
@@ -596,6 +653,10 @@ def main() -> int:
         help="leave out items where no row is used in at least this many recipes",
     )
     parser.add_argument("--merge", action="store_true", help="merge every CONFIDENT group")
+    parser.add_argument(
+        "--decisions", type=Path, default=DECISIONS,
+        help="pairs a person has decided are one ingredient (default: data/pantry_decisions.json)",
+    )
     parser.add_argument("--rename", action="store_true", help='apply the RENAMES list ("Pear - Green")')
     parser.add_argument(
         "--fix-names", action="store_true",
@@ -615,7 +676,8 @@ def main() -> int:
         def wanted(*rows) -> bool:
             return args.min_usage == 0 or any(usage.get(r.id, 0) >= args.min_usage for r in rows)
 
-        report = classify(ingredients)
+        decisions = load_decisions(args.decisions)
+        report = classify(ingredients, decisions)
         print(f"{len(ingredients)} pantry ingredient(s) scanned.\n")
 
         confident = [g for g in report.confident if wanted(*g)]
@@ -677,7 +739,7 @@ def main() -> int:
                 if not args.merge:
                     break
                 usage = usage_counts(session)
-                again = [g for g in classify(list(session.exec(select(Ingredient)).all())).confident if wanted(*g)]
+                again = [g for g in classify(list(session.exec(select(Ingredient)).all()), decisions).confident if wanted(*g)]
                 if not again and not renamed:
                     break
                 if again:
