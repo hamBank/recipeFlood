@@ -384,6 +384,12 @@ has four lists:
 * **UNCHANGED**: related names kept apart, with the reason ("frozen": a
   different product; "a 'cheese', not a 'cream'"), and a count of the rest.
 
+**Decisions.** When you read REVIEW and decide two rows are one ingredient
+where no rule could ("aleppo pepper" and "black aleppo pepper"), add the pair
+to `data/pantry_decisions.json`. The finder then lists it under CONFIDENT and
+`--merge` merges it. A name matches a row's name or an old name kept as an
+alias, ignoring case, so a decision survives the row being renamed.
+
 Merging repoints recipe lines and shopping items through `_merge_into`
 (`backend/routers/ingredients.py`), the same function the Pantry page's
 Merge button uses. It cannot be undone, so read the report first. Merge a

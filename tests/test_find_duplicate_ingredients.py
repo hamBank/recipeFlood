@@ -404,3 +404,58 @@ class TestUsageCounts:
         egg = make(session, "egg")
         use(session, egg, 2)
         assert usage_counts(session) == {egg.id: 2}
+
+
+class TestTheHouseholdsSecondReview:
+    """2026-11-10, second pass over the production report."""
+
+    def test_the_rule_now_merges_these_on_its_own(self):
+        for a, b in [
+            ("almond milk", "unsweetened almond milk"),
+            ("baguette", "costco baguette"),
+            ("beef", "beef preferably wagyu but any braising beef"),
+            ("black pepper", "cracked black pepper"),
+            ("black pepper", "few turns cracked black pepper"),
+            ("scallion /shallot", "shallots / scallion"),
+            ("spring onion", "shallots / scallion"),
+        ]:
+            assert kind(a, b) == CONFIDENT, (a, b)
+
+    def test_alternatives_collapse_to_the_australian_name(self):
+        from scripts.find_duplicate_ingredients import group_name
+
+        group = [row_for(ing(n)) for n in ("scallion /shallot", "shallots / scallion")]
+        assert group_name(group) == "spring onion"
+
+    def test_what_only_a_person_can_decide(self):
+        # "black" is not preparation in general (black pepper is not pepper),
+        # and the banana line is prose: these merge only because the
+        # household said so, in data/pantry_decisions.json.
+        assert kind("aleppo pepper", "black aleppo pepper") == REVIEW
+        rows = [ing("aleppo pepper"), ing("black aleppo pepper"), ing("banana"),
+                ing("depending on liquid content your banana")]
+        decisions = [("aleppo pepper", "black aleppo pepper"),
+                     ("Banana", "depending on liquid content your banana")]
+        report = classify(rows, decisions)
+        assert sorted(sorted(r.name for r in g) for g in report.confident) == [
+            ["aleppo pepper", "black aleppo pepper"],
+            ["banana", "depending on liquid content your banana"],
+        ]
+        assert report.review == []
+
+    def test_a_decision_finds_a_row_by_its_old_name(self):
+        renamed = ing("halloumi", aliases=["block halloumi"])
+        other = ing("x 250g blocks haloumi")
+        report = classify([renamed, other], [("block halloumi", "x 250g blocks haloumi")])
+        assert [sorted(r.name for r in g) for g in report.confident] == [["halloumi", "x 250g blocks haloumi"]]
+
+    def test_a_decision_naming_nothing_changes_nothing(self):
+        rows = [ing("onion"), ing("water")]
+        assert classify(rows, [("unicorn", "rainbow")]).confident == []
+
+    def test_the_shipped_decisions_file_loads(self):
+        from scripts.find_duplicate_ingredients import DECISIONS, load_decisions
+
+        pairs = load_decisions(DECISIONS)
+        assert ("aleppo pepper", "black aleppo pepper") in pairs
+        assert all(len(p) == 2 for p in pairs)

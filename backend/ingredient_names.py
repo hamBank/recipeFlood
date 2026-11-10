@@ -86,6 +86,8 @@ MATCH_NOISE: frozenset[str] = (_BASE_NOISE - {"leaf"} - {"frozen", "dried"}) | f
     "freshly", "ripe", "very", "about", "approximately", "optional", "sifted",
     "firmly", "loosely", "coarsely", "thickly", "med", "sized", "scant",
     "heaped", "heaping", "level", "generous", "big",
+    # Where it was bought is not what it is: "costco baguette" is a baguette.
+    "costco", "aldi", "coles", "woolworths", "woolies", "iga",
 })
 
 #: Words that make a different product, not a prepared version of the same one:
@@ -214,6 +216,9 @@ _COUNT_RE = re.compile(r"(?<![\w./-])(?!0\d)(\d+(?:\.\d+)?(?:\s*/\s*\d+)?)(?![\w
 _BRACKETS = (re.compile(r"\([^()]*\)"), re.compile(r"\[[^\[\]]*\]"))
 _UNCLOSED = re.compile(r"[(\[][^)\]]*$")
 _NOTE_RE = re.compile(r"\b(?:see\s+)?notes?(?:\s*\d+[a-z]?)?\b\.?", re.IGNORECASE)
+_ASIDE_RE = re.compile(r"\b(?:preferably|ideally|depending|if possible|but any)\b", re.IGNORECASE)
+#: "a / b" between words, not "4 qt/4 l" or "and/or".
+_SLASH_RE = re.compile(r"(?<=[A-Za-z])\s*/\s*(?=[A-Za-z])(?<!and/)(?<!and /)(?<!and/ )")
 #: Where the name ends and the instructions begin.
 _TAIL_RE = re.compile(r"\s[–—-]\s|[,;]")
 _SPACES = re.compile(r"\s+")
@@ -405,6 +410,21 @@ def clean_name(raw: str | None) -> CleanedName:
         notes.append(_tidy(note.group(0)))
     text = _NOTE_RE.sub(" ", text)
 
+    # Commentary after the name: "beef preferably wagyu but any braising beef".
+    aside = _ASIDE_RE.search(text)
+    if aside and _tidy(text[: aside.start()]):
+        notes.append(_tidy(text[aside.start():]))
+        text = text[: aside.start()]
+
+    # Alternatives: "scallion / shallot", "shallots / scallion". The one that is
+    # another country's name for something says which thing is meant (a
+    # scallion is a spring onion); otherwise the first. The rest is a note.
+    if _SLASH_RE.search(text):
+        options = [o.strip() for o in _SLASH_RE.split(text) if o.strip()]
+        chosen = next((o for o in options if _has_synonym(o)), options[0])
+        notes.extend(f"or {o}" for o in options if o is not chosen)
+        text = chosen
+
     # Instructions after the name: ", finely chopped", "; fresh grated",
     # " – drained and chopped".
     # Except a pantry-style type after a dash, "Pear - Green" or
@@ -510,6 +530,16 @@ def _is_type(tail: str) -> bool:
     # "- sift before measuring": a verb is an instruction ("Wine - Sparkling" is not).
     verb = any(len(w) > 4 and w.endswith("ing") and w != "sparkling" for w in words)
     return not verb and not any(w in instructions or w in UNIT_WORDS for w in words)
+
+
+def _has_synonym(text: str) -> bool:
+    """Whether `text` says something `SYNONYMS` renames ("scallion")."""
+    folded = [fold_word(w) for w in re.findall(r"[a-z]+", text.lower())]
+    return any(
+        tuple(folded[i:i + len(phrase)]) == phrase and replacement[-len(phrase):] != phrase
+        for phrase, replacement in _SYNONYMS_FOLDED
+        for i in range(len(folded))
+    )
 
 
 def _apply_synonyms(words: list[str]) -> list[str]:
