@@ -88,8 +88,10 @@ class TestStripPrepAndSize:
         # them too) — stripping everything would leave nothing to group
         # on, so this returns the plain normalised form (itself already
         # singularised to "cube") rather than an empty string a dozen
-        # other over-stripped names could collide on.
-        assert strip_prep_and_size("1 Inch Cubes") == "1 inch cube"
+        # other over-stripped names could collide on. The normalised form
+        # no longer carries the measured "1 inch" (it is a quantity, not a
+        # name: backend/ingredient_names.py), so the fallback is "cube".
+        assert strip_prep_and_size("1 Inch Cubes") == "cube"
 
 
 class TestPrepSizeGroups:

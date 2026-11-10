@@ -218,6 +218,14 @@ touches `.deploy-trigger`; a systemd path unit runs `deploy.sh --update`
   shopping-list importer writes every variant it saw there, which makes a
   re-import a no-op; `find_ingredient` normalises both sides, so an alias
   matches whether or not the query needed singularising.
+- `Ingredient.prep_terms` says which extra words in a recipe line are mere
+  preparation for that ingredient ("juice" for a lemon, "boneless" for a
+  chicken thigh). A line whose extras are all listed belongs to the row. The
+  vocabulary lives with the ingredient, not in a global list, because whether
+  a word is prep or part of the name is a fact about the ingredient. What a
+  name carries beyond the name (brackets, instructions, quantities) is pulled
+  out by `backend/ingredient_names.py`, shared by the matcher, the shopping
+  list and the duplicate finder, and ends up in the shopping row's note.
 - `Ingredient.source` is a plain VARCHAR, not a database ENUM — the value
   list has already grown once and will again.
 - Nutrition and cost are held to different accuracy bars: `enrich_pantry.py`

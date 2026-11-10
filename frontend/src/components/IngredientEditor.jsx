@@ -38,6 +38,7 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
   const [form, setForm] = useState(() => ({
     name: ingredient.name,
     aliases: (ingredient.aliases || []).join(', '),
+    prep_terms: (ingredient.prep_terms || []).join(', '),
     measure_kind: ingredient.measure_kind || 'weight',
     package_size_grams: ingredient.package_size_grams ?? '',
     // Prices are entered per kilogram/litre — nobody knows a price per
@@ -83,6 +84,10 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
         aliases: form.aliases
           .split(',')
           .map((alias) => alias.trim())
+          .filter(Boolean),
+        prep_terms: form.prep_terms
+          .split(',')
+          .map((term) => term.trim())
           .filter(Boolean),
         measure_kind: form.measure_kind,
         package_size_grams: number(form.package_size_grams),
@@ -137,6 +142,12 @@ export default function IngredientEditor({ ingredient, symbol, onClose, onSave }
           </Field>
           <Field label="Also known as" hint="Comma separated — used when matching recipes">
             <input value={form.aliases} onChange={(e) => set('aliases', e.target.value)} className={inputClass} />
+          </Field>
+          <Field
+            label="Preparation words"
+            hint='Comma separated, e.g. "juice, zest" for a lemon. A recipe line with only these extra words ("juice 1 lemon") counts as this ingredient'
+          >
+            <input value={form.prep_terms} onChange={(e) => set('prep_terms', e.target.value)} className={inputClass} />
           </Field>
 
           <Field label="Measured by" hint="Most liquids are sold and shelf-priced by volume; some things by the piece">

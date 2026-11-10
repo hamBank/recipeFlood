@@ -17,6 +17,8 @@ Two numeric conventions worth knowing before reading anything else:
 from datetime import date, datetime, timezone
 from enum import Enum
 
+from pydantic import field_validator
+
 # SAEnum, not Enum: a bare `Enum` here shadows enum.Enum and every
 # `class Foo(str, Enum)` below stops being an enum.
 from sqlalchemy import JSON, Column
@@ -159,6 +161,14 @@ class Ingredient(SQLModel, table=True):
     # Alternate spellings the importer matches against ("fetta"/"feta",
     # "coriander"/"cilantro"). Lowercased on write.
     aliases: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    # Words that are preparation for *this* ingredient rather than part of its
+    # name: lemon -> juice, zest, rind; chicken thigh -> boneless, skinless,
+    # fillet. A recipe line whose extra words are all listed here is the same
+    # purchase ("juice 1 lemon" is "lemon"), and the words move to the line's
+    # note. Whether "boneless" is prep or part of the name is a fact about the
+    # ingredient, so it lives with the ingredient (backend/ingredient_names.py).
+    # Lowercased on write.
+    prep_terms: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
     # native_enum=False: see IngredientSource.source below for why plain
     # VARCHAR beats a database enum here.
@@ -262,6 +272,7 @@ class IngredientNutrition(SQLModel):
 class IngredientCreate(SQLModel):
     name: str
     aliases: list[str] = Field(default_factory=list)
+    prep_terms: list[str] = Field(default_factory=list)
     measure_kind: MeasureKind = MeasureKind.weight
     package_size_grams: float | None = Field(default=None, gt=0)
     cost_per_kg_cents: int | None = Field(default=None, ge=0)
@@ -279,6 +290,7 @@ class IngredientCreate(SQLModel):
 class IngredientUpdate(SQLModel):
     name: str | None = None
     aliases: list[str] | None = None
+    prep_terms: list[str] | None = None
     measure_kind: MeasureKind | None = None
     package_size_grams: float | None = Field(default=None, gt=0)
     cost_per_kg_cents: int | None = Field(default=None, ge=0)
@@ -310,6 +322,15 @@ class IngredientRead(SQLModel):
     slug: str
     name: str
     aliases: list[str]
+    prep_terms: list[str]
+
+    @field_validator("prep_terms", mode="before")
+    @classmethod
+    def _no_null_prep_terms(cls, value):
+        # A row written before the column existed, on a database that
+        # skipped the migration's backfill, reads as null.
+        return [] if value is None else value
+
     measure_kind: MeasureKind
     package_size_grams: float | None
     cost_per_kg_cents: int | None

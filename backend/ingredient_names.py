@@ -1,0 +1,450 @@
+"""Reading an ingredient's name out of a recipe line.
+
+A recipe line's name is rarely just the name. Blog posts and pasted lists give
+us things like::
+
+    kecap manis (or dark chinese soy)      alternatives in brackets
+    red (cayenne) pepper                   a synonym in the middle
+    onion, finely chopped                  preparation after the name
+    x 7 g tin anchovies – drained          a pack size, a container, a method
+    sugar 250 mL                           a second quantity fused to the name
+    juice 2 lemons                         the amount sits inside the name
+
+Left as they are, each of those becomes its own pantry row and its own
+shopping line, so "sugar" and "sugar 250 mL" never merge. This module pulls a
+name apart into the part that says *what to buy* and the parts that say how
+much and how to prepare it, so the rest of the app can match on the first and
+keep the others as a note.
+
+## What lives here, and what doesn't
+
+* `clean_name` is pure text: it never looks at the pantry.
+* `MATCH_NOISE` words are dropped from the *match key* everywhere. They are
+  prep and quality words that never change what you walk out of the shop with
+  ("finely", "chopped", "organic").
+* Words that can be a product in their own right ("shredded cheese", "cube
+  steak", "jar garlic", "ground almonds") are **not** in that list. They only
+  stop counting against a match where the pantry row says so, in its own
+  `prep_terms` (see `prep_match`). That is the point of keeping the
+  vocabulary in the pantry: whether "boneless" is prep or part of the name is
+  a fact about the ingredient, not about English.
+
+Matching is deliberately conservative, for the reason `shopping.py` gives: a
+wrong merge is worse than no merge.
+"""
+
+from __future__ import annotations
+
+import re
+import unicodedata
+from dataclasses import dataclass, field
+
+from .models import MeasureUnit
+from .units import UNIT_ALIASES, normalise_fractions
+
+#: Words dropped from an ingredient name before matching it against the pantry,
+#: so "finely chopped fresh flat-leaf parsley" finds "parsley". These never
+#: change the product. (The first block is the long-standing list from
+#: `recipes_service`; the second is words the importers kept tripping on.)
+_BASE_NOISE: frozenset[str] = frozenset({
+    "fresh", "dried", "frozen", "chopped", "finely", "roughly", "thinly",
+    "sliced", "diced", "grated", "crushed", "minced", "ground", "whole",
+    "large", "small", "medium", "extra", "good", "quality", "free",
+    "range", "organic", "raw", "cooked", "peeled", "trimmed", "washed",
+    "rinsed", "drained", "lightly", "beaten", "melted", "softened",
+    "toasted", "flat", "leaf", "plus", "more", "to", "serve", "taste",
+    "of", "the", "a", "an", "and", "or", "for", "at", "room", "temperature",
+})
+MATCH_NOISE: frozenset[str] = _BASE_NOISE | frozenset({
+    # Added with the name cleaner: adverbs, sizes and qualifiers.
+    "freshly", "ripe", "very", "about", "approximately", "optional", "sifted",
+    "firmly", "loosely", "coarsely", "thickly", "med", "sized", "scant",
+    "heaped", "heaping", "level", "generous", "big",
+})
+
+#: Preparation-method words. Not part of the match key (a "cube steak" is a
+#: real cut of meat) but safe to ignore once a pantry row claims them, and
+#: used by `scripts/find_duplicate_ingredients.py` for its looser tier.
+PREP_WORDS: frozenset[str] = frozenset({
+    "shredded", "julienned", "julienne", "cubed", "cube", "cubes",
+    "quartered", "quarters", "halved", "halves", "wedged", "wedges",
+    "mashed", "pureed", "puree", "zested", "zest", "seeded", "deseeded",
+    "hulled", "pitted", "stemmed", "shelled", "boned", "skinned",
+    "diagonally", "lengthwise", "crosswise", "cut", "strips", "chunks",
+    "pieces", "slivered", "slivers", "into",
+})
+
+#: Qualitative size/amount words — "1 Big Onion", "Generous Pinch Salt".
+SIZE_WORDS: frozenset[str] = frozenset({"big", "generous", "heaped", "heaping", "level", "scant", "pinch"})
+
+#: Units that show up attached to a bare number right in a name.
+UNIT_WORDS: frozenset[str] = frozenset({
+    "oz", "ounce", "ounces", "g", "gram", "grams", "kg", "kilogram",
+    "kilograms", "lb", "lbs", "pound", "pounds", "ml", "l", "litre",
+    "liter", "litres", "liters", "mg", "inch", "inches", "cm", "mm",
+})
+
+#: Packaging words. Only treated as noise next to a pack size ("x 7 g tin") or
+#: an "of" ("packet of biscuits"): on their own they can be the product ("jar
+#: garlic" is not the same purchase as "garlic").
+CONTAINER_WORDS: frozenset[str] = frozenset({
+    "tin", "tins", "can", "cans", "jar", "jars", "packet", "packets", "pack",
+    "packs", "bottle", "bottles", "bag", "bags", "tub", "tubs", "punnet",
+    "punnets", "sachet", "sachets", "carton", "cartons", "box", "boxes",
+})
+
+# Units recognised in "250 mL", "7 g", "1.5 cups". A short, unambiguous list:
+# "c", "ts", "tb" and "cc" are valid aliases for parsing a leading amount but
+# would eat real words here.
+_MEASURE_UNITS = (
+    "kilograms", "kilogram", "kilos", "kilo", "kg", "grams", "gram", "gms", "gm", "g",
+    "milligrams", "milligram", "mg", "millilitres", "millilitre", "milliliters",
+    "milliliter", "mls", "ml", "litres", "litre", "liters", "liter", "l",
+    "tablespoons", "tablespoon", "tbsp", "teaspoons", "teaspoon", "tsp",
+    "cups", "cup", "ounces", "ounce", "oz", "pounds", "pound", "lbs", "lb",
+    "inches", "inch", "cm", "mm", "qt",
+)
+_NUM = r"\d+(?:[.,]\d+)?(?:\s*/\s*\d+)?"
+_MEASURE_RE = re.compile(
+    rf"(?<![\w./]){_NUM}(?:\s*(?:-|–|—|to)\s*{_NUM})?\s*({'|'.join(_MEASURE_UNITS)})\b\.?",
+    re.IGNORECASE,
+)
+#: A bare number standing alone: a count ("juice 2 lemons"), not "00 flour".
+_COUNT_RE = re.compile(r"(?<![\w./-])(?!0\d)(\d+(?:\.\d+)?(?:\s*/\s*\d+)?)(?![\w./%-])")
+_BRACKETS = (re.compile(r"\([^()]*\)"), re.compile(r"\[[^\[\]]*\]"))
+_UNCLOSED = re.compile(r"[(\[][^)\]]*$")
+#: Where the name ends and the instructions begin.
+_TAIL_RE = re.compile(r"\s[–—-]\s|[,;]")
+_SPACES = re.compile(r"\s+")
+_EDGE = re.compile(r"^[\s.,;:\-–—!?]+|[\s.,;:\-–—!?]+$")
+
+
+@dataclass(frozen=True)
+class Measure:
+    """A quantity found inside a name: "250 mL", "7 g"."""
+
+    text: str
+    quantity: float
+    unit: MeasureUnit | None
+
+
+@dataclass(frozen=True)
+class CleanedName:
+    """A name pulled apart. See the module docstring."""
+
+    #: What to show: the name with brackets, instructions and measured
+    #: quantities taken out, wording and case as written.
+    display: str
+    #: The same with bare counts ("juice 2 lemons" -> "juice lemons") removed too.
+    display_no_counts: str
+    #: Lower-case words to match on: noise and bare numbers dropped.
+    key_words: tuple[str, ...]
+    #: What was taken out, in reading order, for the line's note.
+    notes: tuple[str, ...]
+    measures: tuple[Measure, ...] = ()
+    #: Bare numbers left in the name.
+    counts: tuple[float, ...] = ()
+    #: Whether a pack size ("x 7 g tin") was seen.
+    pack: bool = False
+    #: What survives as the match key, as a string, last word singularised.
+    key: str = field(default="", compare=False)
+
+
+def singular(word: str) -> str:
+    """Drop a trailing plural "s", leaving "cress", "hummus" and "asparagus"
+    alone. Deliberately crude, and deliberately the same rule the pantry's
+    existing slugs were minted with."""
+    if len(word) > 3 and word.endswith("s") and not word.endswith(("ss", "us", "is")):
+        return word[:-1]
+    return word
+
+
+def _parse_number(text: str) -> float:
+    text = text.replace(",", ".").strip()
+    total = 0.0
+    for part in text.split():
+        if "/" in part:
+            num, _, den = part.partition("/")
+            total += float(num) / float(den)
+        else:
+            total += float(part)
+    return total
+
+
+def _unit_for(token: str) -> MeasureUnit | None:
+    return UNIT_ALIASES.get(token.lower().rstrip("."))
+
+
+def _strip_brackets(text: str, notes: list[str]) -> str:
+    changed = True
+    while changed:
+        changed = False
+        for pattern in _BRACKETS:
+            def grab(match: re.Match) -> str:
+                inner = match.group(0)[1:-1].strip()
+                if inner:
+                    notes.append(inner)
+                return " "
+
+            text, n = pattern.subn(grab, text)
+            changed = changed or n > 0
+    match = _UNCLOSED.search(text)
+    if match:
+        inner = match.group(0)[1:].strip()
+        if inner:
+            notes.append(inner)
+        text = text[: match.start()]
+    return text
+
+
+def _tidy(text: str) -> str:
+    return _EDGE.sub("", _SPACES.sub(" ", text)).strip()
+
+
+def clean_name(raw: str | None) -> CleanedName:
+    """Pull `raw` apart into a name, a match key and the bits that were taken
+    out. Pure text; never looks at the pantry."""
+    text = unicodedata.normalize("NFKC", normalise_fractions(raw or "")).strip()
+    notes: list[str] = []
+
+    text = _strip_brackets(text, notes)
+
+    # Instructions after the name: ", finely chopped", "; fresh grated",
+    # " – drained and chopped".
+    head, *tail = _TAIL_RE.split(text, maxsplit=1)
+    if tail and _tidy(tail[0]):
+        notes.append(_tidy(tail[0]))
+    text = head
+
+    # "x 7 g tin anchovies": the "x" belongs to a count that parse_amount has
+    # already taken; what follows is a pack size.
+    pack = False
+    lead = re.match(r"^\s*[x×]\s*(?=\d)", text, re.IGNORECASE)
+    if lead:
+        text = text[lead.end():]
+        pack = True
+
+    measures: list[Measure] = []
+
+    def grab_measure(match: re.Match) -> str:
+        unit = _unit_for(match.group(1))
+        quantity_text = re.match(rf"\s*({_NUM})", match.group(0))
+        try:
+            quantity = _parse_number(quantity_text.group(1)) if quantity_text else 0.0
+        except (ValueError, ZeroDivisionError):
+            quantity = 0.0
+        measures.append(Measure(text=_tidy(match.group(0)), quantity=quantity, unit=unit))
+        return " "
+
+    text = _MEASURE_RE.sub(grab_measure, text)
+    notes.extend(m.text for m in measures)
+    # A fused trailing/embedded "250 mL" is not a pack size; only the
+    # "x 7 g tin" form (the "x" taken above) is.
+
+    display = _tidy(text)
+    words = display.split()
+    # Packaging next to a pack size ("tin anchovies") or an "of" ("packet of
+    # Marie biscuits") is not the product.
+    while words and (
+        words[0].lower() in {"of", "a", "an"}
+        or (
+            words[0].lower() in CONTAINER_WORDS
+            and (pack or (len(words) > 1 and words[1].lower() == "of"))
+        )
+    ):
+        dropped = words.pop(0)
+        if dropped.lower() in CONTAINER_WORDS:
+            notes.append(dropped.lower())
+    display = " ".join(words)
+
+    counts = tuple(_parse_number(m.group(1)) for m in _COUNT_RE.finditer(display))
+    display_no_counts = _tidy(_COUNT_RE.sub(" ", display))
+
+    key_source = display.lower().replace("-", " ")
+    all_words = [w.strip("().!?:") for w in key_source.split()]
+    all_words = [w for w in all_words if w]
+    kept = [w for w in all_words if w not in MATCH_NOISE and not _is_bare_number(w)]
+    if not kept:
+        kept = all_words
+    key = " ".join([*kept[:-1], singular(kept[-1])]) if kept else ""
+
+    return CleanedName(
+        display=display,
+        display_no_counts=display_no_counts or display,
+        key_words=tuple(kept),
+        notes=tuple(notes),
+        measures=tuple(measures),
+        counts=counts,
+        pack=pack,
+        key=key,
+    )
+
+
+def _is_bare_number(word: str) -> bool:
+    """A number that is a quantity, not part of a name: "00 flour" and
+    "1000 island" keep theirs."""
+    return bool(re.fullmatch(r"(?!0\d)\d+(?:\.\d+)?", word))
+
+
+def normalise_ingredient_name(name: str) -> str:
+    """Reduce an ingredient phrase to its matchable core.
+
+    "1 cup fresh flat leaf parsley leaves, chopped" has already had its
+    amount stripped by `units.parse_amount`; this drops brackets, instructions,
+    measured quantities, preparation words and a trailing plural so it can find
+    the master row for "parsley".
+    """
+    return clean_name(name).key
+
+
+def legacy_key(name: str) -> str:
+    """The match key as it was before the name cleaner existed.
+
+    Pantry slugs were minted from it, so `find_ingredient` still tries it:
+    anything that matched before keeps matching. New behaviour only adds
+    matches.
+    """
+    core = name.split(",")[0].lower().replace("-", " ")
+    words = [w.strip("().") for w in core.split()]
+    kept = [w for w in words if w and w not in _BASE_NOISE]
+    if not kept:
+        kept = [w for w in words if w]
+    if kept:
+        kept[-1] = singular(kept[-1])
+    return " ".join(kept)
+
+
+def stem(word: str) -> str:
+    """The form words are compared in when matching sets of words."""
+    return singular(word.lower())
+
+
+def stems(words) -> frozenset[str]:
+    return frozenset(stem(w) for w in words if w)
+
+
+def word_stems(text: str) -> frozenset[str]:
+    """Stems of the match words of `text`: a pantry name, an alias or a
+    prep term, reduced the same way a recipe line is."""
+    return stems(clean_name(text).key.split())
+
+
+def join_notes(*parts: str | None) -> str | None:
+    """Combine notes, skipping repeats and blanks, in the order given."""
+    seen: list[str] = []
+    for part in parts:
+        for piece in (part or "").split(";"):
+            piece = piece.strip()
+            if piece and piece.lower() not in {s.lower() for s in seen}:
+                seen.append(piece)
+    return "; ".join(seen) or None
+
+
+@dataclass(frozen=True)
+class PantryEntry:
+    """One pantry row, pre-digested for matching."""
+
+    ingredient_id: int
+    #: The name and each alias as a set of word stems.
+    forms: tuple[frozenset[str], ...]
+    #: Every word the pantry says is preparation for this ingredient.
+    prep: frozenset[str]
+
+
+def entry_for(ingredient) -> PantryEntry:
+    forms = tuple(
+        form for form in (word_stems(n) for n in (ingredient.name, *(ingredient.aliases or []))) if form
+    )
+    prep: set[str] = set()
+    for term in ingredient.prep_terms or []:
+        prep |= stems(re.split(r"[\s/-]+", term.lower().replace("-", " ")))
+    # A prep term is judged the way a line's words are: noise removed.
+    return PantryEntry(ingredient.id, forms, frozenset(prep))
+
+
+def prep_match(line_words, entries: list[PantryEntry]) -> int | None:
+    """The pantry row a line belongs to when every word it has beyond the
+    row's own name is something the row lists as preparation.
+
+        "boneless skinless chicken thigh fillets"  ->  chicken thigh
+        (prep_terms: boneless, skinless, fillet)
+
+    Returns the ingredient id, or None when nothing qualifies or two different
+    rows tie. The most specific row wins ("chicken thigh" over "chicken" when
+    both would qualify), but only if it is strictly more specific: a tie is a
+    guess, and a guess here silently mislinks that line's cost and nutrition.
+    """
+    wanted = stems(line_words)
+    if not wanted:
+        return None
+    best: int | None = None
+    best_size = 0
+    tied = False
+    for entry in entries:
+        if not entry.prep:
+            continue
+        for form in entry.forms:
+            if form <= wanted and (wanted - form) <= entry.prep:
+                size = len(form)
+                if size > best_size:
+                    best, best_size, tied = entry.ingredient_id, size, False
+                elif size == best_size and entry.ingredient_id != best:
+                    tied = True
+    return None if tied else best
+
+
+def prep_extras(line_words, entry: PantryEntry) -> list[str] | None:
+    """The words of a line that are not the pantry row's own name, when the
+    row's prep terms account for all of them (what a successful `prep_match`
+    explains away as preparation); None when they do not."""
+    wanted = [w for w in line_words if w]
+    have = stems(wanted)
+    best: frozenset[str] | None = None
+    for form in entry.forms:
+        if form <= have and (have - form) <= entry.prep and (best is None or len(form) > len(best)):
+            best = form
+    if best is None:
+        return None
+    return [w for w in wanted if stem(w) not in best]
+
+
+#: Joining words that carry no information once the preparation is a note.
+_CONNECTORS = frozenset({"of", "and", "or", "the", "a", "an", "for", "to", "at", "with", "plus"})
+
+
+def explain(cleaned: CleanedName, ingredient) -> list[str] | None:
+    """What `cleaned` says beyond the pantry row's own name, as words for a
+    note, when the row's `prep_terms` account for all of it. None when the
+    row has no terms or the line says something the row does not know.
+
+        explain(clean_name("Zest and juice 2 lemons"), lemon[juice, zest]) == ["Zest", "juice"]
+
+    Words are taken from the display text, so noise like "finely" and
+    "chopped" is kept for the note instead of vanishing.
+    """
+    if not ingredient.prep_terms:
+        return None
+    entry = entry_for(ingredient)
+    if prep_extras(cleaned.key_words, entry) is None:
+        return None
+    have = stems(cleaned.key_words)
+    form = max((f for f in entry.forms if f <= have), key=len)
+    leftovers: list[str] = []
+    for word in cleaned.display.split():
+        bare = word.strip("().!?,:;")
+        if not bare or _is_bare_number(bare.lower()) or bare.lower() in _CONNECTORS:
+            continue
+        if stem(bare) not in form:
+            leftovers.append(bare)
+    return leftovers
+
+
+def merge_key(name: str | None) -> str:
+    """What two shopping lines are compared on when neither is linked to the
+    pantry: the name without its brackets, instructions and measured
+    quantities, case, punctuation and plurals. Deliberately *not* the match
+    key: "frozen peas" and "peas" are different purchases even though the
+    pantry may file them both under "peas"."""
+    cleaned = clean_name(name)
+    text = (cleaned.display or (name or "")).lower().replace("-", " ")
+    return " ".join(stem(w) for w in re.sub(r"[^\w\s]", " ", text).split())

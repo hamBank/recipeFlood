@@ -9,6 +9,7 @@ cost blocks.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from sqlmodel import Session, and_, or_, select
@@ -33,50 +34,46 @@ from .models import (
     WeightSource,
     utcnow,
 )
+from .ingredient_names import (  # noqa: F401  (normalise_ingredient_name is re-exported)
+    PantryEntry,
+    clean_name,
+    entry_for,
+    legacy_key,
+    normalise_ingredient_name,
+    prep_match,
+)
 from .nutrition import compute_nutrition
 from .slugs import slugify, unique_slug
 from .units import format_amount, to_grams, to_ml
 
-#: Words stripped from an ingredient name before matching it against the
-#: master list, so "finely chopped fresh flat-leaf parsley" finds "parsley".
-_MATCH_NOISE = {
-    "fresh", "dried", "frozen", "chopped", "finely", "roughly", "thinly",
-    "sliced", "diced", "grated", "crushed", "minced", "ground", "whole",
-    "large", "small", "medium", "extra", "good", "quality", "free",
-    "range", "organic", "raw", "cooked", "peeled", "trimmed", "washed",
-    "rinsed", "drained", "lightly", "beaten", "melted", "softened",
-    "toasted", "flat", "leaf", "plus", "more", "to", "serve", "taste",
-    "of", "the", "a", "an", "and", "or", "for", "at", "room", "temperature",
-}
+@dataclass
+class Pantry:
+    """The pantry read once, for a caller matching many names.
 
-
-def normalise_ingredient_name(name: str) -> str:
-    """Reduce an ingredient phrase to its matchable core.
-
-    "1 cup fresh flat leaf parsley leaves, chopped" has already had its
-    amount stripped by `units.parse_amount`; this drops the preparation
-    words and trailing plural so it can find the master row for "parsley".
+    `find_ingredient` reads the whole ingredient table on every call, which is
+    fine for one line and wasteful for a shopping list of a hundred. Build this
+    once and pass it as `pantry=`.
     """
-    core = name.split(",")[0].lower()
-    core = core.replace("-", " ")
-    words = [w.strip("().") for w in core.split()]
-    kept = [w for w in words if w and w not in _MATCH_NOISE]
-    if not kept:
-        kept = [w for w in words if w]
-    # Singularise a trailing plural, but leave words that legitimately end
-    # in "ss" ("cress") or "us" ("hummus") alone.
-    if kept and len(kept[-1]) > 3 and kept[-1].endswith("s") and not kept[-1].endswith(("ss", "us", "is")):
-        kept[-1] = kept[-1][:-1]
-    return " ".join(kept)
+
+    ingredients: list[Ingredient]
+    entries: list[PantryEntry]
+
+    @classmethod
+    def load(cls, session: Session) -> "Pantry":
+        ingredients = list(session.exec(select(Ingredient)).all())
+        return cls(ingredients, [entry_for(i) for i in ingredients if i.prep_terms])
 
 
-def find_ingredient(session: Session, name: str, *, fuzzy: bool = True) -> Ingredient | None:
+def find_ingredient(
+    session: Session, name: str, *, fuzzy: bool = True, pantry: Pantry | None = None
+) -> Ingredient | None:
     """Match a recipe line's name to a master ingredient, or None.
 
     Tries, in order: exact slug, the normalised slug, an alias hit, and —
     only when `fuzzy` (the default) and it can't be mistaken for something
-    else — a name whose words are a superset of the query's ("garlic"
-    reaching "jar garlic").
+    else — a pantry row whose own `prep_terms` account for every extra word in
+    the name ("juice 1 lemon" reaching "lemon"), then a name whose words are a
+    superset of the query's ("garlic" reaching "jar garlic").
 
     `fuzzy=False` is for the one caller checking whether a name a human is
     about to save as a *new*, deliberately distinct pantry row already
@@ -85,17 +82,22 @@ def find_ingredient(session: Session, name: str, *, fuzzy: bool = True) -> Ingre
     same containment rule is right to allow everywhere the name is only
     ever being looked up, not created.
     """
-    candidates = [slugify(name), slugify(normalise_ingredient_name(name))]
-    for slug in candidates:
-        if not slug:
-            continue
+    cleaned = clean_name(name)
+    normalised = cleaned.key
+    # The original key too: pantry slugs were minted from it, so anything that
+    # matched before the name cleaner existed still does.
+    slugs: list[str] = []
+    for text in (name, normalised, legacy_key(name)):
+        slug = slugify(text)
+        if slug and slug not in slugs:
+            slugs.append(slug)
+    for slug in slugs:
         found = session.exec(select(Ingredient).where(Ingredient.slug == slug)).first()
         if found:
             return found
-    normalised = normalise_ingredient_name(name)
     if not normalised:
         return None
-    ingredients = session.exec(select(Ingredient)).all()
+    ingredients = pantry.ingredients if pantry is not None else session.exec(select(Ingredient)).all()
     for ingredient in ingredients:
         # Normalise both sides. Comparing the normalised name against raw
         # aliases only matched when normalisation happened to be a no-op:
@@ -108,6 +110,14 @@ def find_ingredient(session: Session, name: str, *, fuzzy: bool = True) -> Ingre
 
     if not fuzzy:
         return None
+
+    # The pantry says what is preparation for each ingredient. Everything a
+    # line says beyond the ingredient's own name has to be on that list, so
+    # this is as safe as the data is.
+    entries = pantry.entries if pantry is not None else [entry_for(i) for i in ingredients if i.prep_terms]
+    matched_id = prep_match(cleaned.key_words, entries)
+    if matched_id is not None:
+        return next(i for i in ingredients if i.id == matched_id)
 
     # Whole-word containment, e.g. "garlic" -> "jar garlic": a plain
     # substring would also catch "egg" inside "eggplant", which is wrong,

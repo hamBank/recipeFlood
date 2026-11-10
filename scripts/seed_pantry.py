@@ -92,6 +92,14 @@ def main() -> int:
             aliases.update(a.lower() for a in definition.get("aliases", []))
             aliases.discard(ingredient.name.lower())
             ingredient.aliases = sorted(aliases)
+
+            # Prep terms accumulate the same way, so a word added on the
+            # Pantry page survives a re-seed.
+            prep_terms = [t.lower() for t in (ingredient.prep_terms or [])]
+            for term in definition.get("prep_terms", []):
+                if term.lower() not in prep_terms:
+                    prep_terms.append(term.lower())
+            ingredient.prep_terms = prep_terms
             ingredient.updated_at = utcnow()
             session.add(ingredient)
             session.flush()
