@@ -40,6 +40,7 @@ from sqlmodel import Session, select  # noqa: E402
 from backend.database import engine  # noqa: E402
 from backend.models import Ingredient, utcnow  # noqa: E402
 from backend.ingredient_names import match_key  # noqa: E402
+from backend.pantry_names import new_row_name  # noqa: E402
 from backend.recipes_service import find_ingredient  # noqa: E402
 from backend.pantry_import import (  # noqa: E402
     clean_item,
@@ -158,8 +159,12 @@ def main() -> int:
                     ).first()
                     is not None,
                 )
+                # The household's naming (backend/pantry_names.py); the CSV's
+                # own spelling stays as an alias.
+                name = new_row_name(display)
                 existing = Ingredient(
-                    slug=slug, name=display, aliases=sorted(aliases_for(group, display))
+                    slug=slug, name=name,
+                    aliases=sorted({*aliases_for(group, display), display.lower()} - {name.lower()}),
                 )
                 session.add(existing)
                 session.flush()

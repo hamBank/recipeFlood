@@ -88,6 +88,8 @@ MATCH_NOISE: frozenset[str] = (_BASE_NOISE - {"leaf"} - {"frozen", "dried"}) | f
     "heaped", "heaping", "level", "generous", "big",
     # Where it was bought is not what it is: "costco baguette" is a baguette.
     "costco", "aldi", "coles", "woolworths", "woolies", "iga",
+    # A recipe's own bookkeeping: "shredded gruyere cheese, divided".
+    "divided",
 })
 
 #: Words that make a different product, not a prepared version of the same one:
@@ -179,6 +181,10 @@ UNIT_WORDS: frozenset[str] = frozenset({
 #: Packaging words. Only treated as noise next to a pack size ("x 7 g tin") or
 #: an "of" ("packet of biscuits"): on their own they can be the product ("jar
 #: garlic" is not the same purchase as "garlic").
+#: A can in front of the name is always a canned product ("can tomatoes"),
+#: unlike a jar ("jar garlic" is its own thing).
+_CAN_WORDS = frozenset({"tin", "tins", "can", "cans"})
+
 #: How much, said in front of the name: "handfuls rice", "block halloumi",
 #: "sheets filo pastry". Never the name itself (the name follows), so dropped
 #: from the front wherever they are, into the note.
@@ -208,7 +214,7 @@ _MEASURE_UNITS = (
 )
 _NUM = r"\d+(?:[.,]\d+)?(?:\s*/\s*\d+)?"
 _MEASURE_RE = re.compile(
-    rf"(?<![\w./]){_NUM}(?:\s*(?:-|–|—|to)\s*{_NUM})?\s*({'|'.join(_MEASURE_UNITS)})\b\.?",
+    rf"(?<![\w./]){_NUM}(?:\s*(?:-|–|—|to)\s*{_NUM})?[\s-]*({'|'.join(_MEASURE_UNITS)})\b\.?",
     re.IGNORECASE,
 )
 #: A bare number standing alone: a count ("juice 2 lemons"), not "00 flour".
@@ -475,7 +481,7 @@ def clean_name(raw: str | None) -> CleanedName:
         or words[0].lower() in AMOUNT_WORDS
         or (
             words[0].lower() in CONTAINER_WORDS
-            and (pack or words[1].lower() == "of")
+            and (pack or words[1].lower() == "of" or words[0].lower() in _CAN_WORDS)
         )
     ):
         dropped = words.pop(0)
@@ -484,7 +490,7 @@ def clean_name(raw: str | None) -> CleanedName:
         if dropped.lower() in CONTAINER_WORDS:
             notes.append(dropped.lower())
             # The packaging goes, but a tin is still what makes it tinned.
-            if dropped.lower() in {"tin", "tins", "can", "cans"} and "canned" not in type_words:
+            if dropped.lower() in _CAN_WORDS and "canned" not in type_words:
                 type_words.insert(0, "canned")
     display = " ".join(words)
 

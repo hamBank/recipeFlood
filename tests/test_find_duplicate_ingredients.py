@@ -197,6 +197,7 @@ class TestTidyNames:
         assert {i.name: new for i, new in rename_proposals(rows)} == {
             "tinned tomatoes": "Tomato - Canned",
             "canned chickpeas": "Chickpea - Canned",
+            "can coconut milk": "Coconut milk - Canned",
         }
 
     def test_the_snapshot_s_odd_cases(self):
