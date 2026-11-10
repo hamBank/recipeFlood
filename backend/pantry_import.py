@@ -24,6 +24,7 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 
+from .ingredient_names import fold_word
 from .models import IngredientSource
 
 #: Free-text shop -> the source it means. Keys are lowercased and stripped.
@@ -158,12 +159,9 @@ def _edit_distance_one(a: str, b: str) -> bool:
 
 
 def _singular(text: str) -> str:
-    words = text.split()
-    if words and len(words[-1]) > 3 and words[-1].endswith("s") and not words[-1].endswith(
-        ("ss", "us", "is")
-    ):
-        words[-1] = words[-1][:-1]
-    return " ".join(words)
+    """The text with every word folded (see `ingredient_names.fold_word`), so
+    two names differing only by plural compare equal."""
+    return " ".join(fold_word(w) for w in text.split())
 
 
 #: Below this length, one edit is as likely to be a different food as a

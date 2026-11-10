@@ -38,7 +38,9 @@ from .ingredient_names import (  # noqa: F401  (normalise_ingredient_name is re-
     PantryEntry,
     clean_name,
     entry_for,
+    fold_word,
     legacy_key,
+    match_key,
     normalise_ingredient_name,
     prep_match,
 )
@@ -48,20 +50,39 @@ from .units import format_amount, to_grams, to_ml
 
 @dataclass
 class Pantry:
-    """The pantry read once, for a caller matching many names.
+    """The pantry read once, and indexed for matching.
 
-    `find_ingredient` reads the whole ingredient table on every call, which is
-    fine for one line and wasteful for a shopping list of a hundred. Build this
-    once and pass it as `pantry=`.
+    `find_ingredient` needs the whole ingredient table (names, aliases and
+    prep terms) whenever a slug lookup misses. Build this once and pass it as
+    `pantry=` when matching many names, e.g. a shopping list of a hundred lines.
     """
 
     ingredients: list[Ingredient]
+    #: Rows that list prep terms, digested for `prep_match`.
     entries: list[PantryEntry]
+    #: `match_key` of every alias, and of every name, -> the rows that go by it.
+    by_alias: dict[str, list[Ingredient]]
+    by_name: dict[str, list[Ingredient]]
+    #: Every name and alias as a set of folded words, for whole-word containment.
+    word_sets: list[tuple[Ingredient, frozenset[str]]]
 
     @classmethod
     def load(cls, session: Session) -> "Pantry":
         ingredients = list(session.exec(select(Ingredient)).all())
-        return cls(ingredients, [entry_for(i) for i in ingredients if i.prep_terms])
+        by_alias: dict[str, list[Ingredient]] = {}
+        by_name: dict[str, list[Ingredient]] = {}
+        word_sets: list[tuple[Ingredient, frozenset[str]]] = []
+        for ingredient in ingredients:
+            for index, form in enumerate((ingredient.name, *(ingredient.aliases or []))):
+                key = match_key(form)
+                if not key:
+                    continue
+                rows = (by_name if index == 0 else by_alias).setdefault(key, [])
+                if ingredient not in rows:
+                    rows.append(ingredient)
+                word_sets.append((ingredient, frozenset(key.split())))
+        entries = [entry_for(i) for i in ingredients if i.prep_terms]
+        return cls(ingredients, entries, by_alias, by_name, word_sets)
 
 
 def find_ingredient(
@@ -97,27 +118,36 @@ def find_ingredient(
             return found
     if not normalised:
         return None
-    ingredients = pantry.ingredients if pantry is not None else session.exec(select(Ingredient)).all()
-    for ingredient in ingredients:
-        # Normalise both sides. Comparing the normalised name against raw
-        # aliases only matched when normalisation happened to be a no-op:
-        # the alias "pinenuts" never matched a line reading "pinenut",
-        # because the left side had been singularised and the right side
-        # had not.
-        for alias in ingredient.aliases or []:
-            if normalise_ingredient_name(alias) == normalised:
-                return ingredient
+    pantry = pantry or Pantry.load(session)
+
+    # An alias that is this name in every way that matters: same words once
+    # noise is dropped and plurals folded. (Aliases are the pantry saying "this
+    # is also called that", so this is safe even when creating a row.)
+    query_words = frozenset(fold_word(w) for w in cleaned.key_words)
+    query_key = " ".join(fold_word(w) for w in cleaned.key_words)
+    same = pantry.by_alias.get(query_key)
+    if same:
+        return min(same, key=lambda i: i.id)
 
     if not fuzzy:
         return None
 
+    # A row *named* this, however it is spelled: noise dropped, plurals folded,
+    # including rows named with the original mangled plurals ("tomatoe"), which
+    # the slug lookup above reaches only through `legacy_key`. Names are not
+    # compared when creating a row (above): "large egg" and "egg" may
+    # deliberately be separate rows. Rows that tie are the same ingredient by
+    # definition (the duplicate finder merges them); the oldest wins.
+    same = pantry.by_name.get(query_key)
+    if same:
+        return min(same, key=lambda i: i.id)
+
     # The pantry says what is preparation for each ingredient. Everything a
     # line says beyond the ingredient's own name has to be on that list, so
     # this is as safe as the data is.
-    entries = pantry.entries if pantry is not None else [entry_for(i) for i in ingredients if i.prep_terms]
-    matched_id = prep_match(cleaned.key_words, entries)
+    matched_id = prep_match(cleaned.key_words, pantry.entries)
     if matched_id is not None:
-        return next(i for i in ingredients if i.id == matched_id)
+        return next(i for i in pantry.ingredients if i.id == matched_id)
 
     # Whole-word containment, e.g. "garlic" -> "jar garlic": a plain
     # substring would also catch "egg" inside "eggplant", which is wrong,
@@ -125,16 +155,9 @@ def find_ingredient(
     # ingredient qualifies — "onion" reaching for one of three pantry rows
     # that all happen to contain the word is a guess, not a match, and a
     # wrong guess here silently mislinks that line's cost and nutrition.
-    query_words = set(normalised.split())
-    word_matches = []
-    for ingredient in ingredients:
-        for candidate in (ingredient.name, *(ingredient.aliases or [])):
-            candidate_words = set(normalise_ingredient_name(candidate).split())
-            if query_words <= candidate_words:
-                word_matches.append(ingredient)
-                break
+    word_matches = {i.id: i for i, words in pantry.word_sets if query_words <= words}
     if len(word_matches) == 1:
-        return word_matches[0]
+        return next(iter(word_matches.values()))
     return None
 
 

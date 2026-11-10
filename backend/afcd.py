@@ -41,6 +41,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .ingredient_names import fold_word
 from .nutrition import kcal_from_kj
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "afcd"
@@ -158,9 +159,9 @@ LOW_FORM_PENALTY = 0.02
 
 
 def _singularise(word: str) -> str:
-    if len(word) > 3 and word.endswith("s") and not word.endswith(("ss", "us", "is")):
-        return word[:-1]
-    return word
+    """One form for every spelling of a word, so a pantry "tomatoes" finds the
+    database's "tomato" (the shared rule: `ingredient_names.fold_word`)."""
+    return fold_word(word)
 
 
 def tokenise(text: str) -> frozenset[str]:
