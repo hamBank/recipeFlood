@@ -341,67 +341,66 @@ get it.
 
 ## Finding duplicate pantry rows
 
-> **After upgrading to name cleaning and the plural fix** (brackets,
-> instructions and quantities are no longer part of a name's match key, and
-> "tomatoes", "tomato" and the old importer's "tomatoe" are one word), rows
-> minted earlier now count as exact duplicates: "sugar 250 ml" next to
-> "sugar", "cherrie" next to "cherry". Run the report below, read it, then
-> `--merge-exact --fix-names`. On the 321-recipe blog snapshot, built by the
-> old code, that merged 106 rows and renamed 56 (1,180 pantry rows down to
-> 1,074), with every recipe line still linked; a second run changes nothing.
->
-> `--fix-names` repairs names the old plural rule mangled ("tomatoe",
-> "cherrie", "bay leave"). It only touches a word when the right spelling
-> appears elsewhere in your pantry or recipes ("Marie biscuits" stays: nothing
-> says "Mary"), keeps the old name as an alias so nothing stops matching, and
-> leaves the slug alone so links and URLs survive. A rename that would give two
-> rows the same name is skipped; merge them first.
-
 Importing the blog, a shopping-list CSV and years of cooking history each
-mint one pantry row per distinct phrase they saw, so the same real
-ingredient routinely ends up split across several rows — "egg" / "eggs" /
-"large eggs" — each with its own separate, incomplete price and
-nutrition. The Pantry page's own Merge button is how that gets folded
-back down (see "The master ingredient list" in SPEC.md), but finding the
-candidates by eye across a few hundred rows is tedious:
+mint one pantry row per phrase they saw, so one real ingredient can be
+several rows ("onion", "med onion", "onions"), each with its own incomplete
+price and nutrition.
 
 ```bash
-python -m scripts.find_duplicate_ingredients
-python -m scripts.find_duplicate_ingredients --min-usage 1   # skip zero-usage stubs
-python -m scripts.find_duplicate_ingredients --merge-exact   # actually merge the exact tier
-python -m scripts.find_duplicate_ingredients --merge-exact --merge-prep-size  # + the prep/size tier
-python -m scripts.find_duplicate_ingredients --fix-names     # rename "tomatoe" -> "tomato"
+python -m scripts.find_duplicate_ingredients               # the report; changes nothing
+python -m scripts.find_duplicate_ingredients --min-usage 1 # skip rows no recipe uses
+python -m scripts.find_duplicate_ingredients --merge       # merge the CONFIDENT list
+python -m scripts.find_duplicate_ingredients --rename      # apply the RENAMES list
+python -m scripts.find_duplicate_ingredients --fix-names   # "tomatoe" -> "tomato"
 ```
 
-By default it's read-only — it only prints suggestions, in three tiers:
-**exact matches** (rows whose name or alias reduces to the same
-normalised core — about as certain as text alone gets), **prep/size
-variants** (rows that only match once preparation-method words —
-"shredded", "cut diagonally", "julienned" — and sizing/amount words —
-"1 big", "2.5 oz", "500g", "generous pinch", "1 inch cubes" — are
-stripped too, e.g. "Onion" / "1 Inch Diced Onion"; a pantry row minted
-straight from scraped recipe text can carry that phrasing right in its
-name, unlike a recipe line, which has already had its amount parsed out
-by the time it's matched), and **qualified variants** (one name's words
-are a subset of the other's, e.g. "onion" ⊂ "red onion"). See the
-script's own docstring for why a plain spelling-similarity score was
-tried and rejected — it scored unrelated pairs like "salt"/"malt"
-*higher* than real duplicates like "hand soap"/"handwash", which is
-exactly backwards.
+It applies the rule in SPEC.md ("What is the same ingredient"): preparation
+after purchase is the same ingredient, a different product is not. The report
+has four lists:
 
-`--merge-exact` and `--merge-prep-size` each merge every group in their
-own tier there and then (and can be combined), keeping whichever member
-is used in the most recipes and absorbing the rest — same `_merge_into`
-(`backend/routers/ingredients.py`) the Pantry page's own Merge button
-calls, so it's the same repointing of recipe lines and shopping items,
-same alias inheritance. `--merge-prep-size` is the riskier of the two —
-"cube steak" is a real cut of meat, not "steak" with "cubed" stripped
-off — so read the prep/size report before turning it on; it's worth
-checking case by case once, rather than assuming every pantry looks the
-same. Qualified variants are never auto-merged, at any flag — that tier
-still needs a human, since "peanut butter" is not just "butter" with a
-qualifier stripped. Act on one of those from the Pantry page's Merge
-button, or `POST /ingredients/<keep>/merge/<absorb>`.
+* **CONFIDENT**: only preparation words differ ("onion" / "med onion" /
+  "• 1 big onion"), or a word the keeper lists in its own prep terms.
+  Synonyms count as the same ("green bell pepper" / "green capsicum",
+  "cilantro" / "coriander"). `--merge` merges these, keeping the row used in
+  the most recipes under the plainest name.
+* **REVIEW**: what the rule cannot settle, with the reason: an unknown
+  qualifier ("caster sugar", "japanese curry powder"), a word that is
+  sometimes how it is sold ("shredded coconut", "ground coriander"), a part
+  ("coriander leaves"). It also lists **every link made only through an
+  alias**, never merged automatically, and names that are nothing but
+  preparation ("divided").
+* **RENAMES**: types of fruit, vegetables, cream and wine, renamed `Name -
+  Type` ("Pear - Green", "Cream - Thickened"). It only renames clean names
+  (nothing but the type and the base). The old name is kept as an alias and
+  the slug is unchanged.
+* **UNCHANGED**: related names kept apart, with the reason ("frozen": a
+  different product; "a 'cheese', not a 'cream'"), and a count of the rest.
+
+Merging repoints recipe lines and shopping items through `_merge_into`
+(`backend/routers/ingredients.py`), the same function the Pantry page's
+Merge button uses. It cannot be undone, so read the report first. Merge a
+REVIEW item by hand from the Pantry page, or with `POST
+/ingredients/<keep>/merge/<absorb>`. For an alias link, either merge the two
+rows or remove the alias in the ingredient editor.
+
+> **Why aliases are never trusted** (2026-11-10): the previous version grouped
+> rows that shared a key through *any* name or alias, transitively, so a chain
+> of aliases could join rows that have nothing in common. In the production
+> pantry it put water, caster sugar, cinnamon, thyme, oyster sauce and sixteen
+> more into one "exact" group with onion, more than 600 recipe lines' worth.
+> The report was read before anything was merged. Groups are now formed from
+> names only, on equal word sets. That is an equivalence, so a row cannot be
+> in two groups and groups cannot chain.
+
+On the 321-recipe blog snapshot built by the old code (1,075 rows), `--merge
+--rename --fix-names` merged 102 rows and renamed 44, leaving every one of the
+3,138 recipe lines linked and no dangling link. A second run changes nothing.
+
+`--fix-names` repairs names the old plural rule mangled ("tomatoe",
+"cherrie", "bay leave"). It only touches a word when the right spelling
+appears elsewhere in your pantry or recipes ("Marie biscuits" stays: nothing
+says "Mary"). It keeps the old name as an alias and leaves the slug alone. A
+rename that would give two rows the same name is skipped; merge them first.
 
 **Acting on a long list of candidates one pair at a time is still
 tedious even with the script narrowing it down** — `PANTRY_MULTI_MERGE`

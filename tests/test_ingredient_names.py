@@ -51,7 +51,8 @@ class TestBrackets:
     def test_a_synonym_in_brackets_does_not_pollute_the_key(self):
         # The old key was "kecap manis dark chinese soy": a name nobody has.
         assert normalise_ingredient_name("kecap manis (or dark chinese soy)") == "kecap manis"
-        assert normalise_ingredient_name("cornstarch (corn flour)") == "cornstarch"
+        # Cornstarch is cornflour here: the shop's name wins (SYNONYMS).
+        assert normalise_ingredient_name("cornstarch (corn flour)") == "cornflour"
 
 
 class TestInstructionsAfterTheName:
@@ -252,10 +253,11 @@ class TestExplainAndMergeKey:
         assert keys == {"red onion"}
 
     def test_the_merge_key_is_not_the_match_key(self):
-        # "frozen peas" and "peas" are different purchases even though the
-        # pantry may file both under "peas".
+        # Brackets and instructions go from both, but the merge key keeps
+        # noise words the match key drops.
         assert merge_key("frozen peas") != merge_key("peas")
-        assert normalise_ingredient_name("frozen peas") == normalise_ingredient_name("peas")
+        assert merge_key("organic peas") != merge_key("peas")
+        assert normalise_ingredient_name("organic peas") == normalise_ingredient_name("peas")
 
 
 class TestPlurals:
@@ -380,3 +382,41 @@ class TestLeaf:
         basil = entry_for(_ing("basil", prep=["leaves"]))
         for raw in ("basil leaf", "basil leaves", "basil leave"):
             assert prep_match(clean_name(raw).key_words, [basil]) == 1, raw
+
+
+class TestNameDashType:
+    """The pantry names types "Pear - Green"; a dash before an instruction is
+    still a note."""
+
+    def test_a_type_after_a_dash_is_part_of_the_key(self):
+        assert normalise_ingredient_name("Pear - Green") == normalise_ingredient_name("green pears")
+        assert normalise_ingredient_name("Cream - Thickened") == "thickened cream"
+        assert clean_name("Pear - Beurre Bosc").display == "Pear - Beurre Bosc"
+
+    def test_an_instruction_after_a_dash_is_a_note(self):
+        for line, key in [
+            ("onion - finely chopped", "onion"),
+            ("basil - to serve", "basil"),
+            ("tomatoes - see note", "tomato"),
+            ("all-purpose flour - sift before measuring", "all purpose flour"),
+            ("butter - softened", "butter"),
+        ]:
+            assert normalise_ingredient_name(line) == key, line
+
+    def test_a_type_is_not_the_plain_ingredient(self):
+        assert normalise_ingredient_name("cheese - blue") != normalise_ingredient_name("cheese")
+
+
+class TestProductsAndSynonyms:
+    def test_frozen_and_dried_are_part_of_the_name(self):
+        assert normalise_ingredient_name("frozen spinach") == "frozen spinach"
+        assert normalise_ingredient_name("dried figs") == "dried fig"
+
+    def test_a_tin_makes_it_tinned(self):
+        assert normalise_ingredient_name("x 400 g tin tomatoes") == "tinned tomato"
+        assert normalise_ingredient_name("canned tomatoes") == "tinned tomato"
+
+    def test_the_shop_name_wins(self):
+        assert normalise_ingredient_name("green bell peppers") == "green capsicum"
+        assert normalise_ingredient_name("cilantro") == "coriander"
+        assert normalise_ingredient_name("chili powder") == normalise_ingredient_name("chilli powder")

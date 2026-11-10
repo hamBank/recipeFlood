@@ -195,7 +195,7 @@ class TestWhatStaysApart:
     def test_frozen_and_plain_are_different_purchases_when_unlinked(self, client):
         a = make_recipe(client, "Pie", [{"name": "frozen peas", "quantity": 1, "unit": "cup"}])
         b = make_recipe(client, "Soup", [{"name": "peas", "quantity": 1, "unit": "cup"}])
-        unlink(client, "pea")
+        unlink(client, "frozen-pea", "pea")
         assert len(shop_for(client, a, b)) == 2
 
     def test_a_jar_of_garlic_is_not_garlic(self, client):

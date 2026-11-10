@@ -29,6 +29,16 @@ keep the others as a note.
   vocabulary in the pantry: whether "boneless" is prep or part of the name is
   a fact about the ingredient, not about English.
 
+* `PRODUCT_WORDS` ("frozen", "tinned", "smoked", "dried", "juice", "paste")
+  make a different product. They are never noise, and no fuzzy match may add
+  one: a "peas" line never reaches a lone "frozen peas" row.
+* A type after a spaced dash is part of the name: "Pear - Green" keys as
+  "green pear", the pantry's naming for types of fruit, vegetables, cream
+  and wine. An instruction after a dash ("onion - finely chopped") is still
+  a note.
+* `SYNONYMS` give the shop's name: "bell pepper" is "capsicum", "cilantro"
+  is "coriander", "canned" is "tinned".
+
 Matching is deliberately conservative, for the reason `shopping.py` gives: a
 wrong merge is worse than no merge. In the same spirit `leaf` is not noise
 ("lime leaf" is not "lime"); what a leaf means for a herb is the pantry's to
@@ -71,20 +81,59 @@ _BASE_NOISE: frozenset[str] = frozenset({
 #: handled as the pair it is (see `clean_name`); what a leaf means for a herb is
 #: the pantry's to say, with `prep_terms`. The original list stays in
 #: `_BASE_NOISE` so `legacy_key` can still reach every row it used to.
-MATCH_NOISE: frozenset[str] = (_BASE_NOISE - {"leaf"}) | frozenset({
+MATCH_NOISE: frozenset[str] = (_BASE_NOISE - {"leaf"} - {"frozen", "dried"}) | frozenset({
     # Added with the name cleaner: adverbs, sizes and qualifiers.
     "freshly", "ripe", "very", "about", "approximately", "optional", "sifted",
     "firmly", "loosely", "coarsely", "thickly", "med", "sized", "scant",
     "heaped", "heaping", "level", "generous", "big",
 })
 
+#: Words that make a different product, not a prepared version of the same one:
+#: frozen spinach is not spinach, a tin of tomatoes is not tomatoes. They are
+#: never noise, and no fuzzy match may add one (`find_ingredient`). ("frozen"
+#: and "dried" were noise until 2026-11; `legacy_key` still drops them, for the
+#: slugs minted back then.)
+PRODUCT_WORDS: frozenset[str] = frozenset({
+    "tinned", "canned", "tin", "tins", "frozen", "smoked", "dried", "dry",
+    "pickled", "preserved", "candied", "glace", "crystallised", "crystallized",
+    "desiccated", "evaporated", "condensed", "powdered", "instant", "cured",
+    "jarred", "bottled", "juice", "paste", "powder", "sauce", "oil", "stock",
+    "extract", "essence", "syrup", "jam", "soup", "flavour", "flavor",
+    "flavoured", "flavored", "vinegar", "cordial", "liqueur", "concentrate",
+})
+
+#: The same thing under another name: the Australian name wins, because that is
+#: what the shop calls it. Compared on folded words, so plurals are covered.
+SYNONYMS: dict[tuple[str, ...], tuple[str, ...]] = {
+    ("bell", "pepper"): ("capsicum",),
+    ("chili",): ("chilli",),
+    ("chile",): ("chilli",),
+    ("cilantro",): ("coriander",),
+    ("courgette",): ("zucchini",),
+    ("aubergine",): ("eggplant",),
+    ("scallion",): ("spring", "onion"),
+    ("arugula",): ("rocket",),
+    ("cornstarch",): ("cornflour",),
+    ("canned",): ("tinned",),
+    ("tin",): ("tinned",),
+}
+
+#: Words after a spaced dash that are instructions, not a type: "basil - to
+#: serve", "tomatoes - see note".
+_INSTRUCTION_WORDS: frozenset[str] = frozenset({
+    "see", "note", "notes", "garnish", "garnishing", "serving", "serve",
+    "divided", "reserved", "optional", "plus", "extra", "approx", "approximately",
+    "about", "or", "and", "for", "to", "at", "if", "as", "needed", "taste",
+    "before", "after", "until", "then", "when", "sift", "use", "see",
+})
+
 #: Preparation-method words. Not part of the match key (a "cube steak" is a
 #: real cut of meat) but safe to ignore once a pantry row claims them, and
-#: used by `scripts/find_duplicate_ingredients.py` for its looser tier.
+#: used by `scripts/find_duplicate_ingredients.py`.
 PREP_WORDS: frozenset[str] = frozenset({
     "shredded", "julienned", "julienne", "cubed", "cube", "cubes",
     "quartered", "quarters", "halved", "halves", "wedged", "wedges",
-    "mashed", "pureed", "puree", "zested", "zest", "seeded", "deseeded",
+    "mashed", "pureed", "puree", "zested", "zest", "juiced", "seeded", "deseeded",
     "hulled", "pitted", "stemmed", "shelled", "boned", "skinned",
     "diagonally", "lengthwise", "crosswise", "cut", "strips", "chunks",
     "pieces", "slivered", "slivers", "into",
@@ -164,6 +213,9 @@ class CleanedName:
     pack: bool = False
     #: What survives as the match key, as a string, last word singularised.
     key: str = field(default="", compare=False)
+    #: Every word of the name in key order, noise included: a "Pear - Green"
+    #: type moved to the front, synonyms applied, bare numbers dropped.
+    words: tuple[str, ...] = field(default=(), compare=False)
 
 
 # --------------------------------------------------------------------------
@@ -315,10 +367,19 @@ def clean_name(raw: str | None) -> CleanedName:
 
     # Instructions after the name: ", finely chopped", "; fresh grated",
     # " – drained and chopped".
-    head, *tail = _TAIL_RE.split(text, maxsplit=1)
-    if tail and _tidy(tail[0]):
-        notes.append(_tidy(tail[0]))
-    text = head
+    # Except a pantry-style type after a dash, "Pear - Green" or
+    # "Cream - Thickened": that is part of what to buy, and keys as "green pear".
+    type_words: list[str] = []
+    type_text = ""
+    split = _TAIL_RE.search(text)
+    if split:
+        head, tail = text[: split.start()], _tidy(text[split.end():])
+        if split.group(0).strip() in "-–—" and _is_type(tail):
+            type_text = " ".join(tail.split())
+            type_words = type_text.lower().split()
+        elif tail:
+            notes.append(tail)
+        text = head
 
     # "x 7 g tin anchovies": the "x" belongs to a count that parse_amount has
     # already taken; what follows is a pack size.
@@ -359,6 +420,9 @@ def clean_name(raw: str | None) -> CleanedName:
         dropped = words.pop(0)
         if dropped.lower() in CONTAINER_WORDS:
             notes.append(dropped.lower())
+            # The packaging goes, but a tin is still what makes it tinned.
+            if dropped.lower() in {"tin", "tins", "can", "cans"} and "tinned" not in type_words:
+                type_words.insert(0, "tinned")
     display = " ".join(words)
 
     counts = tuple(_parse_number(m.group(1)) for m in _COUNT_RE.finditer(display))
@@ -366,7 +430,9 @@ def clean_name(raw: str | None) -> CleanedName:
 
     key_source = display.lower().replace("-", " ")
     all_words = [w.strip("().!?:") for w in key_source.split()]
-    all_words = [w for w in all_words if w]
+    all_words = _apply_synonyms([*type_words, *(w for w in all_words if w)])
+    if type_text:
+        display = f"{display} - {type_text}"
     kept = [
         w
         for i, w in enumerate(all_words)
@@ -387,7 +453,38 @@ def clean_name(raw: str | None) -> CleanedName:
         counts=counts,
         pack=pack,
         key=key,
+        words=tuple(w for w in all_words if not _is_bare_number(w)),
     )
+
+
+def _is_type(tail: str) -> bool:
+    """Whether the text after a dash names a type ("Green", "Beurre Bosc")
+    rather than saying what to do ("finely chopped", "to serve")."""
+    words = tail.lower().split()
+    if not 1 <= len(words) <= 3 or not all(w.isalpha() for w in words):
+        return False
+    instructions = MATCH_NOISE | PREP_WORDS | SIZE_WORDS | CONTAINER_WORDS | _INSTRUCTION_WORDS
+    # "- sift before measuring": a verb is an instruction ("Wine - Sparkling" is not).
+    verb = any(len(w) > 4 and w.endswith("ing") and w != "sparkling" for w in words)
+    return not verb and not any(w in instructions or w in UNIT_WORDS for w in words)
+
+
+def _apply_synonyms(words: list[str]) -> list[str]:
+    """Replace each `SYNONYMS` phrase with the name the shop uses."""
+    out: list[str] = []
+    i = 0
+    folded = [fold_word(w) for w in words]
+    while i < len(words):
+        for phrase, replacement in _SYNONYMS_FOLDED:
+            n = len(phrase)
+            if tuple(folded[i:i + n]) == phrase:
+                out.extend(replacement)
+                i += n
+                break
+        else:
+            out.append(words[i])
+            i += 1
+    return out
 
 
 def _is_bare_number(word: str) -> bool:
@@ -565,3 +662,11 @@ def merge_key(name: str | None) -> str:
     cleaned = clean_name(name)
     text = (cleaned.display or (name or "")).lower().replace("-", " ")
     return " ".join(stem(w) for w in re.sub(r"[^\w\s]", " ", text).split())
+
+
+_SYNONYMS_FOLDED = tuple(
+    (tuple(fold_word(w) for w in phrase), replacement) for phrase, replacement in SYNONYMS.items()
+)
+
+#: `PRODUCT_WORDS` as `fold_word` spells them, for comparing folded keys.
+PRODUCT_FOLDS: frozenset[str] = frozenset(fold_word(w) for w in PRODUCT_WORDS)
