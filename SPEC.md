@@ -234,7 +234,10 @@ recipe, so it costs no matching.
 not bell pepper; yoghurt; plain flour; icing sugar). A name says what to buy,
 not how much: "handfuls rice" is rice, "block halloumi" is halloumi, "sheets
 filo pastry" is filo pastry. A **handful** is a unit, a poor measure but a
-measure: it is counted ("2 handfuls rocket") and never given a weight. Where the line
+measure: it is counted ("2 handfuls rocket") and never given a weight.
+A row created from a recipe line or a shopping-list import is named by these
+rules (`backend/pantry_names.py`); a row someone types in on the Pantry page
+keeps the name they typed. Where the line
 isn't clear ("caster sugar" next to "sugar", "japanese eggplant"), nothing
 guesses: `scripts/find_duplicate_ingredients.py` lists it for a person to
 decide.

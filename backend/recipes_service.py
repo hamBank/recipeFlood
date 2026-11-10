@@ -48,6 +48,7 @@ from .ingredient_names import (  # noqa: F401  (normalise_ingredient_name is re-
     prep_match,
 )
 from .nutrition import compute_nutrition
+from .pantry_names import new_row_name
 from .slugs import slugify, unique_slug
 from .units import format_amount, to_grams, to_ml
 
@@ -66,6 +67,8 @@ class Pantry:
     #: `match_key` of every alias, and of every name, -> the rows that go by it.
     by_alias: dict[str, list[Ingredient]]
     by_name: dict[str, list[Ingredient]]
+    #: The same, by the *set* of words, for "juice of a lime" -> "lime juice".
+    by_words: dict[frozenset[str], list[Ingredient]]
     #: Every name and alias as a set of folded words, for whole-word containment.
     word_sets: list[tuple[Ingredient, frozenset[str]]]
 
@@ -74,6 +77,7 @@ class Pantry:
         ingredients = list(session.exec(select(Ingredient)).all())
         by_alias: dict[str, list[Ingredient]] = {}
         by_name: dict[str, list[Ingredient]] = {}
+        by_words: dict[frozenset[str], list[Ingredient]] = {}
         word_sets: list[tuple[Ingredient, frozenset[str]]] = []
         for ingredient in ingredients:
             for index, form in enumerate((ingredient.name, *(ingredient.aliases or []))):
@@ -83,9 +87,13 @@ class Pantry:
                 rows = (by_name if index == 0 else by_alias).setdefault(key, [])
                 if ingredient not in rows:
                     rows.append(ingredient)
+                if index == 0:
+                    same_words = by_words.setdefault(frozenset(key.split()), [])
+                    if ingredient not in same_words:
+                        same_words.append(ingredient)
                 word_sets.append((ingredient, frozenset(key.split())))
         entries = [entry_for(i) for i in ingredients if i.prep_terms]
-        return cls(ingredients, entries, by_alias, by_name, word_sets)
+        return cls(ingredients, entries, by_alias, by_name, by_words, word_sets)
 
 
 def find_ingredient(
@@ -146,6 +154,11 @@ def find_ingredient(
         same = pantry.by_name.get(query_key)
         if same:
             return min(same, key=lambda i: i.id)
+        # The same words in another order: "juice of a lime" is "lime juice",
+        # "cloves garlic" is "garlic clove".
+        same = pantry.by_words.get(query_words)
+        if same:
+            return min(same, key=lambda i: i.id)
 
     # An alias that is this name in every way that matters: same words once
     # noise is dropped and plurals folded. (Aliases are the pantry saying "this
@@ -193,7 +206,16 @@ def get_or_create_ingredient(session: Session, name: str) -> Ingredient:
     existing = find_ingredient(session, name)
     if existing:
         return existing
-    display = normalise_ingredient_name(name) or name.strip().lower()
+    # Named as the household names things (see `pantry_names`): "green pears"
+    # makes "Pear - Green", "x 250g blocks halloumi" makes "halloumi".
+    display = new_row_name(name) or normalise_ingredient_name(name) or name.strip().lower()
+    # The house name can be a row that already exists: "butter cubed" misses
+    # "butter" above (cubed is not noise to the matcher), but it is named
+    # "butter", which is the duplicate finder's rule for the same ingredient.
+    if display != name:
+        existing = find_ingredient(session, display)
+        if existing:
+            return existing
     slug = unique_slug(
         display,
         lambda s: session.exec(select(Ingredient).where(Ingredient.slug == s)).first()

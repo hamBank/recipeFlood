@@ -111,7 +111,10 @@ class TestQuantitiesInTheName:
     def test_a_container_on_its_own_is_part_of_the_name(self):
         # "jar garlic" is a different purchase from "garlic".
         assert clean_name("jar garlic").display == "jar garlic"
-        assert clean_name("can condensed milk").display == "can condensed milk"
+        # A can is the exception: whatever follows is a canned product.
+        assert clean_name("can condensed milk").display == "condensed milk"
+        assert normalise_ingredient_name("can condensed milk") == "canned condensed milk"
+        assert clean_name("14.5-ounce can tomatoes").display == "tomatoes"
 
     def test_a_container_before_of_is_dropped(self):
         assert clean_name("Packet of Marie biscuits").display == "Marie biscuits"

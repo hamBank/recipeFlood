@@ -384,6 +384,12 @@ has four lists:
 * **UNCHANGED**: related names kept apart, with the reason ("frozen": a
   different product; "a 'cheese', not a 'cream'"), and a count of the rest.
 
+The naming rules live in `backend/pantry_names.py`, not in the script: the
+app names a new row minted from a recipe line, and the shopping-list CSV
+importer names its new rows, the same way. On the blog snapshot a fresh import
+now creates 932 rows (1,048 before), with nothing in RENAMES and one CONFIDENT
+group left.
+
 **Decisions.** When you read REVIEW and decide two rows are one ingredient
 where no rule could ("aleppo pepper" and "black aleppo pepper"), add the pair
 to `data/pantry_decisions.json`. The finder then lists it under CONFIDENT and
