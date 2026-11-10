@@ -1,284 +1,302 @@
-"""scripts/find_duplicate_ingredients.py's three detection tiers. No
-network, pure functions over whatever's in the pantry — see the script's
-own module docstring for why a plain spelling-similarity score was
-rejected in favour of "one's normalised words are a subset of the
-other's": it scored unrelated pairs like "salt"/"malt" higher than real
-duplicates like "hand soap"/"handwash".
+"""scripts/find_duplicate_ingredients.py: the rule that sorts near-duplicates
+into CONFIDENT (merge), REVIEW (a person decides) and UNCHANGED (kept apart),
+and the `Name - Type` renames.
+
+Most cases here are from the household's own report of 2026-11-10, where the
+old tiers offered to merge water, sugar and cinnamon into onion (chained
+through aliases), frozen spinach into spinach, and dried figs into a ripe fig.
 """
 
 from backend.models import Ingredient, Recipe, RecipeIngredient, ShoppingItem
 from scripts.find_duplicate_ingredients import (
-    find_exact_groups,
-    find_prep_size_groups,
-    find_qualified_variants,
+    APART,
+    CONFIDENT,
+    REVIEW,
+    apply_renames,
+    classify,
+    judge,
     merge_groups,
-    strip_prep_and_size,
+    rename_proposals,
+    row_for,
     usage_counts,
 )
 
+_ids = iter(range(1, 100_000))
 
-def make(session, name, *, aliases=None, slug=None):
-    ingredient = Ingredient(
-        slug=slug or name.lower().replace(" ", "-"), name=name, aliases=aliases or []
+
+def ing(name, *, aliases=None, prep_terms=None):
+    """An unsaved row: the rule is pure, so most tests need no database."""
+    return Ingredient(
+        id=next(_ids), slug=name.lower().replace(" ", "-"), name=name,
+        aliases=aliases or [], prep_terms=prep_terms or [],
     )
+
+
+def verdict(a, b, *, others=()):
+    rows = [row_for(i) for i in (ing(a), ing(b), *(ing(o) for o in others))]
+    singles = frozenset(r.core[0] for r in rows if len(r.core) == 1)
+    return judge(rows[0], rows[1], singles)
+
+
+def kind(a, b, **kw):
+    v = verdict(a, b, **kw)
+    return v.kind if v else None
+
+
+def make(session, name, *, aliases=None):
+    ingredient = Ingredient(slug=name.lower().replace(" ", "-"), name=name, aliases=aliases or [])
     session.add(ingredient)
     session.commit()
     session.refresh(ingredient)
     return ingredient
 
 
-class TestExactGroups:
-    def test_groups_names_that_normalise_the_same(self, session):
-        egg = make(session, "Egg")
-        eggs = make(session, "Eggs")
-        large_eggs = make(session, "Large Eggs")  # "large" is noise, "eggs" singularises
-        groups = find_exact_groups([egg, eggs, large_eggs])
-        assert len(groups) == 1
-        assert {m.id for m in groups[0]} == {egg.id, eggs.id, large_eggs.id}
-
-    def test_an_alias_can_also_form_a_group(self, session):
-        a = make(session, "Coriander")
-        b = make(session, "Cilantro", aliases=["coriander"])
-        groups = find_exact_groups([a, b])
-        assert len(groups) == 1
-        assert {m.id for m in groups[0]} == {a.id, b.id}
-
-    def test_unrelated_names_are_not_grouped(self, session):
-        a = make(session, "Salt")
-        b = make(session, "Malt")
-        assert find_exact_groups([a, b]) == []
-
-    def test_a_singleton_is_not_a_group(self, session):
-        a = make(session, "Vanilla")
-        assert find_exact_groups([a]) == []
+def use(session, ingredient, times=1):
+    recipe = Recipe(slug=f"r-{next(_ids)}", title="R")
+    session.add(recipe)
+    session.flush()
+    for n in range(times):
+        session.add(RecipeIngredient(
+            recipe_id=recipe.id, position=n, name=ingredient.name, raw_text=ingredient.name,
+            ingredient_id=ingredient.id,
+        ))
+    session.commit()
 
 
-class TestStripPrepAndSize:
-    def test_strips_a_preparation_method(self):
-        assert strip_prep_and_size("Shredded Chicken") == "chicken"
+class TestConfident:
+    def test_only_size_or_chopping_differs(self):
+        assert kind("onion", "med onion") == CONFIDENT
+        assert kind("butter", "butter cubed") == CONFIDENT
+        assert kind("banana", "mashed ripe banana") == CONFIDENT
+        assert kind("pear", "firm pear") == CONFIDENT
 
-    def test_strips_a_multi_word_preparation_phrase(self):
-        # Word-level stripping handles this without any phrase-matching:
-        # both "cut" and "diagonally" are noise words on their own.
-        assert strip_prep_and_size("Carrots Cut Diagonally") == "carrot"
+    def test_spelling_case_and_plural(self):
+        assert kind("Coriander seed", "coriander seeds") == CONFIDENT
+        assert kind("cherry", "cherries") == CONFIDENT
 
-    def test_strips_a_sizing_phrase_with_a_leading_number(self):
-        assert strip_prep_and_size("1 Inch Cubed Chicken Breast") == "chicken breast"
+    def test_the_same_thing_under_its_other_name(self):
+        assert kind("green bell pepper", "green capsicum") == CONFIDENT
+        assert kind("coriander", "cilantro") == CONFIDENT
+        assert kind("tinned lentils", "canned lentils") == CONFIDENT
 
-    def test_strips_a_qualitative_size_word(self):
-        assert strip_prep_and_size("1 Big Onion") == "onion"
-
-    def test_strips_a_generous_pinch(self):
-        assert strip_prep_and_size("Generous Pinch Salt") == "salt"
-
-    def test_strips_a_spaced_out_weight(self):
-        assert strip_prep_and_size("2.5 oz Chocolate") == "chocolate"
-
-    def test_strips_a_weight_fused_to_its_number(self):
-        assert strip_prep_and_size("500g Flour") == "flour"
-
-    def test_strips_a_fused_kg(self):
-        assert strip_prep_and_size("1kg Sugar") == "sugar"
-
-    def test_leaves_a_plain_name_alone(self):
-        assert strip_prep_and_size("Onion") == "onion"
-
-    def test_falls_back_to_the_plain_normalised_form_if_nothing_is_left(self):
-        # No food word at all, just size/prep words ("cube" is one of
-        # them too) — stripping everything would leave nothing to group
-        # on, so this returns the plain normalised form (itself already
-        # singularised to "cube") rather than an empty string a dozen
-        # other over-stripped names could collide on. The normalised form
-        # no longer carries the measured "1 inch" (it is a quantity, not a
-        # name: backend/ingredient_names.py), so the fallback is "cube".
-        assert strip_prep_and_size("1 Inch Cubes") == "cube"
+    def test_a_word_the_row_lists_as_its_own_preparation(self):
+        lemon = row_for(ing("lemon", prep_terms=["juice"]))
+        juice = row_for(ing("lemon juice"))
+        assert judge(lemon, juice, frozenset()).kind == CONFIDENT
 
 
-class TestPrepSizeGroups:
-    def test_a_plain_name_matches_its_diced_variant(self, session):
-        onion = make(session, "Onion")
-        diced = make(session, "1 Inch Diced Onion")
-        groups = find_prep_size_groups([onion, diced], exclude_ids=set())
-        assert len(groups) == 1
-        assert {m.id for m in groups[0]} == {onion.id, diced.id}
+class TestDifferentProducts:
+    """Tinned, frozen, smoked and dried are different ingredients."""
 
-    def test_unrelated_names_are_not_grouped(self, session):
-        salt = make(session, "Salt")
-        malt = make(session, "Malt")
-        assert find_prep_size_groups([salt, malt], exclude_ids=set()) == []
+    def test_frozen_spinach_is_not_spinach(self):
+        assert kind("spinach", "frozen spinach") == APART
 
-    def test_exact_group_members_are_excluded_from_this_tier(self, session):
-        egg = make(session, "Egg")
-        eggs = make(session, "Eggs")
-        groups = find_prep_size_groups([egg, eggs], exclude_ids={egg.id, eggs.id})
-        assert groups == []
+    def test_dried_figs_are_not_a_ripe_fig(self):
+        assert kind("ripe fig", "dried figs") == APART
 
-    def test_a_singleton_is_not_a_group(self, session):
-        a = make(session, "Shredded Carrot")
-        assert find_prep_size_groups([a], exclude_ids=set()) == []
+    def test_tinned_and_smoked(self):
+        assert kind("tomatoes", "tinned tomatoes") == APART
+        assert kind("salmon", "smoked salmon") == APART
 
+    def test_a_form_of_the_thing(self):
+        assert kind("yuzu", "yuzu juice") == APART
+        assert kind("pear", "pear juice") == APART
+        assert kind("chilli sauce", "chilli bean sauce") == APART or kind(
+            "chilli sauce", "chilli bean sauce") == REVIEW
 
-class TestQualifiedVariants:
-    def test_a_variety_qualifier_is_flagged(self, session):
-        onion = make(session, "Onion")
-        red_onion = make(session, "Red Onion")
-        pairs = find_qualified_variants([onion, red_onion], exclude_ids=set())
-        assert {p.id for p in pairs[0]} == {onion.id, red_onion.id}
+    def test_the_last_word_says_what_it_is(self):
+        assert kind("cream", "cream cheese") == APART
+        assert kind("milk", "milk chocolate easter egg") == APART
+        assert kind("egg", "milk chocolate easter egg", others=["milk", "chocolate"]) == APART
+        assert kind("museli", "kids museli bars") == APART
+        assert kind("yuzu", "yuzu koshō") == APART
+        # kecap manis, the sweet soy: not tomato ketchup
+        assert kind("ketchup", "ketchup manus") == APART
+        assert kind("pork loin", "pork loin chops") == APART
+        assert kind("beans", "chilli bean sauce") == APART
+        assert kind("cream", "dutch cream potato") == APART
 
-    def test_coincidental_spelling_overlap_is_not_flagged(self, session):
-        # The exact case a plain similarity score gets wrong: "salt" and
-        # "malt" share three of four letters but are not the same food,
-        # and neither's normalised words are a subset of the other's.
-        salt = make(session, "Salt")
-        malt = make(session, "Malt")
-        assert find_qualified_variants([salt, malt], exclude_ids=set()) == []
-
-    def test_a_shared_second_word_alone_is_not_enough(self, session):
-        # "lima beans" and "lime" share no words at all — a token-subset
-        # check (unlike character similarity) never even considers this
-        # a near miss.
-        lime = make(session, "Lime")
-        lima_beans = make(session, "Lima Beans")
-        assert find_qualified_variants([lime, lima_beans], exclude_ids=set()) == []
-
-    def test_exact_group_members_are_excluded_from_this_tier(self, session):
-        # A pair already reported as an exact match shouldn't also show
-        # up here — that would just be the same suggestion twice.
-        egg = make(session, "Egg")
-        eggs = make(session, "Eggs")
-        pairs = find_qualified_variants([egg, eggs], exclude_ids={egg.id, eggs.id})
-        assert pairs == []
-
-    def test_identical_normalised_forms_are_not_a_variant_pair(self, session):
-        # Two names that normalise identically are an exact match, not a
-        # "subset of itself" variant — this only matters when the caller
-        # doesn't pre-exclude them (defence in depth for find_exact_groups
-        # not having run first).
-        a = make(session, "Egg")
-        b = make(session, "EGG", slug="egg-2")
-        assert find_qualified_variants([a, b], exclude_ids=set()) == []
+    def test_another_ingredient_in_front_of_cream_or_wine(self):
+        assert kind("cream", "coconut cream", others=["coconut"]) == APART
+        assert kind("wine", "rice wine", others=["rice"]) == APART
 
 
-class TestUsageCounts:
-    def test_counts_only_linked_recipe_ingredients(self, session):
-        flour = make(session, "Flour")
-        recipe = Recipe(slug="bread", title="Bread")
-        session.add(recipe)
-        session.flush()
-        session.add(
-            RecipeIngredient(
-                recipe_id=recipe.id, position=0, name="flour", raw_text="2 cups flour",
-                ingredient_id=flour.id,
-            )
-        )
-        session.add(
-            RecipeIngredient(
-                recipe_id=recipe.id, position=1, name="salt", raw_text="a pinch salt",
-                ingredient_id=None,
-            )
-        )
-        session.commit()
-        counts = usage_counts(session)
-        assert counts == {flour.id: 1}
+class TestTypes:
+    """A type of fruit, vegetable, cream or wine stays its own row, named
+    `Name - Type`."""
+
+    def test_kept_apart_from_the_plain_one(self):
+        assert kind("eggplant", "japanese eggplant") == APART
+        assert kind("pear", "green pear") == APART
+        assert kind("cream", "thickened cream") == APART
+        assert kind("cream", "sour cream") == APART
+
+    def test_named_name_dash_type(self):
+        rows = [ing(n) for n in (
+            "green pear", "nashi pear", "beurre bosc pear", "thickened cream",
+            "sour cream", "green capsicum", "japanese eggplant", "red wine", "cherry tomato",
+        )]
+        assert {i.name: new for i, new in rename_proposals(rows)} == {
+            "green pear": "Pear - Green",
+            "nashi pear": "Pear - Nashi",
+            "beurre bosc pear": "Pear - Beurre Bosc",
+            "thickened cream": "Cream - Thickened",
+            "sour cream": "Cream - Sour",
+            "green capsicum": "Capsicum - Green",
+            "japanese eggplant": "Eggplant - Japanese",
+            "red wine": "Wine - Red",
+            "cherry tomato": "Tomato - Cherry",
+        }
+
+    def test_what_is_not_a_type(self):
+        rows = [ing(n) for n in (
+            "coconut", "coconut cream", "cream cheese", "sweet potato", "spring onion",
+            "frozen peas", "rind 2 lemons", "stewed rhubarb", "pear", "Pear - Green",
+            "ice cream", "red", "baking pears",
+        )]
+        assert rename_proposals(rows) == []
+
+    def test_a_name_dash_type_row_matches_the_words_in_any_order(self):
+        assert kind("Pear - Green", "green pears") == CONFIDENT
+        assert kind("Capsicum - Green", "green bell pepper") == CONFIDENT
+
+    def test_a_dash_type_is_not_the_plain_one(self):
+        assert kind("cheese", "cheese - blue") == REVIEW
+        assert kind("pear", "Pear - Green") == APART
 
 
-class TestMergeGroups:
-    def test_keeps_the_most_used_member_and_absorbs_the_rest(self, session):
-        # "Egg" is linked to a recipe, "Eggs" isn't — the busier row should
-        # survive even though it wasn't first in the group.
-        eggs = make(session, "Eggs")
-        egg = make(session, "Egg")
-        recipe = Recipe(slug="omelette", title="Omelette")
-        session.add(recipe)
-        session.flush()
-        session.add(
-            RecipeIngredient(
-                recipe_id=recipe.id, position=0, name="egg", raw_text="2 eggs",
-                ingredient_id=egg.id,
-            )
-        )
-        session.commit()
+class TestReview:
+    """Where the line isn't clear, a person decides."""
 
-        usage = usage_counts(session)
-        merged = merge_groups(session, [[eggs, egg]], usage)
+    def test_a_qualifier_the_rule_does_not_know(self):
+        assert kind("curry powder", "japanese curry powder") == REVIEW
+        assert kind("chili powder", "kashmiri chili powder") == REVIEW
+        assert kind("cocoa powder", "dark cocoa powder") == REVIEW
+        assert kind("sugar", "caster sugar") == REVIEW
+        assert kind("rice", "basmati rice") == REVIEW
+        assert kind("rhubarb", "stewed rhubarb") == REVIEW
 
-        assert merged == 1
-        assert session.get(Ingredient, eggs.id) is None
-        kept = session.get(Ingredient, egg.id)
-        assert kept is not None
-        assert "eggs" in kept.aliases
+    def test_words_that_are_sometimes_how_it_is_sold(self):
+        assert kind("coconut", "shredded coconut") == REVIEW
+        assert kind("almonds", "slivered almonds") == REVIEW
+        assert kind("coriander", "ground coriander") == REVIEW
+        assert kind("olive oil", "extra virgin olive oil") == REVIEW
 
-    def test_repoints_recipe_lines_and_shopping_items_off_the_absorbed_row(self, session):
-        egg = make(session, "Egg")
-        eggs = make(session, "Eggs")
-        recipe = Recipe(slug="omelette", title="Omelette")
-        session.add(recipe)
-        session.flush()
-        # Two lines linked to "Egg" so it out-uses "Eggs" and is the one
-        # merge_groups keeps — the line and item under test, linked
-        # to "Eggs", are the ones that should end up repointed.
-        session.add(
-            RecipeIngredient(
-                recipe_id=recipe.id, position=0, name="egg", raw_text="1 egg",
-                ingredient_id=egg.id,
-            )
-        )
-        session.add(
-            RecipeIngredient(
-                recipe_id=recipe.id, position=1, name="egg", raw_text="1 more egg",
-                ingredient_id=egg.id,
-            )
-        )
-        line = RecipeIngredient(
-            recipe_id=recipe.id, position=2, name="eggs", raw_text="3 eggs",
-            ingredient_id=eggs.id,
-        )
-        item = ShoppingItem(name="Eggs", ingredient_id=eggs.id)
-        session.add(line)
+    def test_a_part_of_the_thing(self):
+        assert kind("coriander", "coriander leaves") == REVIEW
+
+    def test_unrelated_names_are_not_compared(self):
+        assert kind("plain flour", "00 flour") is None
+        assert kind("salt", "malt") is None
+        assert kind("lime leaf", "lime juice") is None
+
+
+class TestClassify:
+    def test_aliases_never_chain_rows_into_a_merge(self):
+        # The report that started this: one alias per row joined onion, water,
+        # sugar and cinnamon into one "exact" group.
+        rows = [
+            ing("onion", aliases=["water"]),
+            ing("water", aliases=["sugar"]),
+            ing("sugar", aliases=["cinnamon"]),
+            ing("cinnamon"),
+        ]
+        report = classify(rows)
+        assert report.confident == []
+        assert {(r.name, alias, o.name) for r, alias, o in report.alias_links} == {
+            ("onion", "water", "water"), ("water", "sugar", "sugar"), ("sugar", "cinnamon", "cinnamon"),
+        }
+
+    def test_groups_are_disjoint_and_only_same_product(self):
+        rows = [ing(n) for n in (
+            "onion", "onions", "med onion", "red onion", "frozen spinach", "spinach",
+            "baby spinach", "cherry", "cherries", "divided",
+        )]
+        report = classify(rows)
+        groups = [sorted(r.name for r in g) for g in report.confident]
+        assert sorted(groups) == [["cherries", "cherry"], ["med onion", "onion", "onions"]]
+        ids = [r.id for g in report.confident for r in g]
+        assert len(ids) == len(set(ids))
+        assert [r.name for r in report.no_core] == ["divided"]
+
+    def test_a_prep_term_absorbs_into_the_most_specific_row(self):
+        rows = [
+            ing("chicken", prep_terms=["fillet"]),
+            ing("chicken thigh", prep_terms=["fillet"]),
+            ing("chicken thigh fillets"),
+        ]
+        groups = [sorted(r.name for r in g) for g in classify(rows).confident]
+        assert groups == [["chicken thigh", "chicken thigh fillets"]]
+
+    def test_two_rows_whose_prep_terms_tie_go_to_review(self):
+        rows = [
+            ing("lemon", prep_terms=["juice"]),
+            ing("Lemon", prep_terms=["juice"]),
+            ing("lemon juice"),
+        ]
+        report = classify(rows)
+        # The two lemons are one group; lemon juice is explained by that group.
+        assert sorted(sorted(r.name for r in g) for g in report.confident) == [
+            ["Lemon", "lemon", "lemon juice"],
+        ]
+
+
+class TestMerging:
+    def test_keeps_the_most_used_row_and_repoints_everything(self, session):
+        onion = make(session, "onion")
+        med = make(session, "med onion")
+        use(session, med, 3)
+        use(session, onion, 1)
+        item = ShoppingItem(name="onion", ingredient_id=onion.id)
         session.add(item)
         session.commit()
 
-        merge_groups(session, [[egg, eggs]], usage_counts(session))
-
-        session.refresh(line)
-        session.refresh(item)
-        assert line.ingredient_id == egg.id
-        assert item.ingredient_id == egg.id
-
-    def test_merges_every_group_independently_and_totals_the_count(self, session):
-        egg = make(session, "Egg")
-        eggs = make(session, "Eggs")
-        onion = make(session, "Onion")
-        onions = make(session, "Onions")
-
-        merged = merge_groups(session, [[egg, eggs], [onion, onions]], usage_counts(session))
-
-        assert merged == 2
-        assert session.get(Ingredient, eggs.id) is None
-        assert session.get(Ingredient, onions.id) is None
-        assert session.get(Ingredient, egg.id) is not None
-        assert session.get(Ingredient, onion.id) is not None
-
-    def test_a_three_way_group_leaves_exactly_one_survivor(self, session):
-        a = make(session, "Egg")
-        b = make(session, "Eggs")
-        c = make(session, "Large Eggs")
-
-        merged = merge_groups(session, [[a, b, c]], usage_counts(session))
-
-        assert merged == 2
-        survivors = [i for i in (a, b, c) if session.get(Ingredient, i.id) is not None]
-        assert len(survivors) == 1
-
-    def test_is_tier_agnostic_and_also_merges_a_prep_size_group(self, session):
-        # merge_groups doesn't know or care which tier found its input —
-        # this is exactly what --merge-prep-size relies on.
-        onion = make(session, "Onion")
-        diced = make(session, "1 Inch Diced Onion")
-        groups = find_prep_size_groups([onion, diced], exclude_ids=set())
-
-        merged = merge_groups(session, groups, usage_counts(session))
+        merged = merge_groups(session, classify([onion, med]).confident, usage_counts(session))
 
         assert merged == 1
-        assert session.get(Ingredient, diced.id) is None
-        assert session.get(Ingredient, onion.id) is not None
+        assert session.get(Ingredient, onion.id) is None
+        kept = session.get(Ingredient, med.id)
+        # The busier row is kept, but takes the plainer name.
+        assert kept.name == "onion"
+        assert "med onion" in kept.aliases
+        session.refresh(item)
+        assert item.ingredient_id == med.id
+
+    def test_never_merges_review_or_unchanged(self, session):
+        rows = [make(session, n) for n in ("spinach", "frozen spinach", "sugar", "caster sugar")]
+        report = classify(rows)
+        assert merge_groups(session, report.confident, usage_counts(session)) == 0
+        assert all(session.get(Ingredient, r.id) for r in rows)
+
+
+class TestRenaming:
+    def test_keeps_the_old_name_as_an_alias_and_the_slug(self, session):
+        pear = make(session, "green pear")
+        renamed, skipped = apply_renames(session, rename_proposals([pear]), {"green pear"})
+        session.refresh(pear)
+        assert (renamed, skipped) == (1, [])
+        assert pear.name == "Pear - Green"
+        assert pear.slug == "green-pear"
+        assert "green pear" in pear.aliases
+
+    def test_skips_a_name_another_row_has(self, session):
+        pear = make(session, "green pear")
+        renamed, skipped = apply_renames(
+            session, rename_proposals([pear]), {"green pear", "pear - green"}
+        )
+        assert renamed == 0 and skipped[0][1] == "Pear - Green"
+
+    def test_the_renamed_row_still_matches_recipe_lines(self, session):
+        from backend.recipes_service import find_ingredient
+
+        pear = make(session, "green pear")
+        apply_renames(session, rename_proposals([pear]), {"green pear"})
+        assert find_ingredient(session, "2 green pears, sliced").id == pear.id
+        assert find_ingredient(session, "Pear - Green").id == pear.id
+
+
+class TestUsageCounts:
+    def test_counts_only_linked_recipe_lines(self, session):
+        egg = make(session, "egg")
+        use(session, egg, 2)
+        assert usage_counts(session) == {egg.id: 2}

@@ -337,7 +337,7 @@ def _merge_into(session: Session, target: Ingredient, other: Ingredient) -> None
     commit, so a caller merging several pairs can do it as one transaction.
 
     Shared by the `/merge` endpoint below and
-    `scripts/find_duplicate_ingredients.py --merge-exact`.
+    `scripts/find_duplicate_ingredients.py --merge`.
     """
     for line in session.exec(
         select(RecipeIngredient).where(RecipeIngredient.ingredient_id == other.id)

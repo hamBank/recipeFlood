@@ -15,7 +15,7 @@ from backend.recipes_service import Pantry, find_ingredient, get_or_create_ingre
 from scripts.find_duplicate_ingredients import (
     apply_name_repairs,
     corpus_words,
-    find_exact_groups,
+    classify,
     merge_groups,
     name_repairs,
     usage_counts,
@@ -172,7 +172,7 @@ class TestNutritionLookup:
 class TestCleaningUpExistingRows:
     def test_mangled_and_correct_rows_are_exact_duplicates(self, session):
         rows = [row(session, "cherrie"), row(session, "cherry"), row(session, "cherries")]
-        (group,) = find_exact_groups(rows)
+        (group,) = classify(rows).confident
         assert {m.name for m in group} == {"cherrie", "cherry", "cherries"}
 
     def test_merging_them_keeps_every_recipe_line_linked(self, session):
@@ -188,25 +188,27 @@ class TestCleaningUpExistingRows:
             session.add(line)
             recipe_lines.append(line)
         session.commit()
-        merge_groups(session, find_exact_groups([legacy, correct]), usage_counts(session))
+        merge_groups(session, classify([legacy, correct]).confident, usage_counts(session))
         (kept,) = session.exec(select(Ingredient)).all()
         lines = session.exec(select(RecipeIngredient)).all()
         assert len(lines) == 2 and {l.ingredient_id for l in lines} == {kept.id}
 
-    def test_a_row_that_shares_different_keys_with_two_others_is_one_group(self, session):
-        # "cherrie" is also known as "tomatoe": it shares a key with "cherry" and
-        # another with "tomato". Grouping each key separately put it in two
-        # groups, and merging the first deleted it before the second ran.
+    def test_an_alias_never_pulls_a_second_ingredient_into_the_merge(self, session):
+        # "cherrie" is also known as "tomatoe". That alias is a claim, not a
+        # fact: until 2026-11-10 it made cherry and tomato one group (and the
+        # household's report merged water and sugar into onion the same way).
         x = row(session, "cherrie", aliases=["tomatoe"])
         y, z = row(session, "cherry"), row(session, "tomato")
-        (group,) = find_exact_groups([x, y, z])
-        assert {m.id for m in group} == {x.id, y.id, z.id}
-        merge_groups(session, [group], usage_counts(session))
-        assert len(session.exec(select(Ingredient)).all()) == 1
+        report = classify([x, y, z])
+        (group,) = report.confident
+        assert {m.id for m in group} == {x.id, y.id}
+        assert [(r.id, alias, o.id) for r, alias, o in report.alias_links] == [(x.id, "tomatoe", z.id)]
+        merge_groups(session, report.confident, usage_counts(session))
+        assert {i.name for i in session.exec(select(Ingredient)).all()} == {"cherry", "tomato"}
 
     def test_disjoint_groups_stay_separate(self, session):
         rows = [row(session, n) for n in ("cherrie", "cherry", "tomatoe", "tomato", "lemon")]
-        groups = find_exact_groups(rows)
+        groups = classify(rows).confident
         assert sorted(sorted(m.name for m in g) for g in groups) == [["cherrie", "cherry"], ["tomato", "tomatoe"]]
 
     def _corpus(self, session, names):

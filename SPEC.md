@@ -215,7 +215,22 @@ Importing the blog creates a stub row for every distinct ingredient phrase,
 so the pantry arrives pre-populated and ready to be priced rather than
 empty. A shopping-list export can be imported on top of it
 (`scripts/import_pantry_csv.py`), which adds the items the recipes never
-mention and fills in where each one is bought. Near-duplicates ("onion" / "red onion" / "onions") are folded
+mention and fills in where each one is bought.
+
+**What is the same ingredient.** Two names are one ingredient when what
+differs is preparation after purchase: size, chopping, ripeness ("onion",
+"med onion", "onions"). They are different ingredients when the difference
+describes a substantially different product: tinned, frozen, smoked or dried
+("frozen spinach" is not "spinach"), another form ("pear juice", "garlic
+powder"), or another thing ("cream cheese" is a cheese). Types of fruit,
+vegetables, cream and wine are their own rows, named **`Name - Type`**:
+"Pear - Green", "Capsicum - Red", "Cream - Thickened", "Wine - Dry White". That
+name matches "green pear" in a recipe, so it costs no matching. Where the line
+isn't clear ("caster sugar" next to "sugar", "japanese eggplant"), nothing
+guesses: `scripts/find_duplicate_ingredients.py` lists it for a person to
+decide.
+
+Near-duplicates are folded
 together with the merge action, which repoints recipe lines *and shopping
 items* (missing either one leaves it — the shopping item, usually —
 silently pointed at a pantry row that no longer exists), inherits any
@@ -464,7 +479,8 @@ Two lines are the same thing when they share a pantry ingredient **or the
 same name** (ignoring case, spacing, punctuation, plurals and anything in
 brackets or after a comma), so "extra virgin olive oil" from two recipes is
 one row whether or not either was ever linked to the pantry. "Frozen peas"
-and "peas" stay apart unless the pantry files both under one ingredient.
+and "peas" stay apart: frozen is a different product (see "What is the same
+ingredient").
 
 **What is in a name.** A recipe line's name often carries more than the name:
 "red onion (finely chopped)", "kecap manis (or dark chinese soy)", "sugar 250

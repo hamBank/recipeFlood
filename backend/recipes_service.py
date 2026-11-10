@@ -9,6 +9,7 @@ cost blocks.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -35,6 +36,8 @@ from .models import (
     utcnow,
 )
 from .ingredient_names import (  # noqa: F401  (normalise_ingredient_name is re-exported)
+    PRODUCT_FOLDS,
+    PRODUCT_WORDS,
     PantryEntry,
     clean_name,
     entry_for,
@@ -107,8 +110,13 @@ def find_ingredient(
     normalised = cleaned.key
     # The original key too: pantry slugs were minted from it, so anything that
     # matched before the name cleaner existed still does.
+    # Not when the original key dropped a product word: "frozen spinach" was
+    # filed under "spinach" then, and is a different purchase now.
+    legacy = legacy_key(name)
+    if set(re.findall(r"[a-z]+", name.lower())) & PRODUCT_WORDS:
+        legacy = normalised
     slugs: list[str] = []
-    for text in (name, normalised, legacy_key(name)):
+    for text in (name, normalised, legacy):
         slug = slugify(text)
         if slug and slug not in slugs:
             slugs.append(slug)
@@ -125,22 +133,29 @@ def find_ingredient(
     # is also called that", so this is safe even when creating a row.)
     query_words = frozenset(fold_word(w) for w in cleaned.key_words)
     query_key = " ".join(fold_word(w) for w in cleaned.key_words)
+
+    # A row *named* this, however it is spelled: noise dropped, plurals folded,
+    # including rows named with the original mangled plurals ("tomatoe"), which
+    # the slug lookup above reaches only through `legacy_key`. It beats an
+    # alias: a row called "thickened cream" is a better answer for "thickened
+    # cream" than a row that says it is also called that. Names are not
+    # compared when creating a row (below): "large egg" and "egg" may
+    # deliberately be separate rows. Rows that tie are the same ingredient by
+    # definition (the duplicate finder merges them); the oldest wins.
+    if fuzzy:
+        same = pantry.by_name.get(query_key)
+        if same:
+            return min(same, key=lambda i: i.id)
+
+    # An alias that is this name in every way that matters: same words once
+    # noise is dropped and plurals folded. (Aliases are the pantry saying "this
+    # is also called that", so this is safe even when creating a row.)
     same = pantry.by_alias.get(query_key)
     if same:
         return min(same, key=lambda i: i.id)
 
     if not fuzzy:
         return None
-
-    # A row *named* this, however it is spelled: noise dropped, plurals folded,
-    # including rows named with the original mangled plurals ("tomatoe"), which
-    # the slug lookup above reaches only through `legacy_key`. Names are not
-    # compared when creating a row (above): "large egg" and "egg" may
-    # deliberately be separate rows. Rows that tie are the same ingredient by
-    # definition (the duplicate finder merges them); the oldest wins.
-    same = pantry.by_name.get(query_key)
-    if same:
-        return min(same, key=lambda i: i.id)
 
     # The pantry says what is preparation for each ingredient. Everything a
     # line says beyond the ingredient's own name has to be on that list, so
@@ -155,7 +170,13 @@ def find_ingredient(
     # ingredient qualifies — "onion" reaching for one of three pantry rows
     # that all happen to contain the word is a guess, not a match, and a
     # wrong guess here silently mislinks that line's cost and nutrition.
-    word_matches = {i.id: i for i, words in pantry.word_sets if query_words <= words}
+    # Never across a product word: "peas" is not a lone "frozen peas" row, and
+    # "chilli" is not "chilli sauce".
+    word_matches = {
+        i.id: i
+        for i, words in pantry.word_sets
+        if query_words <= words and not (words - query_words) & PRODUCT_FOLDS
+    }
     if len(word_matches) == 1:
         return next(iter(word_matches.values()))
     return None
