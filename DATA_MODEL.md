@@ -83,7 +83,7 @@ original wording so a bad parse can be redone from source.
 | `raw_text` | The original line, verbatim |
 | `name` | The parsed ingredient name |
 | `quantity`, `quantity_max` | `quantity_max` only for ranges ("2–3 tbsp") |
-| `unit` | enum — `g`…`lb`, `cup`/`tbsp`/`dsp`/`tsp`, `piece`/`clove`/`bunch`…, `pinch`, `to_taste` |
+| `unit` | enum — `g`…`lb`, `cup`/`tbsp`/`dsp`/`tsp`, `piece`/`clove`/`bunch`…, `pinch`, `handful` (counted, never weighed), `to_taste` |
 | `weight_grams` | float? — what a weight-priced ingredient's cost and (always) nutrition are computed from |
 | `weight_source` | `explicit` / `converted` / `estimated` / `unknown` |
 | `volume_ml` | float? — set whenever `unit` is a volume unit; what a volume-priced ingredient's cost is computed from |

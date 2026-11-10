@@ -29,7 +29,7 @@ keep the others as a note.
   vocabulary in the pantry: whether "boneless" is prep or part of the name is
   a fact about the ingredient, not about English.
 
-* `PRODUCT_WORDS` ("frozen", "tinned", "smoked", "dried", "juice", "paste")
+* `PRODUCT_WORDS` ("frozen", "canned", "smoked", "dried", "juice", "paste")
   make a different product. They are never noise, and no fuzzy match may add
   one: a "peas" line never reaches a lone "frozen peas" row.
 * A type after a spaced dash is part of the name: "Pear - Green" keys as
@@ -37,7 +37,7 @@ keep the others as a note.
   and wine. An instruction after a dash ("onion - finely chopped") is still
   a note.
 * `SYNONYMS` give the shop's name: "bell pepper" is "capsicum", "cilantro"
-  is "coriander", "canned" is "tinned".
+  is "coriander", "tinned" is "canned", American spellings are Australian.
 
 Matching is deliberately conservative, for the reason `shopping.py` gives: a
 wrong merge is worse than no merge. In the same spirit `leaf` is not noise
@@ -102,20 +102,45 @@ PRODUCT_WORDS: frozenset[str] = frozenset({
     "flavoured", "flavored", "vinegar", "cordial", "liqueur", "concentrate",
 })
 
-#: The same thing under another name: the Australian name wins, because that is
-#: what the shop calls it. Compared on folded words, so plurals are covered.
+#: The same thing under another name: the Australian name and spelling win,
+#: because that is what the shop calls it. Compared on folded words, so plurals
+#: are covered. Used for matching keys and, by the duplicate finder, to rename.
 SYNONYMS: dict[tuple[str, ...], tuple[str, ...]] = {
     ("bell", "pepper"): ("capsicum",),
+    ("sweet", "pepper"): ("capsicum",),
     ("chili",): ("chilli",),
     ("chile",): ("chilli",),
     ("cilantro",): ("coriander",),
     ("courgette",): ("zucchini",),
     ("aubergine",): ("eggplant",),
     ("scallion",): ("spring", "onion"),
+    ("green", "onion"): ("spring", "onion"),
     ("arugula",): ("rocket",),
+    ("romaine",): ("cos",),
     ("cornstarch",): ("cornflour",),
-    ("canned",): ("tinned",),
-    ("tin",): ("tinned",),
+    ("corn", "starch"): ("cornflour",),
+    ("all", "purpose", "flour"): ("plain", "flour"),
+    ("powdered", "sugar"): ("icing", "sugar"),
+    ("confectioners", "sugar"): ("icing", "sugar"),
+    ("superfine", "sugar"): ("caster", "sugar"),
+    ("castor", "sugar"): ("caster", "sugar"),
+    ("baking", "soda"): ("bicarb", "soda"),
+    ("bicarbonate", "soda"): ("bicarb", "soda"),
+    ("ground", "beef"): ("beef", "mince"),
+    ("minced", "beef"): ("beef", "mince"),
+    ("shrimp",): ("prawn",),
+    ("garbanzo",): ("chickpea",),
+    ("chick", "pea"): ("chickpea",),
+    ("golden", "raisin"): ("sultana",),
+    ("yogurt",): ("yoghurt",),
+    ("flavor",): ("flavour",),
+    ("flavored",): ("flavoured",),
+    ("color",): ("colour",),
+    # Canned, not tinned: the household's word.
+    ("tinned",): ("canned",),
+    ("tin",): ("canned",),
+    # The household's name for bao.
+    ("steamed", "bun"): ("chinese", "steamed", "bun"),
 }
 
 #: Words after a spaced dash that are instructions, not a type: "basil - to
@@ -152,6 +177,16 @@ UNIT_WORDS: frozenset[str] = frozenset({
 #: Packaging words. Only treated as noise next to a pack size ("x 7 g tin") or
 #: an "of" ("packet of biscuits"): on their own they can be the product ("jar
 #: garlic" is not the same purchase as "garlic").
+#: How much, said in front of the name: "handfuls rice", "block halloumi",
+#: "sheets filo pastry". Never the name itself (the name follows), so dropped
+#: from the front wherever they are, into the note.
+AMOUNT_WORDS: frozenset[str] = frozenset({
+    "handful", "handfuls", "block", "blocks", "sheet", "sheets", "bunch", "bunches",
+    "sprig", "sprigs", "pinch", "pinches", "dash", "dashes", "splash", "knob", "knobs",
+    "packet", "packets", "pkt", "pkts", "punnet", "punnets", "bag", "bags", "slab",
+    "basket", "baskets", "tray", "trays", "bucket", "qt",
+})
+
 CONTAINER_WORDS: frozenset[str] = frozenset({
     "tin", "tins", "can", "cans", "jar", "jars", "packet", "packets", "pack",
     "packs", "bottle", "bottles", "bag", "bags", "tub", "tubs", "punnet",
@@ -178,6 +213,7 @@ _MEASURE_RE = re.compile(
 _COUNT_RE = re.compile(r"(?<![\w./-])(?!0\d)(\d+(?:\.\d+)?(?:\s*/\s*\d+)?)(?![\w./%-])")
 _BRACKETS = (re.compile(r"\([^()]*\)"), re.compile(r"\[[^\[\]]*\]"))
 _UNCLOSED = re.compile(r"[(\[][^)\]]*$")
+_NOTE_RE = re.compile(r"\b(?:see\s+)?notes?(?:\s*\d+[a-z]?)?\b\.?", re.IGNORECASE)
 #: Where the name ends and the instructions begin.
 _TAIL_RE = re.compile(r"\s[–—-]\s|[,;]")
 _SPACES = re.compile(r"\s+")
@@ -364,6 +400,10 @@ def clean_name(raw: str | None) -> CleanedName:
     notes: list[str] = []
 
     text = _strip_brackets(text, notes)
+    # "swiss cheese note 1", "see note": a pointer into the recipe, not the name.
+    for note in _NOTE_RE.finditer(text):
+        notes.append(_tidy(note.group(0)))
+    text = _NOTE_RE.sub(" ", text)
 
     # Instructions after the name: ", finely chopped", "; fresh grated",
     # " – drained and chopped".
@@ -410,19 +450,22 @@ def clean_name(raw: str | None) -> CleanedName:
     words = display.split()
     # Packaging next to a pack size ("tin anchovies") or an "of" ("packet of
     # Marie biscuits") is not the product.
-    while words and (
+    while len(words) > 1 and (
         words[0].lower() in {"of", "a", "an"}
+        or words[0].lower() in AMOUNT_WORDS
         or (
             words[0].lower() in CONTAINER_WORDS
-            and (pack or (len(words) > 1 and words[1].lower() == "of"))
+            and (pack or words[1].lower() == "of")
         )
     ):
         dropped = words.pop(0)
+        if dropped.lower() in AMOUNT_WORDS and dropped.lower() not in CONTAINER_WORDS:
+            notes.append(dropped.lower())
         if dropped.lower() in CONTAINER_WORDS:
             notes.append(dropped.lower())
             # The packaging goes, but a tin is still what makes it tinned.
-            if dropped.lower() in {"tin", "tins", "can", "cans"} and "tinned" not in type_words:
-                type_words.insert(0, "tinned")
+            if dropped.lower() in {"tin", "tins", "can", "cans"} and "canned" not in type_words:
+                type_words.insert(0, "canned")
     display = " ".join(words)
 
     counts = tuple(_parse_number(m.group(1)) for m in _COUNT_RE.finditer(display))
@@ -478,7 +521,12 @@ def _apply_synonyms(words: list[str]) -> list[str]:
         for phrase, replacement in _SYNONYMS_FOLDED:
             n = len(phrase)
             if tuple(folded[i:i + n]) == phrase:
-                out.extend(replacement)
+                # Already said in full ("chinese steamed buns"): leave it.
+                lead = replacement[: len(replacement) - n] if replacement[-n:] == phrase else ()
+                if lead and tuple(fold_word(w) for w in out[-len(lead):]) == lead:
+                    out.extend(words[i:i + n])
+                else:
+                    out.extend(replacement)
                 i += n
                 break
         else:
@@ -662,6 +710,38 @@ def merge_key(name: str | None) -> str:
     cleaned = clean_name(name)
     text = (cleaned.display or (name or "")).lower().replace("-", " ")
     return " ".join(stem(w) for w in re.sub(r"[^\w\s]", " ", text).split())
+
+
+def australian(text: str) -> str:
+    """`text` with each `SYNONYMS` phrase replaced by the Australian name,
+    other words as written: "green bell peppers" -> "green capsicums". For
+    renaming; matching uses the folded keys."""
+    words = text.split()
+    folded = [fold_word(re.sub(r"[^\w]", "", w.lower())) for w in words]
+    out: list[str] = []
+    i = 0
+    while i < len(words):
+        for phrase, replacement in _SYNONYMS_FOLDED:
+            n = len(phrase)
+            if tuple(folded[i:i + n]) != phrase:
+                continue
+            lead = replacement[: len(replacement) - n] if replacement[-n:] == phrase else ()
+            if lead and tuple(fold_word(w.lower()) for w in out[-len(lead):]) == lead:
+                out.extend(words[i:i + n])  # already in full
+                i += n
+                break
+            last = words[i + n - 1].lower()
+            plural = singular(last) != last
+            new = list(replacement)
+            if plural:
+                new[-1] = new[-1] + ("es" if new[-1].endswith(("sh", "ch", "x", "s")) else "s")
+            out.extend(new)
+            i += n
+            break
+        else:
+            out.append(words[i])
+            i += 1
+    return " ".join(out)
 
 
 _SYNONYMS_FOLDED = tuple(

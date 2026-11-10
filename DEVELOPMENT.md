@@ -369,10 +369,18 @@ has four lists:
   ("coriander leaves"). It also lists **every link made only through an
   alias**, never merged automatically, and names that are nothing but
   preparation ("divided").
-* **RENAMES**: types of fruit, vegetables, cream and wine, renamed `Name -
-  Type` ("Pear - Green", "Cream - Thickened"). It only renames clean names
-  (nothing but the type and the base). The old name is kept as an alias and
-  the slug is unchanged.
+* **RENAMES**: what each row should be called. `tidy_name` takes off how
+  much ("handfuls rice", "block halloumi", "x 5g packets roasted seaweed
+  snack", "sheets filo pastry"), notes ("swiss cheese note 1") and
+  preparation words ("med onion"), and gives the Australian name and spelling
+  ("bell pepper" is capsicum, "yogurt" is yoghurt, `SYNONYMS` in
+  `backend/ingredient_names.py`). The shorter version wins. Then types of
+  fruit, vegetables, cream and wine become `Name - Type` ("Pear - Green",
+  "Cream - Thickened"), and canned things `Name - Canned` ("Tomato -
+  Canned"). A rename onto a name another row already has is a merge, so it
+  is listed there instead. The old name is kept as an alias and the slug is
+  unchanged. With `--merge`, merging and renaming repeat until nothing
+  changes, since a tidied name can turn out to duplicate another row.
 * **UNCHANGED**: related names kept apart, with the reason ("frozen": a
   different product; "a 'cheese', not a 'cream'"), and a count of the rest.
 
@@ -393,8 +401,9 @@ rows or remove the alias in the ingredient editor.
 > in two groups and groups cannot chain.
 
 On the 321-recipe blog snapshot built by the old code (1,075 rows), `--merge
---rename --fix-names` merged 102 rows and renamed 44, leaving every one of the
-3,138 recipe lines linked and no dangling link. A second run changes nothing.
+--rename --fix-names` merged 113 rows and renamed 279 (1,075 down to 962),
+leaving every one of the 3,138 recipe lines linked and no dangling link. A
+second run changes nothing.
 
 `--fix-names` repairs names the old plural rule mangled ("tomatoe",
 "cherrie", "bay leave"). It only touches a word when the right spelling

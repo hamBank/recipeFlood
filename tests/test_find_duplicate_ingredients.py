@@ -68,7 +68,6 @@ class TestConfident:
         assert kind("onion", "med onion") == CONFIDENT
         assert kind("butter", "butter cubed") == CONFIDENT
         assert kind("banana", "mashed ripe banana") == CONFIDENT
-        assert kind("pear", "firm pear") == CONFIDENT
 
     def test_spelling_case_and_plural(self):
         assert kind("Coriander seed", "coriander seeds") == CONFIDENT
@@ -154,7 +153,7 @@ class TestTypes:
             "frozen peas", "rind 2 lemons", "stewed rhubarb", "pear", "Pear - Green",
             "ice cream", "red", "baking pears",
         )]
-        assert rename_proposals(rows) == []
+        assert [new for _, new in rename_proposals(rows) if " - " in new] == []
 
     def test_a_name_dash_type_row_matches_the_words_in_any_order(self):
         assert kind("Pear - Green", "green pears") == CONFIDENT
@@ -163,6 +162,74 @@ class TestTypes:
     def test_a_dash_type_is_not_the_plain_one(self):
         assert kind("cheese", "cheese - blue") == REVIEW
         assert kind("pear", "Pear - Green") == APART
+
+
+class TestTidyNames:
+    """The household's corrections of 2026-11-10."""
+
+    def test_amounts_notes_and_packaging_come_off(self):
+        rows = [ing(n) for n in (
+            "block halloumi", "swiss cheese note 1", "x 5g packets roasted seaweed snack",
+            "sheets filo pastry", "handfuls rice", "med onion", "• 2 garlic cloves",
+        )]
+        assert {i.name: new for i, new in rename_proposals(rows)} == {
+            "block halloumi": "halloumi",
+            "swiss cheese note 1": "swiss cheese",
+            "x 5g packets roasted seaweed snack": "roasted seaweed snack",
+            "sheets filo pastry": "filo pastry",
+            "handfuls rice": "rice",
+            "med onion": "onion",
+            "• 2 garlic cloves": "garlic cloves",
+        }
+
+    def test_australian_names(self):
+        rows = [ing(n) for n in ("bell pepper", "green bell pepper", "steamed buns", "greek yogurt", "cilantro")]
+        assert {i.name: new for i, new in rename_proposals(rows)} == {
+            "bell pepper": "capsicum",
+            "green bell pepper": "Capsicum - Green",
+            "steamed buns": "chinese steamed buns",
+            "greek yogurt": "greek yoghurt",
+            "cilantro": "coriander",
+        }
+
+    def test_canned_is_name_dash_canned(self):
+        rows = [ing(n) for n in ("tinned tomatoes", "canned chickpeas", "can coconut milk", "Tomatoes - Canned")]
+        assert {i.name: new for i, new in rename_proposals(rows)} == {
+            "tinned tomatoes": "Tomato - Canned",
+            "canned chickpeas": "Chickpea - Canned",
+        }
+
+    def test_the_snapshot_s_odd_cases(self):
+        rows = [ing(n) for n in (
+            "sized orange zest 1 orange", "x 7 g tin anchovies –", "seeded mustard", "1 cup",
+            "bibb lettuce green lettuce see note", "basket 4 qt/4 l peach",
+            "x 500g jars pitted sweet cherry", "x 395g cans sweetened condensed milk",
+        )]
+        assert {i.name: new for i, new in rename_proposals(rows)} == {
+            "sized orange zest 1 orange": "orange",
+            "x 7 g tin anchovies –": "Anchovy - Canned",
+            "bibb lettuce green lettuce see note": "bibb lettuce green lettuce",
+            "basket 4 qt/4 l peach": "peach",
+            "x 500g jars pitted sweet cherry": "jarred sweet cherry",
+            "x 395g cans sweetened condensed milk": "Sweetened condensed milk - Canned",
+        }
+
+    def test_a_rename_onto_an_existing_name_is_a_merge_not_a_rename(self):
+        rows = [ing("warm milk"), ing("milk")]
+        assert rename_proposals(rows) == []
+
+    def test_what_a_tidy_name_keeps(self):
+        rows = [ing(n) for n in ("cream of tartar", "salt and pepper", "fresh pasta", "shredded coconut")]
+        assert rename_proposals(rows) == []
+
+    def test_a_canned_row_matches_every_way_of_saying_it(self, session):
+        from backend.recipes_service import find_ingredient
+
+        row = make(session, "tinned tomatoes")
+        apply_renames(session, rename_proposals([row]), {"tinned tomatoes"})
+        assert row.name == "Tomato - Canned"
+        for line in ("canned tomatoes", "tinned tomatoes", "x 400 g tin tomatoes", "Tomatoes - Canned"):
+            assert find_ingredient(session, line).id == row.id, line
 
 
 class TestReview:
@@ -175,6 +242,16 @@ class TestReview:
         assert kind("sugar", "caster sugar") == REVIEW
         assert kind("rice", "basmati rice") == REVIEW
         assert kind("rhubarb", "stewed rhubarb") == REVIEW
+
+    def test_firm_is_for_a_person_to_judge(self):
+        # Firm tofu is not silken tofu; a firm pear is a pear.
+        assert kind("tofu", "firm tofu") == REVIEW
+        assert kind("silken tofu", "silken firm tofu") == REVIEW
+        assert kind("pear", "firm pear") == REVIEW
+
+    def test_steamed_buns_are_not_buns(self):
+        assert kind("buns", "steamed buns") == REVIEW
+        assert kind("steamed buns", "chinese steamed buns") == CONFIDENT
 
     def test_words_that_are_sometimes_how_it_is_sold(self):
         assert kind("coconut", "shredded coconut") == REVIEW

@@ -398,7 +398,7 @@ class TestNameDashType:
             ("onion - finely chopped", "onion"),
             ("basil - to serve", "basil"),
             ("tomatoes - see note", "tomato"),
-            ("all-purpose flour - sift before measuring", "all purpose flour"),
+            ("all-purpose flour - sift before measuring", "plain flour"),
             ("butter - softened", "butter"),
         ]:
             assert normalise_ingredient_name(line) == key, line
@@ -412,11 +412,57 @@ class TestProductsAndSynonyms:
         assert normalise_ingredient_name("frozen spinach") == "frozen spinach"
         assert normalise_ingredient_name("dried figs") == "dried fig"
 
-    def test_a_tin_makes_it_tinned(self):
-        assert normalise_ingredient_name("x 400 g tin tomatoes") == "tinned tomato"
-        assert normalise_ingredient_name("canned tomatoes") == "tinned tomato"
+    def test_a_tin_makes_it_canned(self):
+        # "Canned" is the household's word; tinned and a tin are the same.
+        for line in ("x 400 g tin tomatoes", "canned tomatoes", "tinned tomatoes", "Tomatoes - Canned"):
+            assert normalise_ingredient_name(line) == "canned tomato", line
 
     def test_the_shop_name_wins(self):
         assert normalise_ingredient_name("green bell peppers") == "green capsicum"
         assert normalise_ingredient_name("cilantro") == "coriander"
         assert normalise_ingredient_name("chili powder") == normalise_ingredient_name("chilli powder")
+
+
+class TestAmountsInTheName:
+    """A pantry name minted from a recipe line can carry how much: those words
+    go to the note, not the name."""
+
+    def test_leading_amount_and_packaging_words(self):
+        for line, name in [
+            ("block halloumi", "halloumi"),
+            ("sheets filo pastry", "filo pastry"),
+            ("handfuls rice", "rice"),
+            ("x 5g packets roasted seaweed snack", "roasted seaweed snack"),
+            ("bunch coriander", "coriander"),
+        ]:
+            assert clean_name(line).display == name, line
+
+    def test_a_word_alone_is_still_the_name(self):
+        assert clean_name("pinch").display == "pinch"
+        assert clean_name("cloves").display == "cloves"
+
+    def test_a_jar_is_still_part_of_the_name(self):
+        assert normalise_ingredient_name("jar garlic") == "jar garlic"
+
+    def test_a_note_pointer_is_not_the_name(self):
+        assert clean_name("swiss cheese note 1").display == "swiss cheese"
+        assert "note 1" in clean_name("swiss cheese note 1").notes
+        assert clean_name("salt (see note)").display == "salt"
+
+
+class TestAustralianNames:
+    def test_the_australian_name_wins(self):
+        for us, au in [
+            ("all-purpose flour", "plain flour"),
+            ("powdered sugar", "icing sugar"),
+            ("baking soda", "bicarb soda"),
+            ("ground beef", "beef mince"),
+            ("shrimp", "prawn"),
+            ("greek yogurt", "greek yoghurt"),
+            ("scallions", "spring onion"),
+        ]:
+            assert normalise_ingredient_name(us) == normalise_ingredient_name(au), us
+
+    def test_steamed_buns_are_chinese_steamed_buns(self):
+        assert normalise_ingredient_name("steamed buns") == "chinese steamed bun"
+        assert normalise_ingredient_name("chinese steamed buns") == "chinese steamed bun"
