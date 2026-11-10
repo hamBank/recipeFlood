@@ -498,18 +498,36 @@ def _mangled(name: str) -> bool:
     return any(repair(w) != w for w in re.findall(r"[a-z]+", name.lower()))
 
 
-def merge_groups(session: Session, groups: list[list[Row]], usage: dict[int, int]) -> int:
-    """Merge each group into its keeper, one commit per group. If another
-    member has a plainer name with the same core ("onion" next to a busier
-    "med onion"), the keeper takes that name and keeps its own as an alias.
-    Returns how many rows were absorbed."""
+def group_name(group: list[Row], single_names: frozenset[str] = frozenset()) -> str:
+    """The name a merged group ends up with: each member's name as RENAMES
+    would have it (no amounts, notes or prep words, Australian, `Name - Type`),
+    then the shortest of those, spelled right ("peach", not "peache"),
+    preferring one a member already has ("rice paper round" stays as written).
+
+        'x 250g blocks halloumi thickly' + 'block halloumi about 16 slice' -> 'halloumi'
+    """
+    def key(member: Row):
+        name = proposed_name(member.name, single_names)
+        return (len(re.findall(r"[A-Za-z%]+", name)), _mangled(name), name != member.name, len(name), member.id)
+
+    best = min(group, key=key)
+    return proposed_name(best.name, single_names)
+
+
+def merge_groups(
+    session: Session,
+    groups: list[list[Row]],
+    usage: dict[int, int],
+    single_names: frozenset[str] = frozenset(),
+) -> int:
+    """Merge each group into its keeper (the row used in the most recipes),
+    one commit per group, and give it the group's name (`group_name`). Every
+    old name is kept as an alias. Returns how many rows were absorbed."""
     merged = 0
     for group in groups:
         ordered = keeper_first(group, usage)
         keep = ordered[0]
-        # The shortest name, and a correctly spelled one over "cherrie".
-        plainest = min(ordered, key=lambda r: (len(r.words), _mangled(r.name), r.id))
-        new_name = plainest.name if set(plainest.core) == set(keep.core) else keep.name
+        new_name = group_name(group, single_names)
         for other in ordered[1:]:
             _merge_into(session, keep.ingredient, other.ingredient)
             merged += 1
@@ -602,9 +620,10 @@ def main() -> int:
 
         confident = [g for g in report.confident if wanted(*g)]
         print(f"CONFIDENT: merge, only preparation differs ({len(confident)} group(s))\n")
+        single_names = frozenset(r.core[0] for r in map(row_for, ingredients) if len(r.core) == 1)
         for group in confident:
             ordered = keeper_first(group, usage)
-            print(f"  keep {label(ordered[0])}")
+            print(f"  {group_name(group, single_names)!r}: keep {label(ordered[0])}")
             for other in ordered[1:]:
                 print(f"    ← {label(other)}")
         if not confident:
@@ -623,7 +642,9 @@ def main() -> int:
         if not (review or links or no_core):
             print("  none")
 
-        renames = [(i, n) for i, n in rename_proposals(ingredients) if wanted(i)]
+        # A row in a CONFIDENT group gets the group's name there, not here.
+        in_groups = {r.id for g in report.confident for r in g}
+        renames = [(i, n) for i, n in rename_proposals(ingredients) if wanted(i) and i.id not in in_groups]
         print(f"\nRENAMES: tidy names, Australian names, Name - Type ({len(renames)} row(s))\n")
         for ingredient, new_name in renames:
             print(f"  {label(ingredient)}  →  {new_name!r}")
@@ -638,7 +659,7 @@ def main() -> int:
 
         # Labels are printed above, before merging: `_merge_into` deletes rows.
         if confident and args.merge:
-            print(f"\nMerged {merge_groups(session, confident, usage)} row(s) into their group's keeper.")
+            print(f"\nMerged {merge_groups(session, confident, usage, single_names)} row(s) into their group's keeper.")
         elif confident:
             print("\n  (nothing merged: pass --merge once the CONFIDENT list looks right)")
 
@@ -660,7 +681,7 @@ def main() -> int:
                 if not again and not renamed:
                     break
                 if again:
-                    print(f"Merged {merge_groups(session, again, usage)} more row(s) the renames made duplicates.")
+                    print(f"Merged {merge_groups(session, again, usage, single_names)} more row(s) the renames made duplicates.")
         elif renames:
             print("  (nothing renamed: pass --rename)")
 

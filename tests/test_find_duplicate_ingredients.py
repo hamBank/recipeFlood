@@ -318,6 +318,33 @@ class TestClassify:
         ]
 
 
+class TestGroupNames:
+    """The name a merged group ends up with, which the report shows, so the
+    CONFIDENT list never reads as if "handful kalamata olive" will stay.
+    The household's corrections of 2026-11-10."""
+
+    def name_of(self, *names):
+        from scripts.find_duplicate_ingredients import group_name
+
+        return group_name([row_for(ing(n)) for n in names])
+
+    def test_amounts_and_notes_never_survive_a_merge(self):
+        assert self.name_of("x 250g blocks halloumi thickly", "block halloumi about 16 slice") == "halloumi"
+        assert self.name_of("basket 4 qt/4 l peache", "peach") == "peach"
+        assert self.name_of('sheets 22cm/8.5" round rice paper note 1', "rice paper round") == "rice paper round"
+        assert self.name_of("handfuls rice 500 600g", "handfuls rice") == "rice"
+        assert self.name_of("swiss cheese note 1", "swiss cheese") == "swiss cheese"
+        assert self.name_of("sheets filo pastry", "packet filo pastry") == "filo pastry"
+
+    def test_australian_names_and_types(self):
+        assert self.name_of("green bell pepper", "green capsicum") == "Capsicum - Green"
+        assert self.name_of("bell pepper", "bell peppers") == "capsicum"
+        assert self.name_of("handful kalamata olive", "kalamata olives") == "Olive - Kalamata"
+
+    def test_canned_groups_are_name_dash_canned(self):
+        assert self.name_of("canned chickpeas", "tinned chickpeas", "x 400 g tin chickpeas") == "Chickpea - Canned"
+
+
 class TestMerging:
     def test_keeps_the_most_used_row_and_repoints_everything(self, session):
         onion = make(session, "onion")
