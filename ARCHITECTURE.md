@@ -216,8 +216,19 @@ touches `.deploy-trigger`; a systemd path unit runs `deploy.sh --update`
   string; the Pantry page merges duplicates.
 - `Ingredient.aliases` is how spellings stay bound to one row. The
   shopping-list importer writes every variant it saw there, which makes a
-  re-import a no-op; `find_ingredient` normalises both sides, so an alias
-  matches whether or not the query needed singularising.
+  re-import a no-op; `find_ingredient` folds both sides (see below), so an
+  alias matches whatever plural form the query took.
+- Plurals have three jobs and three functions in `backend/ingredient_names.py`:
+  `singular` names things ("tomatoes" -> "tomato"), `fold_word` makes every
+  spelling comparable (equality only, never shown), and `legacy_key` keeps the
+  original rule alive for slug lookups. The original rule, which dropped one
+  trailing "s", turned "tomatoes", "cherries" and "leaves" into "tomatoe",
+  "cherrie" and "leave", and pantry rows were *named* with those. So nothing
+  compares the spelled-out word: pantry names, aliases, prep terms, shopping
+  rows, the nutrition lookup (`afcd.tokenise`) and the CSV importer all compare
+  `fold_word`, under which a row called "tomatoe" is still the tomato row. The
+  create check compares slugs and aliases only (never names), so "large egg"
+  and "egg" can still be separate rows on purpose.
 - `Ingredient.prep_terms` says which extra words in a recipe line are mere
   preparation for that ingredient ("juice" for a lemon, "boneless" for a
   chicken thigh). A line whose extras are all listed belongs to the row. The

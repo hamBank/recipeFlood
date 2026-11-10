@@ -30,7 +30,17 @@ keep the others as a note.
   a fact about the ingredient, not about English.
 
 Matching is deliberately conservative, for the reason `shopping.py` gives: a
-wrong merge is worse than no merge.
+wrong merge is worse than no merge. In the same spirit `leaf` is not noise
+("lime leaf" is not "lime"); what a leaf means for a herb is the pantry's to
+say, in `prep_terms`.
+
+## Plurals
+
+The original rule dropped one trailing "s", which turned "tomatoes",
+"cherries" and "leaves" into "tomatoe", "cherrie" and "leave", and pantry rows
+were named with those. The fix is not to rename the world and hope: every
+comparison goes through `fold_word`, which maps all spellings of a word, the
+mangled ones too, to one real word (see the section below).
 """
 
 from __future__ import annotations
@@ -55,7 +65,13 @@ _BASE_NOISE: frozenset[str] = frozenset({
     "toasted", "flat", "leaf", "plus", "more", "to", "serve", "taste",
     "of", "the", "a", "an", "and", "or", "for", "at", "room", "temperature",
 })
-MATCH_NOISE: frozenset[str] = _BASE_NOISE | frozenset({
+#: `leaf` is not noise any more. It was there for "flat leaf parsley", but it
+#: also made "lime leaf" the same as "lime" and "curry leaf" the same as
+#: "curry", and only for the singular ("leaves" was never noise). "Flat leaf" is
+#: handled as the pair it is (see `clean_name`); what a leaf means for a herb is
+#: the pantry's to say, with `prep_terms`. The original list stays in
+#: `_BASE_NOISE` so `legacy_key` can still reach every row it used to.
+MATCH_NOISE: frozenset[str] = (_BASE_NOISE - {"leaf"}) | frozenset({
     # Added with the name cleaner: adverbs, sizes and qualifiers.
     "freshly", "ripe", "very", "about", "approximately", "optional", "sifted",
     "firmly", "loosely", "coarsely", "thickly", "med", "sized", "scant",
@@ -150,13 +166,101 @@ class CleanedName:
     key: str = field(default="", compare=False)
 
 
-def singular(word: str) -> str:
-    """Drop a trailing plural "s", leaving "cress", "hummus" and "asparagus"
-    alone. Deliberately crude, and deliberately the same rule the pantry's
-    existing slugs were minted with."""
+# --------------------------------------------------------------------------
+# Plurals
+#
+# Three rules live here, for three jobs:
+#
+# * `_crude_singular` is the original rule, kept verbatim. Pantry slugs and the
+#   names of stub rows were minted with it, so `legacy_key` still uses it:
+#   anything that matched before still matches.
+# * `singular` is the right answer, for naming things: "tomatoes" -> "tomato",
+#   not the "tomatoe" the original rule gave (and left in the pantry).
+# * `fold_word` is for *comparing*: every spelling of a word, including the
+#   mangled ones already stored, maps to one string. Equality only; never shown.
+# --------------------------------------------------------------------------
+
+#: Words that end in "s" and are already singular.
+_SINGULAR_S = frozenset({
+    "asparagus", "hummus", "couscous", "molasses", "series", "species", "swiss",
+    "cress", "watercress", "lemongrass", "citrus", "bass", "grass", "brussels",
+})
+#: Irregular plurals ("ves" and friends) and spellings where "ies" is not "y".
+_IRREGULAR = {
+    "leaves": "leaf", "loaves": "loaf", "halves": "half", "knives": "knife",
+    "shelves": "shelf", "calves": "calf", "wolves": "wolf", "wives": "wife",
+    "chillies": "chilli",
+}
+#: Real singulars that end like a mangled plural, so are never "repaired".
+_SINGULAR_IE = frozenset({
+    "cookie", "brownie", "smoothie", "veggie", "calorie", "zombie", "movie",
+    "selfie", "hoodie", "rookie", "pie", "tie", "lie",
+})
+_SINGULAR_OE = frozenset({"shoe", "toe", "canoe", "oboe", "aloe", "horseshoe"})
+_SINGULAR_CHE = frozenset({
+    "quiche", "brioche", "cache", "niche", "moustache", "ganache", "pistache", "mousse",
+})
+_SINGULAR_ENDINGS = _SINGULAR_IE | _SINGULAR_OE | _SINGULAR_CHE
+#: What the original rule turned a plural into, where the right word is not
+#: reachable by a suffix rule.
+_MANGLED = {
+    "leave": "leaf", "halve": "half", "knive": "knife", "shelve": "shelf",
+    "calve": "calf", "wolve": "wolf", "wive": "wife", "molasse": "molasses",
+    "chillie": "chilli", "chilly": "chilli",
+}
+
+
+def _crude_singular(word: str) -> str:
+    """The original rule: drop one trailing "s", leaving "cress", "hummus" and
+    "asparagus" alone. Wrong for "tomatoes", "cherries" and "leaves"."""
     if len(word) > 3 and word.endswith("s") and not word.endswith(("ss", "us", "is")):
         return word[:-1]
     return word
+
+
+def singular(word: str) -> str:
+    """The singular of a plural word, for naming: "tomatoes" -> "tomato",
+    "cherries" -> "cherry", "leaves" -> "leaf", "peaches" -> "peach". A word
+    that is not plural comes back unchanged."""
+    if word in _SINGULAR_S or len(word) <= 3 or not word.endswith("s"):
+        return word
+    if word in _IRREGULAR:
+        return _IRREGULAR[word]
+    if word[:-1] in _SINGULAR_ENDINGS:
+        return word[:-1]
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    if word.endswith("oes"):
+        return word[:-2]
+    if word.endswith(("ches", "shes", "sses", "xes")):
+        return word[:-2]
+    if word.endswith(("ss", "us", "is")):
+        return word
+    return word[:-1]
+
+
+def repair(word: str) -> str:
+    """Undo what the original rule did to a singular: "tomatoe" -> "tomato",
+    "cherrie" -> "cherry", "peache" -> "peach". Words that really end that way
+    ("cookie", "shoe", "quiche") are left alone."""
+    if word in _MANGLED:
+        return _MANGLED[word]
+    if len(word) <= 4 or word in _SINGULAR_ENDINGS:
+        return word
+    if word.endswith("ie"):
+        return word[:-2] + "y"
+    if word.endswith("oe"):
+        return word[:-1]
+    if word.endswith(("che", "she", "xe", "sse")):
+        return word[:-1]
+    return word
+
+
+def fold_word(word: str) -> str:
+    """One string for every spelling of a word, mangled ones included, for
+    comparing: "tomato", "tomatoes" and the "tomatoe" already in the pantry
+    all fold to "tomato". Always a real word, so it reads in a debugger."""
+    return repair(singular(word.lower()))
 
 
 def _parse_number(text: str) -> float:
@@ -263,7 +367,13 @@ def clean_name(raw: str | None) -> CleanedName:
     key_source = display.lower().replace("-", " ")
     all_words = [w.strip("().!?:") for w in key_source.split()]
     all_words = [w for w in all_words if w]
-    kept = [w for w in all_words if w not in MATCH_NOISE and not _is_bare_number(w)]
+    kept = [
+        w
+        for i, w in enumerate(all_words)
+        if w not in MATCH_NOISE
+        and not _is_bare_number(w)
+        and not (w == "leaf" and i > 0 and all_words[i - 1] == "flat")
+    ]
     if not kept:
         kept = all_words
     key = " ".join([*kept[:-1], singular(kept[-1])]) if kept else ""
@@ -310,13 +420,20 @@ def legacy_key(name: str) -> str:
     if not kept:
         kept = [w for w in words if w]
     if kept:
-        kept[-1] = singular(kept[-1])
+        kept[-1] = _crude_singular(kept[-1])
     return " ".join(kept)
+
+
+def match_key(name: str) -> str:
+    """`normalise_ingredient_name` folded word by word: equal for every spelling
+    of the same ingredient, however the pantry row happens to be spelled.
+    For comparing and grouping, never for display."""
+    return " ".join(fold_word(w) for w in clean_name(name).key_words)
 
 
 def stem(word: str) -> str:
     """The form words are compared in when matching sets of words."""
-    return singular(word.lower())
+    return fold_word(word)
 
 
 def stems(words) -> frozenset[str]:

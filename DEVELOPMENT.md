@@ -341,12 +341,21 @@ get it.
 
 ## Finding duplicate pantry rows
 
-> **After upgrading to name cleaning** (brackets, instructions and quantities
-> are no longer part of a name's match key), rows minted earlier from such
-> names, like "sugar 250 ml" next to "sugar", now count as exact duplicates.
-> Run the report below, read it, then `--merge-exact`. On the 321-recipe blog
-> snapshot it found 70 groups and merged 101 rows with every recipe line
-> still linked.
+> **After upgrading to name cleaning and the plural fix** (brackets,
+> instructions and quantities are no longer part of a name's match key, and
+> "tomatoes", "tomato" and the old importer's "tomatoe" are one word), rows
+> minted earlier now count as exact duplicates: "sugar 250 ml" next to
+> "sugar", "cherrie" next to "cherry". Run the report below, read it, then
+> `--merge-exact --fix-names`. On the 321-recipe blog snapshot, built by the
+> old code, that merged 106 rows and renamed 56 (1,180 pantry rows down to
+> 1,074), with every recipe line still linked; a second run changes nothing.
+>
+> `--fix-names` repairs names the old plural rule mangled ("tomatoe",
+> "cherrie", "bay leave"). It only touches a word when the right spelling
+> appears elsewhere in your pantry or recipes ("Marie biscuits" stays: nothing
+> says "Mary"), keeps the old name as an alias so nothing stops matching, and
+> leaves the slug alone so links and URLs survive. A rename that would give two
+> rows the same name is skipped; merge them first.
 
 Importing the blog, a shopping-list CSV and years of cooking history each
 mint one pantry row per distinct phrase they saw, so the same real
@@ -361,6 +370,7 @@ python -m scripts.find_duplicate_ingredients
 python -m scripts.find_duplicate_ingredients --min-usage 1   # skip zero-usage stubs
 python -m scripts.find_duplicate_ingredients --merge-exact   # actually merge the exact tier
 python -m scripts.find_duplicate_ingredients --merge-exact --merge-prep-size  # + the prep/size tier
+python -m scripts.find_duplicate_ingredients --fix-names     # rename "tomatoe" -> "tomato"
 ```
 
 By default it's read-only — it only prints suggestions, in three tiers:

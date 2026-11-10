@@ -6,6 +6,7 @@ differently, and suggest which to merge.
     python -m scripts.find_duplicate_ingredients --min-usage 1
     python -m scripts.find_duplicate_ingredients --merge-exact
     python -m scripts.find_duplicate_ingredients --merge-exact --merge-prep-size
+    python -m scripts.find_duplicate_ingredients --fix-names
 
 Importing the blog, a shopping-list CSV and years of cooking history each
 create one pantry row per distinct phrase they saw (see SPEC.md "The
@@ -91,7 +92,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlmodel import Session, func, select  # noqa: E402
 
 from backend.database import engine  # noqa: E402
-from backend.ingredient_names import PREP_WORDS, SIZE_WORDS, UNIT_WORDS  # noqa: E402
+from backend.ingredient_names import (  # noqa: E402
+    PREP_WORDS,
+    SIZE_WORDS,
+    UNIT_WORDS,
+    fold_word,
+    match_key,
+    repair,
+)
 from backend.models import Ingredient, RecipeIngredient  # noqa: E402
 from backend.recipes_service import normalise_ingredient_name  # noqa: E402
 from backend.routers.ingredients import _merge_into  # noqa: E402
@@ -139,8 +147,8 @@ def usage_counts(session: Session) -> dict[int, int]:
 def normalised_keys(ingredient: Ingredient) -> set[str]:
     """Every normalised form this ingredient could be found under — its
     own name, plus each alias."""
-    keys = {normalise_ingredient_name(ingredient.name)}
-    keys.update(normalise_ingredient_name(a) for a in ingredient.aliases or [])
+    keys = {match_key(ingredient.name)}
+    keys.update(match_key(a) for a in ingredient.aliases or [])
     keys.discard("")
     return keys
 
@@ -148,28 +156,44 @@ def normalised_keys(ingredient: Ingredient) -> set[str]:
 def prep_size_keys(ingredient: Ingredient) -> set[str]:
     """Every prep/size-stripped form this ingredient could be found
     under — its own name, plus each alias."""
-    keys = {strip_prep_and_size(n) for n in [ingredient.name, *(ingredient.aliases or [])]}
+    keys = {
+        " ".join(fold_word(w) for w in strip_prep_and_size(n).split())
+        for n in [ingredient.name, *(ingredient.aliases or [])]
+    }
     keys.discard("")
     return keys
 
 
 def _group_by_shared_key(ingredients: list[Ingredient], key_fn) -> list[list[Ingredient]]:
-    """Ingredients partitioned into groups that share at least one key
-    from `key_fn`, each ingredient counted in only its first group."""
-    by_key: dict[str, list[Ingredient]] = defaultdict(list)
+    """Ingredients partitioned into groups: two ingredients are in the same
+    group when they share a key from `key_fn`, directly or through a third.
+
+    Connected components, so every ingredient is in exactly one group. That is
+    not cosmetic: merging deletes the absorbed rows, so a row that appeared in
+    two groups was gone by the second merge ("Instance has been deleted"). It
+    happens whenever a row's name and an alias each match a different sibling,
+    e.g. "cherrie", also known as "tomatoe", next to "cherry" and "tomato".
+    """
+    parent: dict[int, int] = {i.id: i.id for i in ingredients}
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    first_with_key: dict[str, int] = {}
     for ingredient in ingredients:
         for key in key_fn(ingredient):
-            by_key[key].append(ingredient)
+            if key in first_with_key:
+                parent[find(ingredient.id)] = find(first_with_key[key])
+            else:
+                first_with_key[key] = ingredient.id
 
-    groups: list[list[Ingredient]] = []
-    seen_ids: set[int] = set()
-    for members in by_key.values():
-        ids = {m.id for m in members}
-        if len(ids) < 2 or ids <= seen_ids:
-            continue
-        groups.append(members)
-        seen_ids |= ids
-    return groups
+    components: dict[int, list[Ingredient]] = defaultdict(list)
+    for ingredient in ingredients:  # input order, so the output is stable
+        components[find(ingredient.id)].append(ingredient)
+    return [members for members in components.values() if len(members) > 1]
 
 
 def find_exact_groups(ingredients: list[Ingredient]) -> list[list[Ingredient]]:
@@ -217,7 +241,7 @@ def find_qualified_variants(
     scale (a few hundred rows — same reasoning as
     recipes_service.same_season_recipe_ids)."""
     candidates = [i for i in ingredients if i.id not in exclude_ids]
-    tokens = {i.id: set(normalise_ingredient_name(i.name).split()) for i in candidates}
+    tokens = {i.id: set(match_key(i.name).split()) for i in candidates}
     pairs: list[tuple[Ingredient, Ingredient]] = []
     for a, b in combinations(candidates, 2):
         ta, tb = tokens[a.id], tokens[b.id]
@@ -241,6 +265,70 @@ def print_groups(
         print()
 
 
+def corpus_words(session: Session, ingredients: list[Ingredient]) -> set[str]:
+    """Every word in the pantry's names and aliases and in the recipe lines:
+    the household's own vocabulary, which is what decides whether a word that
+    looks mangled really is."""
+    texts = [n for i in ingredients for n in (i.name, *(i.aliases or []))]
+    texts += list(session.exec(select(RecipeIngredient.name)).all())
+    return {w.lower() for text in texts for w in re.findall(r"[A-Za-z]+", text or "")}
+
+
+def name_repairs(
+    ingredients: list[Ingredient], corpus: set[str]
+) -> list[tuple[Ingredient, str]]:
+    """Pantry rows whose name carries a plural the original rule mangled
+    ("tomatoe", "cherrie", "peache"), with the name they should have.
+
+    A word is only repaired when its repaired form turns up somewhere else in
+    the corpus: "cherrie" -> "cherry" because "cherry" and "cherries" are in
+    the recipes, but "Marie" is left alone because nothing says "Mary".
+    """
+    by_fold: dict[str, set[str]] = defaultdict(set)
+    for word in corpus:
+        by_fold[fold_word(word)].add(word)
+
+    def fix(match: re.Match) -> str:
+        word = match.group(0)
+        lower = word.lower()
+        repaired = repair(lower)
+        if repaired == lower or not (by_fold.get(repaired, set()) - {lower}):
+            return word
+        return repaired.capitalize() if word[:1].isupper() else repaired
+
+    repairs = []
+    for ingredient in ingredients:
+        new_name = re.sub(r"[A-Za-z]+", fix, ingredient.name)
+        if new_name != ingredient.name:
+            repairs.append((ingredient, new_name))
+    return repairs
+
+
+def apply_name_repairs(
+    session: Session, repairs: list[tuple[Ingredient, str]], taken: set[str]
+) -> tuple[int, list[tuple[Ingredient, str]]]:
+    """Rename the rows, keeping the old name as an alias so nothing that matched
+    it stops matching, and leaving the slug alone so links and URLs survive.
+    A rename that would give two rows the same name is skipped and returned:
+    merge them first. Returns (renamed, skipped)."""
+    renamed, skipped = 0, []
+    for ingredient, new_name in repairs:
+        if new_name.lower() in taken:
+            skipped.append((ingredient, new_name))
+            continue
+        taken.discard(ingredient.name.lower())
+        taken.add(new_name.lower())
+        aliases = {a.lower() for a in (ingredient.aliases or [])}
+        aliases.add(ingredient.name.lower())
+        aliases.discard(new_name.lower())
+        ingredient.aliases = sorted(aliases)
+        ingredient.name = new_name
+        session.add(ingredient)
+        renamed += 1
+    session.commit()
+    return renamed, skipped
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
@@ -258,6 +346,11 @@ def main() -> int:
         "--merge-prep-size",
         action="store_true",
         help="actually merge every prep/size-variant group too (never qualified variants) instead of just reporting it",
+    )
+    parser.add_argument(
+        "--fix-names",
+        action="store_true",
+        help='actually rename rows whose name carries a mangled plural ("tomatoe" -> "tomato")',
     )
     args = parser.parse_args()
 
@@ -321,7 +414,22 @@ def main() -> int:
             shorter, longer = (a, b) if len(a.name) <= len(b.name) else (b, a)
             print(f"  {label(shorter)}  ⊂  {label(longer)}")
 
-        if not exact_groups and not prep_groups and not variants:
+        # Re-read: the merges above deleted rows.
+        ingredients = list(session.exec(select(Ingredient)).all())
+        repairs = name_repairs(ingredients, corpus_words(session, ingredients))
+        print(f"\nMANGLED NAMES — {len(repairs)} row(s):\n")
+        for ingredient, new_name in repairs:
+            print(f"  {label(ingredient)}  →  {new_name!r}")
+        if repairs and args.fix_names:
+            taken = {i.name.lower() for i in ingredients}
+            renamed, skipped = apply_name_repairs(session, repairs, taken)
+            print(f"\nRenamed {renamed} row(s); the old names are kept as aliases.")
+            for ingredient, new_name in skipped:
+                print(f"  skipped {ingredient.name!r}: a row named {new_name!r} already exists — merge them first")
+        elif repairs:
+            print("\n  (not renamed — pass --fix-names; the old name is kept as an alias)")
+
+        if not exact_groups and not prep_groups and not variants and not repairs:
             print("\nNothing found — the pantry looks clean.")
 
     return 0

@@ -39,7 +39,8 @@ from sqlmodel import Session, select  # noqa: E402
 
 from backend.database import engine  # noqa: E402
 from backend.models import Ingredient, utcnow  # noqa: E402
-from backend.recipes_service import find_ingredient, normalise_ingredient_name  # noqa: E402
+from backend.ingredient_names import match_key  # noqa: E402
+from backend.recipes_service import find_ingredient  # noqa: E402
 from backend.pantry_import import (  # noqa: E402
     clean_item,
     correct_spelling,
@@ -113,7 +114,7 @@ def main() -> int:
         groups: dict[str, dict] = {}
         for original, row in cleaned:
             name = corrections.get(original, original)
-            key = normalise_ingredient_name(name) or name
+            key = match_key(name) or name
             group = groups.setdefault(
                 key,
                 {"display": name, "sources": [], "grams": [], "costs": [],

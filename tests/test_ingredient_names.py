@@ -9,11 +9,16 @@ from backend.ingredient_names import (
     clean_name,
     entry_for,
     explain,
+    fold_word,
     join_notes,
+    legacy_key,
+    match_key,
     merge_key,
     normalise_ingredient_name,
     prep_extras,
     prep_match,
+    repair,
+    singular,
 )
 from backend.models import Ingredient, MeasureUnit
 
@@ -251,3 +256,127 @@ class TestExplainAndMergeKey:
         # pantry may file both under "peas".
         assert merge_key("frozen peas") != merge_key("peas")
         assert normalise_ingredient_name("frozen peas") == normalise_ingredient_name("peas")
+
+
+class TestPlurals:
+    """`singular` names things, `repair` undoes what the original rule did to
+    singulars already stored, `fold_word` makes every spelling comparable."""
+
+    @pytest.mark.parametrize(
+        "plural, word",
+        [
+            ("tomatoes", "tomato"), ("potatoes", "potato"), ("mangoes", "mango"),
+            ("cherries", "cherry"), ("raspberries", "raspberry"), ("anchovies", "anchovy"),
+            ("leaves", "leaf"), ("halves", "half"), ("loaves", "loaf"),
+            ("peaches", "peach"), ("radishes", "radish"), ("boxes", "box"), ("glasses", "glass"),
+            ("chillies", "chilli"), ("onions", "onion"), ("eggs", "egg"), ("peas", "pea"),
+            ("oats", "oat"), ("olives", "olive"), ("cloves", "clove"),
+            ("cookies", "cookie"), ("brownies", "brownie"), ("shoes", "shoe"), ("quiches", "quiche"),
+        ],
+    )
+    def test_singular(self, plural, word):
+        assert singular(plural) == word
+
+    @pytest.mark.parametrize(
+        "word", ["molasses", "asparagus", "hummus", "couscous", "cress", "watercress", "lemongrass", "swiss", "grass"]
+    )
+    def test_words_that_end_in_s_but_are_singular_are_left_alone(self, word):
+        assert singular(word) == word
+
+    @pytest.mark.parametrize("word", ["tomato", "cherry", "leaf", "egg", "rice", "brie", "pie", "oat"])
+    def test_a_singular_is_unchanged(self, word):
+        assert singular(word) == word
+
+    @pytest.mark.parametrize(
+        "mangled, word",
+        [
+            ("tomatoe", "tomato"), ("potatoe", "potato"), ("mangoe", "mango"),
+            ("cherrie", "cherry"), ("raspberrie", "raspberry"), ("blueberrie", "blueberry"),
+            ("anchovie", "anchovy"), ("peache", "peach"), ("radishe", "radish"), ("pinche", "pinch"),
+            ("leave", "leaf"), ("halve", "half"), ("molasse", "molasses"), ("chillie", "chilli"),
+        ],
+    )
+    def test_repair_undoes_the_original_rule(self, mangled, word):
+        assert repair(mangled) == word
+
+    @pytest.mark.parametrize(
+        "word", ["cookie", "brownie", "smoothie", "shoe", "canoe", "quiche", "brioche", "mousse", "brie"]
+    )
+    def test_repair_leaves_real_words_that_merely_look_mangled(self, word):
+        assert repair(word) == word
+
+    @pytest.mark.parametrize(
+        "forms",
+        [
+            ("tomato", "tomatoes", "tomatoe"),
+            ("cherry", "cherries", "cherrie"),
+            ("leaf", "leaves", "leave"),
+            ("peach", "peaches", "peache"),
+            ("mango", "mangoes", "mangoe"),
+            ("chilli", "chillies", "chillie", "chilly"),
+            ("molasses", "molasse"),
+            ("cookie", "cookies"),
+            ("quiche", "quiches"),
+            ("egg", "eggs"),
+        ],
+    )
+    def test_every_spelling_of_a_word_folds_to_one_string(self, forms):
+        assert len({fold_word(f) for f in forms}) == 1, forms
+
+    @pytest.mark.parametrize(
+        "a, b",
+        [("pea", "pear"), ("pea", "peach"), ("rice", "rich"), ("oat", "oath"), ("tomato", "potato"),
+         ("clove", "cloth"), ("leaf", "lead"), ("mint", "mince"), ("cherry", "cheese")],
+    )
+    def test_different_words_stay_different(self, a, b):
+        assert fold_word(a) != fold_word(b)
+
+    def test_the_original_rule_is_still_what_the_legacy_key_uses(self):
+        # Pantry slugs were minted with it; slug lookup still tries it.
+        assert legacy_key("2 tomatoes") == "2 tomatoe"
+        assert legacy_key("cherries") == "cherrie"
+        assert normalise_ingredient_name("cherries") == "cherry"
+
+    def test_the_match_key_is_one_string_for_every_spelling_of_an_ingredient(self):
+        keys = {match_key(n) for n in ("Tomatoes, diced", "tomato", "tomatoe", "fresh tomatoes")}
+        assert keys == {"tomato"}
+
+    def test_prep_terms_match_through_the_fold(self):
+        # The row is named "bay leaf": the line "bay leaves" is that name, folded.
+        bay = entry_for(_ing("bay leaf", prep=["dried"]))
+        assert prep_match(clean_name("bay leaves").key_words, [bay]) == 1
+        assert prep_match(clean_name("bay leaf").key_words, [bay]) == 1
+        # ...and it is not the bay *tree*: "bay" alone is a different row.
+        assert prep_match(clean_name("bay").key_words, [bay]) is None
+        parsley = entry_for(_ing("parsley", prep=["leaf"]))
+        assert prep_match(clean_name("parsley leaves").key_words, [parsley]) == 1
+
+
+class TestLeaf:
+    """"leaf" used to be blanket noise (for "flat leaf parsley"), which made
+    "lime leaf" the same as "lime" and "curry leaf" the same as "curry"."""
+
+    @pytest.mark.parametrize("raw", ["flat leaf parsley", "flat-leaf parsley", "finely chopped flat-leaf parsley"])
+    def test_flat_leaf_is_still_dropped_from_parsley(self, raw):
+        assert normalise_ingredient_name(raw) == "parsley"
+
+    @pytest.mark.parametrize(
+        "leaf, fruit",
+        [("lime leaf", "lime"), ("lime leaves", "lime"), ("kaffir lime leaves", "kaffir lime"),
+         ("curry leaves", "curry"), ("banana leaf", "banana"), ("bay leaf", "bay")],
+    )
+    def test_a_leaf_is_not_the_thing_it_comes_from(self, leaf, fruit):
+        assert match_key(leaf) != match_key(fruit)
+
+    def test_every_spelling_of_leaf_behaves_alike(self):
+        assert len({match_key(n) for n in ("oregano leaf", "oregano leaves", "oregano leave")}) == 1
+
+    def test_the_original_rule_still_finds_what_it_found(self):
+        # find_ingredient tries legacy_key too, so a "basil leaf" line still
+        # reaches a "basil" row by slug, exactly as before.
+        assert legacy_key("basil leaf") == "basil"
+
+    def test_a_herb_that_lists_leaf_as_prep_still_matches_its_leaves(self):
+        basil = entry_for(_ing("basil", prep=["leaves"]))
+        for raw in ("basil leaf", "basil leaves", "basil leave"):
+            assert prep_match(clean_name(raw).key_words, [basil]) == 1, raw
