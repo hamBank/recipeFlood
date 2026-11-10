@@ -540,6 +540,8 @@ class MeasureUnit(str, Enum):
     sprig = "sprig"
     can = "can"
     pinch = "pinch"
+    #: "a handful of rocket": a (poor) measure. Counted, never weighed.
+    handful = "handful"
     to_taste = "to_taste"
 
 

@@ -27,7 +27,7 @@ import { formatCents, formatPercent, SHOP_OPTIONS, SOURCE_LABEL } from '../forma
 //: Units for the plain "quantity" line ("3 lemons", "1 bunch") — weight
 //: and volume have their own dedicated fields (weight_grams/volume_ml),
 //: so those units aren't offered here; see Row's editor below.
-const QUANTITY_UNITS = ['', 'piece', 'slice', 'clove', 'bunch', 'sprig', 'can', 'pinch', 'to_taste']
+const QUANTITY_UNITS = ['', 'piece', 'slice', 'clove', 'bunch', 'sprig', 'can', 'pinch', 'handful', 'to_taste']
 
 /**
  * The shopping list — one permanent list, grouped by shop.

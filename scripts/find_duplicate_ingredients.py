@@ -66,12 +66,14 @@ from sqlmodel import Session, func, select  # noqa: E402
 
 from backend.database import engine  # noqa: E402
 from backend.ingredient_names import (  # noqa: E402
+    AMOUNT_WORDS,
     CONTAINER_WORDS,
     MATCH_NOISE,
     PREP_WORDS,
     PRODUCT_FOLDS,
     SIZE_WORDS,
     UNIT_WORDS,
+    australian,
     clean_name,
     fold_word,
     repair,
@@ -93,15 +95,16 @@ _NOT_SURE = frozenset({
     # bought that way as often as done at home: shredded coconut, slivered
     # almonds, tomato puree, crushed tomatoes, grated parmesan, minced garlic
     "shredded", "slivered", "slivers", "puree", "pureed", "crushed", "grated", "minced",
+    "seeded",  # seeded mustard is wholegrain mustard
 })
 #: Words that never change what you buy.
 SAME_WORDS: frozenset[str] = frozenset(
     fold_word(w)
-    for w in (MATCH_NOISE | PREP_WORDS | SIZE_WORDS | UNIT_WORDS | {
-        "divided", "firm", "ripe", "best", "note", "approx", "roughly", "packed", "torn",
+    for w in (MATCH_NOISE | PREP_WORDS | SIZE_WORDS | UNIT_WORDS | AMOUNT_WORDS | {
+        "divided", "ripe", "best", "note", "approx", "roughly", "packed", "torn",
         # temperature and serving
         "cold", "warm", "chilled", "iced", "serving", "dusting", "frying", "garnish", "garnishing",
-        "steamed", "broken", "required", "needed", "such", "as", "well", "shaken", "other",
+        "broken", "required", "needed", "such", "as", "well", "shaken", "other",
         "yield", "one", "two", "half", "quarter",
         # amounts and the way a recipe counts them
         "sprig", "bunch", "slice", "sheet", "handful", "tbsp", "tblsp", "tbls", "tbl",
@@ -140,7 +143,7 @@ _CONTAINERS = frozenset(fold_word(w) for w in CONTAINER_WORDS)
 _NOT_TYPES = frozenset(fold_word(w) for w in (
     "rind", "zest", "head", "bunch", "clove", "handful", "bulb", "stalk", "stick",
     "sprig", "punnet", "piece", "wedge", "leaf", "salad", "stir", "fry", "semi",
-    "your", "on", "of", "with", "and", "or", "yet", "berries", "fruit",
+    "your", "on", "of", "with", "and", "or", "yet", "berries", "fruit", "firm", "soft",
 ))
 #: Last words that name a part of the thing, not another thing: "coriander
 #: leaves" may well be "coriander". For a person to say.
@@ -176,8 +179,9 @@ def words_of(text: str) -> tuple[str, ...]:
     """The folded words of a name, punctuation and bullets dropped."""
     cleaned = clean_name(text)
     words = cleaned.words or tuple(cleaned.display.lower().split())
-    bare = (re.sub(r"^[\W_]+|[\W_]+$", "", w) for w in words)
-    return tuple(fold_word(w) for w in bare if w)
+    bare = (re.sub(r"^[^\w%]+|[^\w%]+$", "", w) for w in words)
+    # Bare amounts ("1/2", "2") are not the name; "70%" and "00" are.
+    return tuple(fold_word(w) for w in bare if w and not re.fullmatch(r"(?!0\d)[\d./]+", w))
 
 
 def row_for(ingredient: Ingredient) -> Row:
@@ -239,7 +243,7 @@ def judge(a: Row, b: Row, single_names: frozenset[str]) -> Verdict | None:
             return Verdict(APART, small, big, f"{_list(compounds)} {base[0]}: its own ingredient")
         if " - " in big.name:
             return Verdict(APART, small, big, f"a type of {base[0]}")
-        if typed_name(big.ingredient, single_names):
+        if typed_name(tidy_name(big.name), single_names):
             return Verdict(APART, small, big, f"a type of {base[0]}: see RENAMES")
     # The last word says what the thing is: "butter bean" is a bean, "cream
     # cheese" a cheese, "chicken thigh" a cut you buy as such.
@@ -342,47 +346,110 @@ def classify(ingredients: list[Ingredient]) -> Report:
 # --------------------------------------------------------------------------
 # Renames: "green pear" -> "Pear - Green"
 
-def typed_name(ingredient: Ingredient, single_names: frozenset[str]) -> str | None:
-    """The `Name - Type` name for a type of fruit, vegetable, cream or wine, or
-    None when the row is not one, or already is named that way."""
-    if " - " in ingredient.name:
+#: Words a tidied name keeps even though they never change the product: the
+#: joins in "cream of tartar" and "salt and pepper", and "fresh" ("fresh pasta").
+_TIDY_KEEP = frozenset({"of", "and", "or", "the", "with", "fresh", "a", "an", "for", "to", "at"})
+
+
+def tidy_name(name: str) -> str:
+    """The name without what the rule says is not the ingredient: how much
+    ("handfuls", "block", "x 5g packets", counts, measures), notes ("note 1"),
+    brackets, instructions and preparation words, in Australian.
+
+        "x 5g packets roasted seaweed snack" -> "roasted seaweed snack"
+        "block halloumi" -> "halloumi";  "med onion" -> "onion"
+        "bell pepper" -> "capsicum";  "steamed buns" -> "chinese steamed buns"
+    """
+    cleaned = clean_name(name)
+    text = cleaned.display if " - " in cleaned.display else cleaned.display_no_counts
+    text = australian(text or name)
+    # "x 7 g tin anchovies": the tin went with the packaging, but it is canned.
+    if "canned" in cleaned.words and "canned" not in text.lower().split():
+        text = f"canned {text}"
+    # Likewise a jar ("x 500g jars pitted sweet cherries") is a jarred product.
+    elif {"jar", "jars"} & {n.lower() for n in cleaned.notes} and "jarred" not in text.lower().split():
+        text = f"jarred {text}"
+    head, dash, kind = text.partition(" - ")
+    kept = []
+    for word in head.split():
+        bare = re.sub(r"^[^\w%]+|[^\w%]+$", "", word)
+        if not bare or re.fullmatch(r"(?!0\d)[\d./]+", bare):
+            continue  # punctuation, or an amount left over ("4 qt/4 l")
+        lower = bare.lower()
+        if kept and fold_word(kept[-1].lower()) == fold_word(lower):
+            continue  # "orange zest 1 orange" -> "orange", not "orange orange"
+        if lower in _TIDY_KEEP or fold_word(lower) not in SAME_WORDS:
+            kept.append(bare)
+    while kept and kept[0].lower() in _TIDY_KEEP - {"fresh"}:
+        kept.pop(0)
+    if not any(re.search(r"[A-Za-z]", w) for w in kept):
+        return name  # "1 cup": nothing left that names anything
+    return " ".join(kept) + (f" - {kind}" if dash else "")
+
+
+def typed_name(name: str, single_names: frozenset[str]) -> str | None:
+    """The `Name - Type` name for a type of fruit, vegetable, cream or wine
+    ("green pear" -> "Pear - Green"), or for anything canned ("canned
+    tomatoes" -> "Tomato - Canned"). None when it is neither, or is already
+    named that way."""
+    if " - " in name:
         return None
-    row = row_for(ingredient)
-    base = typed_base(row.core)
+    words = re.findall(r"[A-Za-z']+", name.lower())
+    folded = [fold_word(w) for w in words]
+    # Only a clean name, which is what makes this safe to apply in bulk:
+    # nothing but the type and the base. `tidy_name` gets most names there.
+    if not folded or any(w in SAME_WORDS for w in folded):
+        return None
+
+    if "canned" in folded and len(folded) > 1:
+        rest = [w for w, f in zip(words, folded) if f != "canned"]
+        if set(fold_word(w) for w in rest) & _CONTAINERS:
+            return None
+        rest[-1] = singular(rest[-1])
+        return f"{' '.join(rest).capitalize()} - Canned"
+
+    base = typed_base(tuple(folded))
     if base is None:
         return None
-    # Only a clean name: nothing but the type and the base, which is what makes
-    # this safe to apply in bulk. "rind 2 lemon" or "handful kalamata olives"
-    # stays as it is (and probably wants merging, not renaming).
-    if row.words != row.core:
+    qualifiers = words[: -len(base)]
+    folded_q = folded[: -len(base)]
+    if not 1 <= len(qualifiers) <= 3 or base[0] in folded_q:
+        return None  # "orange orange", "bibb lettuce green lettuce"
+    if set(folded_q) & (PRODUCT_FOLDS | _NOT_SURE | _CONTAINERS | _NOT_TYPES):
         return None
-    qualifiers = row.core[: -len(base)]
-    if not 1 <= len(qualifiers) <= 3:
-        return None
-    if set(qualifiers) & (PRODUCT_FOLDS | _NOT_SURE | _CONTAINERS | _NOT_TYPES):
-        return None
-    if any(len(q) > 4 and q.endswith(("ed", "ing")) and q not in _ED_TYPES for q in qualifiers):
+    if any(len(q) > 4 and q.endswith(("ed", "ing")) and q not in _ED_TYPES for q in folded_q):
         return None  # "stewed", "caramelised", "baking": how it is cooked or used, not a type
-    if base[0] in _COMPOUND_SENSITIVE and set(qualifiers) & single_names:
+    if base[0] in _COMPOUND_SENSITIVE and set(folded_q) & single_names:
         return None
-    # Spell the words as the row does, not folded: "Beurre Bosc", "Roma".
-    spelled = {fold_word(w): w for w in re.findall(r"[A-Za-z']+", ingredient.name.lower())}
-    if not all(q in spelled for q in qualifiers) or not spelled.get(base[0]):
-        return None
-    if any(singular(spelled[q]) != spelled[q] for q in qualifiers):
+    if any(singular(q) != q for q in qualifiers):
         return None  # "plums peach", "berries cream": a list, not a type
-    base_word = singular(spelled[base[0]])
-    return f"{base_word.capitalize()} - {' '.join(spelled[q].capitalize() for q in qualifiers)}"
+    base_word = singular(words[-1])
+    return f"{base_word.capitalize()} - {' '.join(q.capitalize() for q in qualifiers)}"
+
+
+def proposed_name(name: str, single_names: frozenset[str]) -> str:
+    """What the row should be called: tidied, then `Name - Type` where that
+    applies. The same name when there is nothing to change."""
+    tidy = tidy_name(name)
+    return typed_name(tidy, single_names) or tidy
 
 
 def rename_proposals(ingredients: list[Ingredient]) -> list[tuple[Ingredient, str]]:
+    """Each row whose name should change. A new name another row already has
+    is left out: that is a merge (CONFIDENT, or REVIEW), not a rename."""
     rows = [row_for(i) for i in ingredients]
     single_names = frozenset(r.core[0] for r in rows if len(r.core) == 1)
+    names = defaultdict(int)
+    for ingredient in ingredients:
+        names[ingredient.name.lower()] += 1
     out = []
     for ingredient in ingredients:
-        new = typed_name(ingredient, single_names)
-        if new and new != ingredient.name:
-            out.append((ingredient, new))
+        new = proposed_name(ingredient.name, single_names)
+        if new == ingredient.name:
+            continue
+        if names.get(new.lower(), 0) - (new.lower() == ingredient.name.lower()) > 0:
+            continue
+        out.append((ingredient, new))
     return out
 
 
@@ -557,7 +624,7 @@ def main() -> int:
             print("  none")
 
         renames = [(i, n) for i, n in rename_proposals(ingredients) if wanted(i)]
-        print(f"\nRENAMES: Name - Type ({len(renames)} row(s))\n")
+        print(f"\nRENAMES: tidy names, Australian names, Name - Type ({len(renames)} row(s))\n")
         for ingredient, new_name in renames:
             print(f"  {label(ingredient)}  →  {new_name!r}")
         if not renames:
@@ -576,13 +643,24 @@ def main() -> int:
             print("\n  (nothing merged: pass --merge once the CONFIDENT list looks right)")
 
         if renames and args.rename:
-            ingredients = list(session.exec(select(Ingredient)).all())
-            current = {i.id for i in ingredients}
-            todo = [(i, n) for i, n in renames if i.id in current]
-            renamed, skipped = apply_renames(session, todo, {i.name.lower() for i in ingredients})
-            print(f"Renamed {renamed} row(s); the old names are kept as aliases.")
-            for ingredient, new_name in skipped:
-                print(f"  skipped {ingredient.name!r}: a row named {new_name!r} already exists")
+            # Worked out again each round: a merge may have given a keeper a new
+            # name, and a tidied name ("juice lemon") can turn out to be a
+            # duplicate of another row, so repeat until nothing changes.
+            for _ in range(5):
+                ingredients = list(session.exec(select(Ingredient)).all())
+                todo = [(i, n) for i, n in rename_proposals(ingredients) if wanted(i)]
+                renamed, skipped = apply_renames(session, todo, {i.name.lower() for i in ingredients})
+                print(f"Renamed {renamed} row(s); the old names are kept as aliases.")
+                for ingredient, new_name in skipped:
+                    print(f"  skipped {ingredient.name!r}: a row named {new_name!r} already exists")
+                if not args.merge:
+                    break
+                usage = usage_counts(session)
+                again = [g for g in classify(list(session.exec(select(Ingredient)).all())).confident if wanted(*g)]
+                if not again and not renamed:
+                    break
+                if again:
+                    print(f"Merged {merge_groups(session, again, usage)} more row(s) the renames made duplicates.")
         elif renames:
             print("  (nothing renamed: pass --rename)")
 

@@ -13,7 +13,7 @@ const IMAGE_TYPES = 'image/jpeg,image/png,image/webp,image/gif'
 
 const UNITS = [
   '', 'g', 'kg', 'ml', 'l', 'cup', 'tbsp', 'dsp', 'tsp', 'piece', 'slice',
-  'clove', 'bunch', 'sprig', 'can', 'pinch', 'to_taste',
+  'clove', 'bunch', 'sprig', 'can', 'pinch', 'handful', 'to_taste',
 ]
 
 const EMPTY_INGREDIENT = {

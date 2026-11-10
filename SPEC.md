@@ -224,8 +224,17 @@ describes a substantially different product: tinned, frozen, smoked or dried
 ("frozen spinach" is not "spinach"), another form ("pear juice", "garlic
 powder"), or another thing ("cream cheese" is a cheese). Types of fruit,
 vegetables, cream and wine are their own rows, named **`Name - Type`**:
-"Pear - Green", "Capsicum - Red", "Cream - Thickened", "Wine - Dry White". That
-name matches "green pear" in a recipe, so it costs no matching. Where the line
+"Pear - Green", "Capsicum - Red", "Cream - Thickened", "Wine - Dry White", and
+canned things **`Name - Canned`** ("Tomato - Canned"; tinned, canned and "a 400 g
+tin" are all canned). That name matches "green pear" or "tinned tomatoes" in a
+recipe, so it costs no matching.
+
+**Naming.** Of two versions of the same ingredient, the shorter name wins
+("onion", not "med onion"), with the Australian name and spelling (capsicum,
+not bell pepper; yoghurt; plain flour; icing sugar). A name says what to buy,
+not how much: "handfuls rice" is rice, "block halloumi" is halloumi, "sheets
+filo pastry" is filo pastry. A **handful** is a unit, a poor measure but a
+measure: it is counted ("2 handfuls rocket") and never given a weight. Where the line
 isn't clear ("caster sugar" next to "sugar", "japanese eggplant"), nothing
 guesses: `scripts/find_duplicate_ingredients.py` lists it for a person to
 decide.

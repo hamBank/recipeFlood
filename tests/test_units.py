@@ -182,3 +182,18 @@ def test_format_amount_round_trips_for_display():
     assert format_amount(2, 3, MeasureUnit.tbsp) == "2-3 tbsp"
     assert format_amount(4, None, MeasureUnit.piece) == "4"
     assert format_amount(None, None, MeasureUnit.g) == ""
+
+
+class TestHandful:
+    """A handful is a (poor) measure, not part of the name, and never weighed."""
+
+    def test_a_handful_is_an_amount(self):
+        assert parse_amount("2 handfuls rocket") == (2.0, None, MeasureUnit.handful, "rocket")
+        assert parse_amount("handful baby spinach") == (1.0, None, MeasureUnit.handful, "baby spinach")
+        assert parse_amount("a handful of rice") == (1.0, None, MeasureUnit.handful, "rice")
+
+    def test_handful_alone_is_left_alone(self):
+        assert parse_amount("handful") == (None, None, None, "handful")
+
+    def test_a_handful_has_no_weight_even_with_a_piece_weight(self):
+        assert to_grams(2, MeasureUnit.handful, "rocket", grams_per_piece=50) == (None, WeightSource.unknown)

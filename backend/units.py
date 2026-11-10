@@ -124,6 +124,7 @@ UNIT_ALIASES: dict[str, MeasureUnit] = {
     "can": MeasureUnit.can, "cans": MeasureUnit.can, "tin": MeasureUnit.can,
     "tins": MeasureUnit.can, "jar": MeasureUnit.can, "packet": MeasureUnit.can,
     "pinch": MeasureUnit.pinch, "pinches": MeasureUnit.pinch,
+    "handful": MeasureUnit.handful, "handfuls": MeasureUnit.handful,
 }
 
 #: Densities in g/ml, keyed by a substring of the ingredient name. Derived
@@ -258,6 +259,9 @@ def parse_unit(token: str | None) -> MeasureUnit | None:
     return UNIT_ALIASES.get(token.strip().rstrip(".").lower())
 
 
+_HANDFUL_RE = re.compile(r"^(?:an?\s+)?handfuls?\s+(?:of\s+)?(?P<rest>.*)$", re.IGNORECASE)
+
+
 def parse_amount(line: str) -> tuple[float | None, float | None, MeasureUnit | None, str]:
     """Split an ingredient line into (quantity, quantity_max, unit, remainder).
 
@@ -272,6 +276,11 @@ def parse_amount(line: str) -> tuple[float | None, float | None, MeasureUnit | N
     text = normalise_fractions(line).strip()
     match = _AMOUNT_RE.match(text)
     if not match:
+        # "a handful of rocket", "handful baby spinach": one handful, a poor
+        # measure but a measure, not part of the name.
+        handful = _HANDFUL_RE.match(text)
+        if handful and handful.group("rest").strip():
+            return 1.0, None, MeasureUnit.handful, handful.group("rest").strip()
         return None, None, None, text
 
     qty = parse_quantity(match.group("qty") or "")
@@ -350,7 +359,9 @@ def to_grams(
     """
     if quantity is None or unit is None:
         return None, WeightSource.unknown
-    if unit in (MeasureUnit.pinch, MeasureUnit.to_taste):
+    if unit in (MeasureUnit.pinch, MeasureUnit.to_taste, MeasureUnit.handful):
+        # A handful of rocket and a handful of rice have nothing in common:
+        # no weight is better than an invented one.
         return None, WeightSource.unknown
 
     if unit in MASS_G:

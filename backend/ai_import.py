@@ -34,7 +34,7 @@ SECTION_SLUGS = [
 UNIT_VALUES = [
     "g", "kg", "mg", "ml", "l", "cup", "tbsp", "dsp", "tsp", "fl_oz",
     "oz", "lb", "piece", "slice", "clove", "bunch", "sprig", "can",
-    "pinch", "to_taste",
+    "pinch", "handful", "to_taste",
 ]
 
 SYSTEM_PROMPT = f"""\
