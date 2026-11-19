@@ -81,10 +81,18 @@ class TestBrackets:
         assert item["note"] == "torn; fresh"
 
     def test_the_cleaned_name_keeps_the_wording_as_written(self, client):
-        # Only the brackets go: "Marie biscuits" keeps its capital.
+        # Unlinked, only the brackets go: "Marie biscuits" keeps its capital.
         a = make_recipe(client, "Slice", [{"name": "Packet of Marie biscuits (crushed)"}])
+        unlink(client, "marie-biscuit")
         (item,) = shop_for(client, a)
         assert item["name"] == "Marie biscuits"
+        assert "crushed" in item["note"]
+
+    def test_a_linked_row_shows_the_pantry_name(self, client):
+        a = make_recipe(client, "Slice", [{"name": "Packet of Marie biscuits (crushed)"}])
+        (item,) = shop_for(client, a)
+        assert item["name"] == "marie biscuit"
+        assert "crushed" in item["note"]
 
 
 class TestQuantitiesInNames:
@@ -125,7 +133,7 @@ class TestQuantitiesInNames:
     def test_a_pack_size_and_container_are_not_the_product(self, client):
         a = make_recipe(client, "Pizza", [{"name": "x 7 g tin anchovies – drained", "quantity": 1, "unit": "can"}])
         (item,) = shop_for(client, a)
-        assert item["name"] == "anchovies"
+        assert item["name"] == "Anchovy - Canned"  # the pantry row the recipe made
         assert "7 g" in item["note"]
 
     def test_the_amount_is_scaled_like_any_other(self, client):

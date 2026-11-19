@@ -31,6 +31,7 @@ from ..models import (
 from ..nutrition import NUTRIENT_FIELDS, has_nutrition
 from ..permissions import require_admin_role, require_user_role
 from ..recipes_service import find_ingredient
+from ..shopping import rename_linked_items
 from ..slugs import unique_slug
 from ..units import to_grams
 
@@ -329,6 +330,10 @@ def _relink_unmatched(session: Session, ingredient: Ingredient) -> None:
         if match and match.id == ingredient.id:
             item.ingredient_id = ingredient.id
             session.add(item)
+    # Linked rows, the ones just linked and any already there, show the
+    # pantry name, which may itself have just changed.
+    session.flush()
+    rename_linked_items(session, ingredient)
 
 
 def _merge_into(session: Session, target: Ingredient, other: Ingredient) -> None:
@@ -380,6 +385,9 @@ def _merge_into(session: Session, target: Ingredient, other: Ingredient) -> None
     session.delete(other)
     session.flush()
     _reconvert_lines(session, target)
+    # The absorbed row's list items now show the survivor's name ("bell
+    # pepper" merged into capsicum reads "capsicum").
+    rename_linked_items(session, target)
 
 
 @router.post("/{key}/merge/{other_key}", response_model=IngredientRead)

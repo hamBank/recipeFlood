@@ -417,11 +417,25 @@ On the 321-recipe blog snapshot built by the old code (1,075 rows), `--merge
 leaving every one of the 3,138 recipe lines linked and no dangling link. A
 second run changes nothing.
 
-`--fix-names` repairs names the old plural rule mangled ("tomatoe",
-"cherrie", "bay leave"). It only touches a word when the right spelling
-appears elsewhere in your pantry or recipes ("Marie biscuits" stays: nothing
-says "Mary"). It keeps the old name as an alias and leaves the slug alone. A
-rename that would give two rows the same name is skipped; merge them first.
+**MISSPELT NAMES** comes first, so the rest of the report sees the right
+spelling. `--fix-names` applies it:
+
+* plurals the old rule mangled ("tomatoe", "cherrie", "bay leave"), only
+  where the right spelling appears elsewhere in your pantry or recipes
+  ("Marie biscuits" stays: nothing says "Mary");
+* typos ("red capscium", "caradmom", "unslated butter"): a word one edit
+  from exactly one word used at least five times and three times as often,
+  never at the first or last letter (raisin/raising, braising/raising), never
+  between words known to be different (`TYPO_NEVER`, and `pantry_import`'s
+  `NEVER_MERGE`), plus `pantry_import.KNOWN_MISSPELLINGS`.
+
+It keeps the old name as an alias and leaves the slug alone. Without `--merge`,
+a fix that would give two rows the same name is skipped; with it, the two are
+merged.
+
+**SHOPPING LIST** lists rows on the list linked to a pantry row but shown
+under another name (added before linked rows took the pantry's name).
+`--rename` renames them; the sheet picks the names up on its next sync.
 
 **Acting on a long list of candidates one pair at a time is still
 tedious even with the script narrowing it down** — `PANTRY_MULTI_MERGE`

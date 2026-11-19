@@ -204,6 +204,10 @@ KNOWN_MISSPELLINGS = {
     "haloumi": "halloumi",
     "marscapone": "mascarpone",
     "mascapone": "mascarpone",
+    "desicated": "desiccated",
+    "dessicated": "desiccated",
+    "tumeric": "turmeric",
+    "capscium": "capsicum",
 }
 
 

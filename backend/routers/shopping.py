@@ -19,9 +19,9 @@ from ..models import (
     User,
 )
 from ..permissions import require_user_role
-from ..recipes_service import find_ingredient
+from ..recipes_service import find_by_house_name
 from ..sheet_sync import clear_items_from_sheet, reconcile, sync_item
-from ..shopping import absorb, item_read, merge_target, read_list, set_checked
+from ..shopping import absorb, item_read, linked_name, merge_target, read_list, set_checked
 
 router = APIRouter(prefix="/shopping", tags=["shopping"])
 
@@ -79,7 +79,7 @@ def add_item(
 
     ingredient_id = body.ingredient_id
     if ingredient_id is None:
-        match = find_ingredient(session, name)
+        match = find_by_house_name(session, name)
         ingredient_id = match.id if match else None
     elif session.get(Ingredient, ingredient_id) is None:
         raise HTTPException(
@@ -111,6 +111,8 @@ def add_item(
                 unit=fields["unit"],
                 ingredient_id=ingredient_id,
             )
+            if target.ingredient_id is not None and (linked := session.get(Ingredient, target.ingredient_id)):
+                target.name, target.note = linked_name(target.name, linked, target.note)
             target.sheet_dirty = True
             session.add(target)
             session.commit()
@@ -121,6 +123,9 @@ def add_item(
     if kind == "bare":
         fields["quantity"] = 1
 
+    if ingredient_id is not None:
+        # Named after the pantry row, like a recipe line (shopping.linked_name).
+        name, fields["note"] = linked_name(name, session.get(Ingredient, ingredient_id), fields.get("note"))
     item = ShoppingItem(**fields, name=name, ingredient_id=ingredient_id, sheet_dirty=True)
     session.add(item)
     session.commit()

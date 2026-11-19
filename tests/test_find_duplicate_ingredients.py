@@ -460,3 +460,47 @@ class TestTheHouseholdsSecondReview:
         pairs = load_decisions(DECISIONS)
         assert ("aleppo pepper", "black aleppo pepper") in pairs
         assert all(len(p) == 2 for p in pairs)
+
+
+class TestTypos:
+    """2026-11-19: "red capsicum" on the list linked to a pantry row spelt
+    "red capscium", which nothing caught."""
+
+    def repairs(self, names, usage):
+        from collections import Counter
+
+        from scripts.find_duplicate_ingredients import typo_repairs
+
+        rows = [ing(n) for n in names]
+        return {i.name: new for i, new in typo_repairs(rows, Counter(usage))}
+
+    def test_a_typo_next_to_a_well_used_word_is_fixed(self):
+        usage = {"onion": 40, "cardamom": 6, "parsley": 12, "unsalted": 20, "butter": 50}
+        assert self.repairs(["caradmom pod", "handful parsely", "unslated butter", "spring oinion"], usage) == {
+            "caradmom pod": "cardamom pod",
+            "handful parsely": "handful parsley",
+            "unslated butter": "unsalted butter",
+            "spring oinion": "spring onion",
+        }
+
+    def test_known_misspellings_are_fixed_however_rare_the_right_word(self):
+        assert self.repairs(["red capscium", "tumeric", "desicated coconut"], {}) == {
+            "red capscium": "red capsicum",
+            "tumeric": "turmeric",
+            "desicated coconut": "desiccated coconut",
+        }
+
+    def test_real_words_one_edit_apart_are_left_alone(self):
+        usage = {"raising": 40, "butter": 50, "sliced": 30, "marsala": 10, "braising": 1}
+        # raisin/raising and slices/sliced differ at the last letter, a first
+        # letter separates braising/raising, batter/butter and masala/marsala
+        # are listed as different things.
+        assert self.repairs(["raisin", "batter", "slices", "masala", "braising beef"], usage) == {}
+
+    def test_a_rare_right_word_is_not_a_target(self):
+        assert self.repairs(["cardamon"], {"cardamom": 2}) == {}
+
+    def test_a_fixed_typo_kept_as_an_alias_is_never_restored(self):
+        # The corrected row keeps "haloumi" as an alias; the next run must not
+        # count that and turn "halloumi" back.
+        assert self.repairs(["halloumi"], {"haloumi": 30, "halloumi": 1}) == {}

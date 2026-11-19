@@ -56,7 +56,7 @@ import argparse
 import json
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
@@ -67,18 +67,21 @@ from sqlmodel import Session, func, select  # noqa: E402
 
 from backend.database import engine  # noqa: E402
 from backend.ingredient_names import PRODUCT_FOLDS, clean_name, fold_word, repair  # noqa: E402
-from backend.models import Ingredient, RecipeIngredient  # noqa: E402
+from backend.models import Ingredient, RecipeIngredient, ShoppingItem  # noqa: E402
+from backend.pantry_import import KNOWN_MISSPELLINGS, MIN_CORRECTION_LENGTH, NEVER_MERGE  # noqa: E402
 # The naming rules live in the backend, which names new rows with them too.
 from backend.pantry_names import (  # noqa: E402
     SAME_WORDS,
     _COMPOUND_SENSITIVE,
     _PARTS,
+    TYPED_BASES,
     proposed_name,
     tidy_name,
     typed_base,
     typed_name,
 )
 from backend.routers.ingredients import _merge_into  # noqa: E402
+from backend.shopping import rename_linked_items  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -339,14 +342,14 @@ def rename_proposals(ingredients: list[Ingredient]) -> list[tuple[Ingredient, st
 
 
 def apply_renames(
-    session: Session, renames: list[tuple[Ingredient, str]], taken: set[str]
+    session: Session, renames: list[tuple[Ingredient, str]], taken: set[str], *, allow_same: bool = False
 ) -> tuple[int, list[tuple[Ingredient, str]]]:
     """Rename, keeping the old name as an alias and the slug unchanged. A
     rename onto a name another row already has is skipped and returned.
     Returns (renamed, skipped)."""
     renamed, skipped = 0, []
     for ingredient, new_name in renames:
-        if new_name.lower() in taken:
+        if new_name.lower() in taken and not allow_same:
             skipped.append((ingredient, new_name))
             continue
         taken.discard(ingredient.name.lower())
@@ -357,6 +360,8 @@ def apply_renames(
         ingredient.aliases = sorted(aliases)
         ingredient.name = new_name
         session.add(ingredient)
+        session.flush()
+        rename_linked_items(session, ingredient)  # the list shows the new name
         renamed += 1
     session.commit()
     return renamed, skipped
@@ -423,6 +428,8 @@ def merge_groups(
             keep.ingredient.aliases = sorted(aliases)
             keep.ingredient.name = new_name
             session.add(keep.ingredient)
+            session.flush()
+            rename_linked_items(session, keep.ingredient)
         session.commit()
     return merged
 
@@ -469,6 +476,81 @@ def name_repairs(
     return repairs
 
 
+def _one_edit_not_first(a: str, b: str) -> bool:
+    """Whether `a` becomes `b` by one substitution, insertion, deletion or
+    swap of two neighbours, none of them at the first letter: a typo
+    ("capscium", "mozarella"), not another word ("raising" / "braising")."""
+    if a == b or a[:1] != b[:1] or abs(len(a) - len(b)) > 1:
+        return False
+    # Nor at the last letter, where one edit makes another real word as often
+    # as a typo: raisin/raising, slices/sliced. A swap is still fine there
+    # (parsely/parsley).
+    if len(a) == len(b):
+        diffs = [i for i, (x, y) in enumerate(zip(a, b)) if x != y]
+        if len(diffs) == 1:
+            return diffs[0] != len(a) - 1
+        return len(diffs) == 2 and diffs[1] == diffs[0] + 1 and a[diffs[0]] == b[diffs[1]] and a[diffs[1]] == b[diffs[0]]
+    shorter, longer = (a, b) if len(a) < len(b) else (b, a)
+    return any(shorter == longer[:i] + longer[i + 1:] for i in range(1, len(longer) - 1))
+
+
+#: Words one edit apart that are both real. Extend this, not the rule.
+TYPO_NEVER = {frozenset(p) for p in (("batter", "butter"), ("raisin", "raising"), ("pepper", "popper"))}
+
+
+def typo_repairs(
+    ingredients: list[Ingredient], counts: Counter
+) -> list[tuple[Ingredient, str]]:
+    """Pantry rows whose name has a typo ("red capscium"), with the name
+    spelled right. `counts` is how often each word appears in the pantry and
+    the recipe lines.
+
+    A word is corrected only to a word used at least five times and three
+    times as often as it, exactly one such word, one edit away (see
+    `_one_edit_not_first`), and never between the words `pantry_import` knows
+    are different things (masala and marsala). The words this module already
+    knows (`TYPED_BASES`) count as used. `pantry_import.KNOWN_MISSPELLINGS`
+    applies too.
+    """
+    known = {w: right for w, right in KNOWN_MISSPELLINGS.items() if " " not in w}
+    never = {frozenset(pair) for pair in NEVER_MERGE if all(" " not in w for w in pair)} | TYPO_NEVER
+    # A known misspelling is never a target, however often it is used.
+    common = ({w for w, n in counts.items() if n >= 5} | set(TYPED_BASES)) - set(known)
+
+    def fix(match: re.Match) -> str:
+        word = match.group(0)
+        lower = word.lower()
+        right = known.get(lower)
+        if right is None and len(lower) >= MIN_CORRECTION_LENGTH and lower not in common \
+                and lower not in set(known.values()):
+            candidates = [
+                c for c in common
+                if _one_edit_not_first(lower, c)
+                and fold_word(c) != fold_word(lower)
+                and counts.get(c, 5) >= 3 * counts.get(lower, 0)
+                and frozenset({lower, c}) not in never
+            ]
+            right = candidates[0] if len(candidates) == 1 else None
+        if not right:
+            return word
+        return right.capitalize() if word[:1].isupper() else right
+
+    repairs = []
+    for ingredient in ingredients:
+        new_name = re.sub(r"[A-Za-z]+", fix, ingredient.name)
+        if new_name != ingredient.name:
+            repairs.append((ingredient, new_name))
+    return repairs
+
+
+def word_counts(session: Session, ingredients: list[Ingredient]) -> Counter:
+    """How often each word is used, in pantry names and recipe lines. Not
+    aliases: a fixed typo is kept as one, and must not count for itself."""
+    texts = [i.name for i in ingredients]
+    texts += list(session.exec(select(RecipeIngredient.name)).all())
+    return Counter(w.lower() for text in texts for w in re.findall(r"[A-Za-z]+", text or ""))
+
+
 apply_name_repairs = apply_renames
 
 
@@ -488,7 +570,7 @@ def main() -> int:
     parser.add_argument("--rename", action="store_true", help='apply the RENAMES list ("Pear - Green")')
     parser.add_argument(
         "--fix-names", action="store_true",
-        help='rename rows whose name carries a mangled plural ("tomatoe" -> "tomato")',
+        help='fix the MISSPELT NAMES list: mangled plurals ("tomatoe") and typos ("capscium")',
     )
     args = parser.parse_args()
 
@@ -504,9 +586,49 @@ def main() -> int:
         def wanted(*rows) -> bool:
             return args.min_usage == 0 or any(usage.get(r.id, 0) >= args.min_usage for r in rows)
 
+        print(f"{len(ingredients)} pantry ingredient(s) scanned.\n")
+        # Spelling first, so the rest of the report sees "red capsicum", not
+        # "red capscium": the old plural rule's damage, then typos.
+        mangled = dict((i.id, n) for i, n in name_repairs(ingredients, corpus_words(session, ingredients)))
+        respelt = {i.id: i.name for i in ingredients}
+        respelt.update(mangled)
+        typos: dict[int, str] = {}
+        # Again until nothing changes: fixing "oinon" makes "onion" common
+        # enough to fix "oinion" too.
+        recipe_words = word_counts(session, [])
+        for _ in range(5):
+            shadow = [Ingredient(id=i.id, slug=i.slug, name=respelt[i.id]) for i in ingredients]
+            counts = recipe_words + Counter(
+                w.lower() for i in shadow for w in re.findall(r"[A-Za-z]+", i.name)
+            )
+            found = dict((i.id, n) for i, n in typo_repairs(shadow, counts))
+            if not found:
+                break
+            typos.update(found)
+            respelt.update(found)
+        repairs = [(i, respelt[i.id]) for i in ingredients if respelt[i.id] != i.name and wanted(i)]
+        print(f"MISSPELT NAMES: mangled plurals and typos ({len(repairs)} row(s))\n")
+        for ingredient, new_name in repairs:
+            kind = "typo" if ingredient.id in typos else "plural"
+            print(f"  {label(ingredient)}  →  {new_name!r}  ({kind})")
+        if not repairs:
+            print("  none")
+        if repairs and args.fix_names:
+            # With --merge, two rows that end up spelled alike are merged below.
+            renamed, skipped = apply_renames(
+                session, repairs, {i.name.lower() for i in ingredients}, allow_same=args.merge
+            )
+            print(f"\nRenamed {renamed} row(s); the old names are kept as aliases.")
+            for ingredient, new_name in skipped:
+                print(f"  skipped {ingredient.name!r}: a row named {new_name!r} already exists; merge them first")
+            ingredients = list(session.exec(select(Ingredient)).all())
+        elif repairs:
+            print("\n  (not renamed: pass --fix-names; the old name is kept as an alias)")
+        print()
+
         decisions = load_decisions(args.decisions)
         report = classify(ingredients, decisions)
-        print(f"{len(ingredients)} pantry ingredient(s) scanned.\n")
+
 
         confident = [g for g in report.confident if wanted(*g)]
         print(f"CONFIDENT: merge, only preparation differs ({len(confident)} group(s))\n")
@@ -575,19 +697,23 @@ def main() -> int:
         elif renames:
             print("  (nothing renamed: pass --rename)")
 
-        # Re-read: merges and renames changed rows.
-        ingredients = list(session.exec(select(Ingredient)).all())
-        repairs = name_repairs(ingredients, corpus_words(session, ingredients))
-        print(f"\nMANGLED NAMES ({len(repairs)} row(s))\n")
-        for ingredient, new_name in repairs:
-            print(f"  {label(ingredient)}  →  {new_name!r}")
-        if repairs and args.fix_names:
-            renamed, skipped = apply_renames(session, repairs, {i.name.lower() for i in ingredients})
-            print(f"\nRenamed {renamed} row(s); the old names are kept as aliases.")
-            for ingredient, new_name in skipped:
-                print(f"  skipped {ingredient.name!r}: a row named {new_name!r} already exists; merge them first")
-        elif repairs:
-            print("\n  (not renamed: pass --fix-names; the old name is kept as an alias)")
+        # The shopping list: linked rows still showing the words they were
+        # added with ("bell pepper" on capsicum). Merges and renames above
+        # already fixed the rows they touched; this catches the rest.
+        by_id = {i.id: i for i in session.exec(select(Ingredient)).all()}
+        stale = [
+            item for item in session.exec(select(ShoppingItem).where(ShoppingItem.ingredient_id.is_not(None))).all()
+            if item.ingredient_id in by_id and item.name != by_id[item.ingredient_id].name
+        ]
+        print(f"\nSHOPPING LIST: rows shown under another name than their pantry row ({len(stale)})\n")
+        for item in stale:
+            print(f"  {item.name!r}  →  {by_id[item.ingredient_id].name!r}")
+        if stale and args.rename:
+            changed = sum(rename_linked_items(session, by_id[i]) for i in {item.ingredient_id for item in stale})
+            session.commit()
+            print(f"\nRenamed {changed} list row(s); the sheet picks the names up on its next sync.")
+        elif stale:
+            print("\n  (not renamed: pass --rename)")
 
     return 0
 

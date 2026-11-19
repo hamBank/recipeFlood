@@ -494,6 +494,14 @@ one row whether or not either was ever linked to the pantry. "Frozen peas"
 and "peas" stay apart: frozen is a different product (see "What is the same
 ingredient").
 
+**A linked row shows the pantry's name.** Whatever a line said, a row linked
+to a pantry ingredient is named after it: "bell pepper" on capsicum reads
+"capsicum", "tinned tomatoes" reads "Tomato - Canned". Words the line said
+beyond the pantry name ("cold butter") go into the row's note. The name follows
+the pantry: merging, renaming or a new alias renames the rows on the list too,
+and the sheet takes the new name on its next sync. An unlinked row keeps the
+line's wording.
+
 **What is in a name.** A recipe line's name often carries more than the name:
 "red onion (finely chopped)", "kecap manis (or dark chinese soy)", "sugar 250
 mL", "x 7 g tin anchovies – drained", "juice 2 lemons". The list shows the
