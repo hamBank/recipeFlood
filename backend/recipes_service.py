@@ -195,6 +195,19 @@ def find_ingredient(
     return None
 
 
+def find_by_house_name(session: Session, name: str, *, pantry: Pantry | None = None) -> Ingredient | None:
+    """`find_ingredient`, then the same for the name the pantry would give
+    the line (`pantry_names.new_row_name`): "cold butter" misses "butter"
+    (cold is not noise to the matcher) but is named "butter", which is the
+    duplicate finder's rule for the same ingredient."""
+    found = find_ingredient(session, name, pantry=pantry)
+    if found is None:
+        house = new_row_name(name)
+        if house and house != name.strip().lower():
+            found = find_ingredient(session, house, pantry=pantry)
+    return found
+
+
 def get_or_create_ingredient(session: Session, name: str) -> Ingredient:
     """Match, or add a bare stub to the master list.
 
@@ -203,19 +216,12 @@ def get_or_create_ingredient(session: Session, name: str) -> Ingredient:
     for a price and nutrition figures to be filled in later, rather than an
     empty table someone has to populate by hand before anything works.
     """
-    existing = find_ingredient(session, name)
+    existing = find_by_house_name(session, name)
     if existing:
         return existing
     # Named as the household names things (see `pantry_names`): "green pears"
     # makes "Pear - Green", "x 250g blocks halloumi" makes "halloumi".
     display = new_row_name(name) or normalise_ingredient_name(name) or name.strip().lower()
-    # The house name can be a row that already exists: "butter cubed" misses
-    # "butter" above (cubed is not noise to the matcher), but it is named
-    # "butter", which is the duplicate finder's rule for the same ingredient.
-    if display != name:
-        existing = find_ingredient(session, display)
-        if existing:
-            return existing
     slug = unique_slug(
         display,
         lambda s: session.exec(select(Ingredient).where(Ingredient.slug == s)).first()

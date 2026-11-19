@@ -468,8 +468,9 @@ class TestShops:
 
         body = client.get("/shopping").json()
         assert body["shops"] == ["markets", "supermarket"]
+        # A linked row shows its pantry name: the "onion" line is brown onion.
         assert {i["name"]: i["shop"] for i in body["items"]} == {
-            "onion": "markets",
+            "brown onion": "markets",
             "plain flour": "supermarket",
         }
 
@@ -489,7 +490,7 @@ class TestShops:
         client.patch(f"/ingredients/{onion.slug}", json={"source": "costco"})
         body = client.get("/shopping").json()
         assert body["shops"] == ["costco", "other"]
-        assert {i["name"]: i["shop"] for i in body["items"]}["onion"] == "costco"
+        assert {i["name"]: i["shop"] for i in body["items"]}["brown onion"] == "costco"
         # And a line can be moved there just once, too.
         candles = next(i for i in body["items"] if i["name"] == "birthday candles")
         moved = client.patch(f"/shopping/{candles['id']}", json={"shop_override": "costco"})

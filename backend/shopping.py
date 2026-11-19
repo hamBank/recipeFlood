@@ -91,7 +91,7 @@ from __future__ import annotations
 from sqlmodel import Session, select
 
 from .costing import amount_cost_cents, cost_per_gram  # noqa: F401  (cost_per_gram re-exported)
-from .ingredient_names import clean_name, explain, join_notes, merge_key
+from .ingredient_names import clean_name, explain, join_notes, merge_key, stems
 from .models import (
     Ingredient,
     IngredientSource,
@@ -105,7 +105,7 @@ from .models import (
     WeightSource,
     utcnow,
 )
-from .recipes_service import Pantry, find_ingredient
+from .recipes_service import Pantry, find_by_house_name
 from .units import MASS_G, format_amount, to_grams, to_ml
 
 #: Shops in the order they get walked, not alphabetical. Anything not
@@ -290,6 +290,43 @@ def read_list(session: Session, *, with_cost: bool) -> ShoppingListRead:
 # --------------------------------------------------------------------------
 # Adding a cooking list's recipes to the shopping list
 # --------------------------------------------------------------------------
+
+
+def linked_name(text: str, ingredient: Ingredient | None, note: str | None = None) -> tuple[str, str | None]:
+    """The name a list row shows, and its note, when it is linked to the pantry.
+
+    A linked row is named after its pantry row, so a line added as "bell
+    pepper" shows "capsicum" once it belongs to capsicum. The words a line
+    said beyond the pantry name are not lost: when there are any ("cold
+    butter" on butter), the line's own wording joins the note. A line that is
+    only another way of saying the pantry name ("bell pepper", "red capsicum"
+    on Capsicum - Red) adds nothing.
+    """
+    if ingredient is None:
+        return text, note
+    said = stems(clean_name(text).key_words)
+    known = stems(clean_name(ingredient.name).key_words)
+    for alias in ingredient.aliases or []:
+        if stems(clean_name(alias).key_words) == said:
+            known = said
+    if said - known and text.strip().lower() != ingredient.name.lower():
+        note = join_notes(text.strip(), note)
+    return ingredient.name, note
+
+
+def rename_linked_items(session: Session, ingredient: Ingredient) -> int:
+    """Give every list row linked to `ingredient` its name, after a merge, a
+    rename or a new alias linked it. Marks each changed row for the sheet,
+    which picks the new name up on its next sync. Returns how many changed."""
+    changed = 0
+    for item in session.exec(select(ShoppingItem).where(ShoppingItem.ingredient_id == ingredient.id)).all():
+        if item.name == ingredient.name:
+            continue
+        item.name, item.note = linked_name(item.name, ingredient, item.note)
+        item.sheet_dirty = True
+        session.add(item)
+        changed += 1
+    return changed
 
 
 def _same_thing(item: ShoppingItem, ingredient_id: int | None, name: str) -> bool:
@@ -487,7 +524,7 @@ def add_lines(
             # Matching only ever ran when the line was first saved, so a line
             # saved before the pantry knew its words is still unlinked.
             pantry = pantry or Pantry.load(session)
-            ingredient = find_ingredient(session, raw_name, pantry=pantry)
+            ingredient = find_by_house_name(session, raw_name, pantry=pantry)
             ingredient_id = ingredient.id if ingredient else None
 
         grams = line.weight_grams * factor if line.weight_grams else None
@@ -509,11 +546,14 @@ def add_lines(
         # The name shown: the pantry's own when its prep terms explain
         # everything the line says beyond it, otherwise the cleaned wording.
         extras = explain(cleaned, ingredient) if ingredient is not None else None
-        if extras is not None:
+        name = (cleaned.display_no_counts if counted else cleaned.display) or raw_name
+        wording_note = None
+        if extras is None and ingredient is not None:
+            # Linked: the pantry's name, with what the line said beyond it as a note.
+            _, wording_note = linked_name(name, ingredient)
+        if ingredient is not None:
             name = ingredient.name
-        else:
-            name = (cleaned.display_no_counts if counted else cleaned.display) or raw_name
-        note_parts = [line.note, *cleaned.notes, *(extras or [])]
+        note_parts = [line.note, wording_note, *cleaned.notes, *(extras or [])]
         if harvested_measure is not None:
             note_parts = [p for p in note_parts if p != harvested_measure.text]
         note = join_notes(*note_parts)
@@ -583,6 +623,9 @@ def add_lines(
                 ingredient_id=ingredient_id,
             )
             target.note = join_notes(target.note, note)
+            if ingredient is not None and target.ingredient_id == ingredient.id and target.name != ingredient.name:
+                # An unlinked row this line just linked: it takes the pantry name.
+                target.name, target.note = linked_name(target.name, ingredient, target.note)
             target.contributions = [*(target.contributions or []), contribution]
             if cook_list_id is not None and target.cook_list_id is None:
                 target.cook_list_id = cook_list_id
